@@ -7,20 +7,27 @@ import (
 )
 
 var newPostCmd = &cobra.Command{
-	Use:   "post",
+	Use:   "post <content>",
 	Short: "Create a new post",
-	Long:  `Create a new post in the specified thread or as a new thread.`,
+	Long:  `Create a new post with content and optional URL or attachment.`,
+	Args:  cobra.MinimumNArgs(1),
 	Run:   runNewPost,
 }
 
+var postUrl string
+var postAttachment string
+
 func init() {
-	// Add any flags here if needed
-	// For example:
-	// newPostCmd.Flags().StringVarP(&threadId, "thread", "t", "", "Thread ID to post in")
-	// newPostCmd.Flags().StringVarP(&content, "content", "c", "", "Content of the post")
+	newPostCmd.Flags().StringVarP(&postUrl, "url", "u", "", "Optional URL for the post")
+	newPostCmd.Flags().StringVarP(&postAttachment, "attachment", "f", "", "Path to the file to attach")
 }
 
 func runNewPost(cmd *cobra.Command, args []string) {
-	// Stub implementation
-	fmt.Println("Creating a new post... (Not implemented yet)")
+	content := args[0]
+	if content == "" {
+		fmt.Println("Error: Content is required for a post.")
+		return
+	}
+
+	clipLink(postUrl, content, postAttachment, false)
 }
