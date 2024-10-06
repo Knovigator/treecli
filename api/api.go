@@ -7,24 +7,10 @@ import (
 	"net/url"
 
 	"github.com/go-resty/resty/v2"
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
-func GetMessages(cmd *cobra.Command, args []string) {
-	messageIDs := args
-
-	// load credentials from viper config
-	accessToken := viper.GetString("access_token")
-	client := viper.GetString("client")
-	uid := viper.GetString("uid")
-	backendURL := viper.GetString("backend_url")
-
-	if accessToken == "" || client == "" || uid == "" || backendURL == "" {
-		fmt.Println("Error: Missing credentials. Please login first.")
-		return
-	}
-
+// GetMessages fetches messages from the API and returns them
+func GetMessages(backendURL, accessToken, client, uid string, messageIDs []string) (map[string]interface{}, error) {
 	// create a new resty client
 	restyClient := resty.New()
 
@@ -53,33 +39,23 @@ func GetMessages(cmd *cobra.Command, args []string) {
 		Get(fmt.Sprintf("%s/api/v1/answers/bulk", backendURL))
 
 	if err != nil {
-		fmt.Printf("Error making request: %v\n", err)
-		return
+		return nil, fmt.Errorf("error making request: %v", err)
 	}
 
 	if resp.StatusCode() != http.StatusOK {
-		fmt.Printf("Error: Received status code %d\n", resp.StatusCode())
-		fmt.Printf("Response body: %s\n", resp.Body())
-		return
+		return nil, fmt.Errorf("error: received status code %d. Response body: %s", resp.StatusCode(), resp.Body())
 	}
 
-	// parse and print the response
+	// parse the response
 	var messagesInfo map[string]interface{}
 	err = json.Unmarshal(resp.Body(), &messagesInfo)
 	if err != nil {
-		fmt.Printf("Error parsing response: %v\n", err)
-		return
+		return nil, fmt.Errorf("error parsing response: %v", err)
 	}
 
-	// pretty print the messages info
-	prettyJSON, err := json.MarshalIndent(messagesInfo, "", "  ")
-	if err != nil {
-		fmt.Printf("Error formatting JSON: %v\n", err)
-		return
-	}
-
-	fmt.Println(string(prettyJSON))
+	return messagesInfo, nil
 }
+
 func GetThread(backendURL, threadID, accessToken, client, uid string) (map[string]interface{}, error) {
 	// create a new resty client
 	restyClient := resty.New()
