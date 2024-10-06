@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"os"
 
-	// "strings"
-
 	"github.com/Knovigator/knovigator/treectl/api"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -48,14 +46,11 @@ func runGetThread(cmd *cobra.Command, args []string) {
 	}
 
 	if !noRehydrate {
-		// fmt.Fprintln(os.Stderr, "Hydrating answers into the thread...")
 		threadInfo, err = hydrateAnswersIntoQuest(threadInfo, backendURL, accessToken, client, uid)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error hydrating answers: %v\n", err)
 			return
 		}
-	} else {
-		// fmt.Fprintln(os.Stderr, "Skipping hydration of answers.")
 	}
 
 	// pretty print the thread info
@@ -65,74 +60,49 @@ func runGetThread(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	// fmt.Fprintln(os.Stderr, "Would've printed json of len: ", len(prettyJSON))
 	fmt.Println(string(prettyJSON))
 }
 
 func hydrateAnswersIntoQuest(quest map[string]interface{}, backendURL, accessToken, client, uid string) (map[string]interface{}, error) {
 	if quest == nil {
-		// fmt.Fprintln(os.Stderr, "Error: quest is nil")
 		return nil, nil
+	}
+
+	questData, ok := quest["quest"].(map[string]interface{})
+	if !ok {
+		return quest, nil
 	}
 
 	var allAnswerIds []string
 
-	// updated to access sorted_answer_ids from the quest key
-	questData, ok := quest["quest"].(map[string]interface{})
-	if ok {
-
-		keys := make([]string, 0, len(questData))
-		for key := range questData {
-			keys = append(keys, key)
-		}
-		// fmt.Fprintf(os.Stderr, "Keys in quest data: %s\n", strings.Join(keys, ", "))
-
-		if sortedAnswerIds, ok := questData["sorted_answer_ids"].([]interface{}); ok {
-			for _, id := range sortedAnswerIds {
-				if strID, ok := id.(string); ok {
-					allAnswerIds = append(allAnswerIds, strID)
-				}
+	if sortedAnswerIds, ok := questData["sorted_answer_ids"].([]interface{}); ok {
+		for _, id := range sortedAnswerIds {
+			if strID, ok := id.(string); ok {
+				allAnswerIds = append(allAnswerIds, strID)
 			}
 		}
-		// fmt.Fprintln(os.Stderr, "Number of sorted answers:", len(allAnswerIds))
-
-		if parentID, ok := questData["parent_id"].(string); ok && parentID != "" {
-			// fmt.Fprintln(os.Stderr, "parentID found: ", parentID)
-			allAnswerIds = append(allAnswerIds, parentID)
-		} else {
-			// fmt.Fprintln(os.Stderr, "parent ID not found")
-		}
 	}
-	// fmt.Fprintln(os.Stderr, "retrieving", len(allAnswerIds), "answers")
-	// fmt.Fprintln(os.Stderr, "Retrieving answer IDs:", allAnswerIds)
+
+	if parentID, ok := questData["parent_id"].(string); ok && parentID != "" {
+		allAnswerIds = append(allAnswerIds, parentID)
+	}
 
 	if len(allAnswerIds) == 0 {
 		return quest, nil
 	}
 
-	// fmt.Fprintln(os.Stderr, ">>> Getting answers")
 	messagesInfo, err := api.GetMessages(backendURL, accessToken, client, uid, allAnswerIds)
 	if err != nil {
 		return nil, fmt.Errorf("error fetching answers: %v", err)
 	}
 
-	// extract the answers from the messagesInfo
-	allAnswers, ok := messagesInfo["answers"].([]interface{})
+	answers, ok := messagesInfo["answers"].([]interface{})
 	if !ok {
 		return nil, fmt.Errorf("unexpected format for answers in response")
 	}
 
-	// for _, answer := range allAnswers {
-	// 	if answerObj, ok := answer.(map[string]interface{}); ok {
-	// 		if id, ok := answerObj["id"].(string); ok {
-	// 			fmt.Fprintln(os.Stderr, "Retrieved answer ID:", id)
-	// 		}
-	// 	}
-	// }
-
-	// create a map for easy lookup
 	answerMap := make(map[string]interface{})
-	for _, answer := range allAnswers {
+	for _, answer := range answers {
 		if answerObj, ok := answer.(map[string]interface{}); ok {
 			if id, ok := answerObj["id"].(string); ok {
 				answerMap[id] = answerObj
@@ -155,8 +125,6 @@ func hydrateAnswersIntoQuest(quest map[string]interface{}, backendURL, accessTok
 	if parentID, ok := questData["parent_id"].(string); ok && parentID != "" {
 		if parent, found := answerMap[parentID]; found {
 			questData["parent"] = parent
-		} else {
-			// fmt.Fprintln(os.Stderr, "error: parent not found for ID", parentID)
 		}
 	}
 
