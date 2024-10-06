@@ -20,7 +20,8 @@ var rootCmd = &cobra.Command{
 func init() {
 	cobra.OnInitialize(initConfig)
 	rootCmd.AddCommand(cmd.LoginCmd)
-	rootCmd.AddCommand(cmd.GetCmd) // Add the new get command
+	rootCmd.AddCommand(cmd.GetCmd)
+	rootCmd.AddCommand(cmd.NewCmd) // Add the new top-level command
 }
 
 func initConfig() {
