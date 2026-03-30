@@ -6,6 +6,8 @@
 - Root posts default to private; use `--stream` only on root posts and root actions.
 - Discover action tags with `treectl action tags`.
 - Submit action work with `treectl action <tag> "prompt"` or `treectl action --reply-to <quest-id> <tag> "prompt"`.
+- Use plain tags for new assets, `animate_*` to animate an existing image, and `edit_*` to edit an existing image.
+- If the goal is to animate or edit a previous image, do not use a plain generation tag.
 - Use `treectl action --no-wait` plus `treectl action status --answer ...` or `--thread ...` for async flows.
 - Human-readable output is the default. Use `--json` when you need structured output.
 - Install packaged skills with `treectl skills list` and `treectl skills install ...`.

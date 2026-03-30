@@ -27,7 +27,12 @@ Use `treectl` as the CLI surface for Treechat automation in this repo.
 
 - Discover model-backed tags with `treectl action tags`.
 - Root action: `treectl action flux "a glass cathedral in the rain"`.
-- Reply action: `treectl action --reply-to <quest-id> kling "animate this as a handheld push-in"`.
+- Reply action: `treectl action --reply-to <quest-id> animate_kling "animate this as a handheld push-in"`.
+- Treechat action model:
+- Use plain tags like `flux`, `veo3`, or `kling` to generate a new asset from the prompt.
+- Use `animate_*` tags to animate an existing image from the thread or attachment context.
+- Use `edit_*` tags to edit an existing image from the thread or attachment context.
+- If the user wants to animate or edit a previous image, do not substitute a plain generation tag.
 - Actions default to private root-thread placement unless you pass a root-only stream flag.
 - `treectl action` waits by default and shows a spinner in interactive terminals.
 

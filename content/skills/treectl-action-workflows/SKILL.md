@@ -12,10 +12,19 @@ Use this skill when you need to submit or inspect Treechat action-tag work throu
 - Run `treectl action tags` to inspect the current model-backed action tags for the active profile.
 - Use `--allow-unknown-tag` only when you intentionally need to bypass local tag validation.
 
+## Treechat Action Model
+
+- Use plain generation tags like `flux`, `veo3`, or `kling` when you want a brand-new asset from the prompt.
+- Use an `animate_*` tag when the goal is to animate an existing image.
+- Use an `edit_*` tag when the goal is to edit an existing image.
+- If the user says "animate this image" or "edit the previous image", do not swap in a plain generation tag or you will likely create a new asset instead of transforming the existing one.
+
 ## Submit Action Work
 
 - Root action: `treectl action flux "a glass cathedral in the rain"`.
-- Reply action: `treectl action --reply-to <quest-id> kling "animate this as a handheld push-in"`.
+- Reply action: `treectl action --reply-to <quest-id> animate_kling "animate this as a handheld push-in"`.
+- Existing-image animation: `treectl action --reply-to <quest-id> animate_kling "animate this still as a handheld push-in"`.
+- Existing-image edit: `treectl action --reply-to <quest-id> edit_flux "make this warmer and more cinematic"`.
 - Root actions default to private placement unless you pass a root-only stream flag like `--stream public`.
 
 ## Async Workflows
