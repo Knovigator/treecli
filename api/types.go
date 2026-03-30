@@ -12,6 +12,18 @@ type ThreadResponse struct {
 	Raw   json.RawMessage `json:"-"`
 }
 
+type CreateQuestResponse struct {
+	Quest Quest           `json:"quest"`
+	Raw   json.RawMessage `json:"-"`
+}
+
+type CreateAnswerResponse struct {
+	Answer    Answer          `json:"answer"`
+	Quest     *Quest          `json:"quest"`
+	SideQuest *Quest          `json:"side_quest"`
+	Raw       json.RawMessage `json:"-"`
+}
+
 type MessagesResponse struct {
 	Answers []Answer        `json:"answers"`
 	Raw     json.RawMessage `json:"-"`
