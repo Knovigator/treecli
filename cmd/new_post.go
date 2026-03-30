@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -93,6 +94,10 @@ type actionInvocation struct {
 	Tag               string
 	Prompt            string
 	NormalizedContent string
+}
+
+type actionSpinner struct {
+	done chan struct{}
 }
 
 func init() {
@@ -701,7 +706,10 @@ func createAndPollAction(
 }
 
 func pollActionResult(profile profileConfig, threadID string, answerID string) (actionResult, error) {
-	if actionOutputFormat == "ascii" {
+	spinner := startActionSpinner(answerID)
+	if spinner != nil {
+		defer spinner.Stop()
+	} else if actionOutputFormat == "ascii" {
 		fmt.Printf("Created action in thread %s. Polling answer %s for generated media...\n", threadID, answerID)
 	}
 
@@ -729,4 +737,75 @@ func pollActionResult(profile profileConfig, threadID string, answerID string) (
 	}
 
 	return result, nil
+}
+
+func startActionSpinner(answerID string) *actionSpinner {
+	if !stderrIsTTY() {
+		return nil
+	}
+
+	spinner := &actionSpinner{
+		done: make(chan struct{}),
+	}
+
+	go spinner.run(answerID)
+	return spinner
+}
+
+func (spinner *actionSpinner) Stop() {
+	if spinner == nil {
+		return
+	}
+
+	close(spinner.done)
+}
+
+func (spinner *actionSpinner) run(answerID string) {
+	frames := []string{"|", "/", "-", `\`}
+	ticker := time.NewTicker(120 * time.Millisecond)
+	defer ticker.Stop()
+
+	startedAt := time.Now()
+	frameIndex := 0
+
+	for {
+		elapsed := time.Since(startedAt).Round(time.Second)
+		if elapsed < time.Second {
+			elapsed = time.Second
+		}
+
+		fmt.Fprintf(
+			os.Stderr,
+			"\r\033[K%s Waiting for generated media on answer %s (%s elapsed)",
+			frames[frameIndex],
+			shortActionID(answerID),
+			elapsed,
+		)
+
+		select {
+		case <-spinner.done:
+			fmt.Fprint(os.Stderr, "\r\033[K")
+			return
+		case <-ticker.C:
+			frameIndex = (frameIndex + 1) % len(frames)
+		}
+	}
+}
+
+func shortActionID(id string) string {
+	trimmedID := strings.TrimSpace(id)
+	if len(trimmedID) <= 8 {
+		return trimmedID
+	}
+
+	return trimmedID[:8]
+}
+
+func stderrIsTTY() bool {
+	stderrInfo, err := os.Stderr.Stat()
+	if err != nil {
+		return false
+	}
+
+	return (stderrInfo.Mode() & os.ModeCharDevice) != 0
 }
