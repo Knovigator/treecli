@@ -127,6 +127,27 @@ func GetAnswer(backendURL, answerID, accessToken, client, uid string) (AnswerRes
 	return answerInfo, nil
 }
 
+func ListAIModels(backendURL, accessToken, client, uid string) (AIModelsResponse, error) {
+	resp, err := newRequest(accessToken, client, uid).
+		SetHeader("accept", "application/json").
+		Get(fmt.Sprintf("%s/api/v1/ai_models", backendURL))
+	if err != nil {
+		return nil, fmt.Errorf("error making request: %v", err)
+	}
+
+	if resp.StatusCode() != http.StatusOK {
+		return nil, fmt.Errorf("received status code %d: %s", resp.StatusCode(), resp.Body())
+	}
+
+	var models AIModelsResponse
+	err = json.Unmarshal(resp.Body(), &models)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing response: %v", err)
+	}
+
+	return models, nil
+}
+
 func ListTeams(
 	backendURL string,
 	accessToken string,

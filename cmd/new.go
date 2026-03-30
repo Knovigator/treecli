@@ -14,11 +14,12 @@ var NewCmd = &cobra.Command{
 }
 
 var newReplyCmd = &cobra.Command{
-	Use:   "reply <content>",
-	Short: "Create a reply in an existing thread",
-	Long:  `Create a reply answer in an existing thread.`,
-	Args:  cobra.MinimumNArgs(1),
-	Run:   runNewReply,
+	Use:    "reply <content>",
+	Short:  "Create a reply in an existing thread",
+	Long:   `Create a reply answer in an existing thread.`,
+	Args:   cobra.MinimumNArgs(1),
+	Run:    runNewReply,
+	Hidden: true,
 }
 
 var replyThreadID string
@@ -26,17 +27,27 @@ var replyAttachment string
 var replySpaceID string
 var replyMessageType string
 
+type replyCreateOptions struct {
+	ReplyToQuestID string
+	Content        string
+	Attachment     string
+	SpaceID        string
+	MessageType    string
+}
+
 func init() {
 	NewCmd.AddCommand(newPostCmd)
 	NewCmd.AddCommand(newReplyCmd)
 	NewCmd.AddCommand(newClipCmd)
 
-	newReplyCmd.Flags().StringVar(&replyThreadID, "thread", "", "Thread ID to reply to")
+	newReplyCmd.Flags().StringVar(&replyThreadID, "reply-to", "", "Reply to the thread/quest with this id instead of creating a new root thread")
+	newReplyCmd.Flags().StringVar(&replyThreadID, "thread", "", "Compatibility alias for --reply-to")
 	newReplyCmd.Flags().StringVarP(&replyAttachment, "attachment", "f", "", "Path to the file to attach")
 	newReplyCmd.Flags().StringVar(&replySpaceID, "space-id", "", "Space ID to create the reply in")
 	newReplyCmd.Flags().StringVar(&replyMessageType, "message-type", "", "Optional message_type for the reply")
 	newReplyCmd.Flags().StringVarP(&createOutputFormat, "output", "o", "ascii", "Output format: ascii or json")
-	_ = newReplyCmd.MarkFlagRequired("thread")
+	_ = newReplyCmd.MarkFlagRequired("reply-to")
+	_ = newReplyCmd.Flags().MarkHidden("thread")
 }
 
 func runNewReply(cmd *cobra.Command, args []string) {
@@ -52,34 +63,48 @@ func runNewReply(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	spaceID, err := resolveSpaceID(profile, replySpaceID)
+	result, err := createReply(
+		profile,
+		replyCreateOptions{
+			ReplyToQuestID: replyThreadID,
+			Content:        content,
+			Attachment:     replyAttachment,
+			SpaceID:        replySpaceID,
+			MessageType:    replyMessageType,
+		},
+	)
 	if err != nil {
-		fmt.Println("Error:", err)
+		fmt.Println("Error creating reply:", err)
 		return
+	}
+
+	printCreateAnswerResult(profile, result, createOutputFormat)
+}
+
+func createReply(profile profileConfig, options replyCreateOptions) (api.CreateAnswerResponse, error) {
+	spaceID, err := resolveSpaceID(profile, options.SpaceID)
+	if err != nil {
+		return api.CreateAnswerResponse{}, err
 	}
 
 	answerID, err := newUUID()
 	if err != nil {
-		fmt.Println("Error generating answer id:", err)
-		return
+		return api.CreateAnswerResponse{}, fmt.Errorf("error generating answer id: %w", err)
 	}
 
 	childQuestID, err := newUUID()
 	if err != nil {
-		fmt.Println("Error generating child quest id:", err)
-		return
+		return api.CreateAnswerResponse{}, fmt.Errorf("error generating child quest id: %w", err)
 	}
 
-	uploads, err := prepareAttachmentUploads(replyAttachment, "images[]", "recording", "files[]")
+	uploads, err := prepareAttachmentUploads(options.Attachment, "images[]", "recording", "files[]")
 	if err != nil {
-		fmt.Println("Error:", err)
-		return
+		return api.CreateAnswerResponse{}, err
 	}
 
-	deltaJSON, err := textToDeltaJSONString(content)
+	deltaJSON, err := textToDeltaJSONString(options.Content)
 	if err != nil {
-		fmt.Println("Error:", err)
-		return
+		return api.CreateAnswerResponse{}, err
 	}
 
 	result, err := api.CreateAnswer(
@@ -90,18 +115,17 @@ func runNewReply(cmd *cobra.Command, args []string) {
 		api.CreateAnswerRequest{
 			AnswerID:     answerID,
 			ChildQuestID: childQuestID,
-			QuestID:      replyThreadID,
+			QuestID:      options.ReplyToQuestID,
 			SpaceID:      spaceID,
-			Content:      content,
+			Content:      options.Content,
 			DeltaJSON:    deltaJSON,
-			MessageType:  replyMessageType,
+			MessageType:  options.MessageType,
 			Uploads:      uploads,
 		},
 	)
 	if err != nil {
-		fmt.Println("Error creating reply:", err)
-		return
+		return api.CreateAnswerResponse{}, err
 	}
 
-	printCreateAnswerResult(profile, result, createOutputFormat)
+	return result, nil
 }
