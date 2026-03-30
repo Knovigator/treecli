@@ -1,0 +1,3 @@
+display_name: treectl Basic Usage
+short_description: Use treectl for profile auth, thread reads, root posts, and replies.
+default_prompt: Use this skill when you need the current treectl workflow for reading threads and creating posts or replies.
