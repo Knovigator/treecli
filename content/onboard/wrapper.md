@@ -30,7 +30,12 @@ treectl skills install treectl-action-workflows --claude
 treectl skills install all --pi
 ```
 
+Turn on live shell completion immediately in bash or zsh:
+
+```bash
+source <(treectl completion $(basename "$SHELL"))
+```
+
 ---
 
 {{AGENTS_MD_BLOCK}}
-

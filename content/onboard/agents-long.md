@@ -48,3 +48,8 @@ Use `treectl` as the CLI surface for Treechat automation in this repo.
 - Use `treectl skills list` to discover packaged skills.
 - Install them into an agent skills directory with `treectl skills install ...`.
 - The first skills to install are the basic posting workflow and the action workflow skills.
+
+### Shell Completion
+
+- For bash and zsh, turn completions on in the current shell with `source <(treectl completion $(basename "$SHELL"))`.
+- Use `treectl completion bash` or `treectl completion zsh` directly if you want to install persistent completions.

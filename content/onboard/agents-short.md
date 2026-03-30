@@ -9,3 +9,4 @@
 - Use `treectl action --no-wait` plus `treectl action status --answer ...` or `--thread ...` for async flows.
 - Human-readable output is the default. Use `--json` when you need structured output.
 - Install packaged skills with `treectl skills list` and `treectl skills install ...`.
+- Turn on bash/zsh completions in the current shell with `source <(treectl completion $(basename "$SHELL"))`.
