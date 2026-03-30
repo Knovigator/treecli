@@ -24,6 +24,11 @@ type CreateAnswerResponse struct {
 	Raw       json.RawMessage `json:"-"`
 }
 
+type AnswerResponse struct {
+	Answer Answer          `json:"answer"`
+	Raw    json.RawMessage `json:"-"`
+}
+
 type MessagesResponse struct {
 	Answers []Answer        `json:"answers"`
 	Raw     json.RawMessage `json:"-"`
@@ -283,6 +288,63 @@ func (answer Answer) MediaURLs() []string {
 	}
 
 	return urls
+}
+
+func (answer Answer) CanonicalMediaURLs(fallbackBase string) []string {
+	mediaURLs := answer.MediaURLs()
+	canonicalURLs := make([]string, 0, len(mediaURLs))
+
+	for _, mediaURL := range mediaURLs {
+		canonicalURLs = append(canonicalURLs, canonicalizeURL(mediaURL, fallbackBase))
+	}
+
+	return canonicalURLs
+}
+
+func (answer Answer) GenerationStatus() string {
+	if answer.ImageGenerationFailed {
+		return "failed"
+	}
+
+	if len(answer.MediaURLs()) > 0 {
+		return "completed"
+	}
+
+	return "pending"
+}
+
+func (answer Answer) GenerationFailureReason() string {
+	if answer.ImageGenerationFailureReason == nil {
+		return ""
+	}
+
+	return strings.TrimSpace(*answer.ImageGenerationFailureReason)
+}
+
+func canonicalizeURL(rawURL string, fallbackBase string) string {
+	trimmedURL := strings.TrimSpace(rawURL)
+	if trimmedURL == "" {
+		return ""
+	}
+
+	if strings.HasPrefix(trimmedURL, "http://") || strings.HasPrefix(trimmedURL, "https://") {
+		return trimmedURL
+	}
+
+	scheme := "https"
+	if strings.HasPrefix(strings.TrimSpace(fallbackBase), "http://") {
+		scheme = "http"
+	}
+
+	if strings.HasPrefix(trimmedURL, "//") {
+		return scheme + ":" + trimmedURL
+	}
+
+	if strings.HasPrefix(trimmedURL, "/") {
+		return strings.TrimRight(strings.TrimSpace(fallbackBase), "/") + trimmedURL
+	}
+
+	return trimmedURL
 }
 
 func (quest Quest) ToASCII() string {

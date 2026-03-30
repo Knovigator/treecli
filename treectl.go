@@ -23,6 +23,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&cmd.AppHostOverride, "app-host", "", "Override the app host for generated links for this invocation")
 	rootCmd.AddCommand(cmd.LoginCmd)
 	rootCmd.AddCommand(cmd.GetCmd)
+	rootCmd.AddCommand(cmd.ActionCmd)
 	rootCmd.AddCommand(cmd.NewCmd) // Add the new top-level command
 	rootCmd.AddCommand(cmd.ProfileCmd)
 }

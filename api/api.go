@@ -91,6 +91,29 @@ func GetThread(backendURL, threadID, accessToken, client, uid string) (ThreadRes
 	return threadInfo, nil
 }
 
+func GetAnswer(backendURL, answerID, accessToken, client, uid string) (AnswerResponse, error) {
+	resp, err := newRequest(accessToken, client, uid).
+		SetHeader("accept", "application/json").
+		Get(fmt.Sprintf("%s/api/v1/answers/%s", backendURL, answerID))
+
+	if err != nil {
+		return AnswerResponse{}, fmt.Errorf("error making request: %v", err)
+	}
+
+	if resp.StatusCode() != http.StatusOK {
+		return AnswerResponse{}, fmt.Errorf("received status code %d: %s", resp.StatusCode(), resp.Body())
+	}
+
+	var answerInfo AnswerResponse
+	err = json.Unmarshal(resp.Body(), &answerInfo)
+	if err != nil {
+		return AnswerResponse{}, fmt.Errorf("error parsing response: %v", err)
+	}
+	answerInfo.Raw = append(answerInfo.Raw[:0], resp.Body()...)
+
+	return answerInfo, nil
+}
+
 func CreateQuest(
 	backendURL string,
 	accessToken string,
