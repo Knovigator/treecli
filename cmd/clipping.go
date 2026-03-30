@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"mime"
+	neturl "net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -302,6 +303,47 @@ func normalizeStreamKey(value string) string {
 func looksLikeUUID(value string) bool {
 	uuidPattern := regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
 	return uuidPattern.MatchString(strings.TrimSpace(value))
+}
+
+func normalizeReplyTarget(value string) (string, error) {
+	trimmedValue := strings.TrimSpace(value)
+	if trimmedValue == "" {
+		return "", fmt.Errorf("missing --reply-to value")
+	}
+
+	if looksLikeUUID(trimmedValue) {
+		return trimmedValue, nil
+	}
+
+	parsedURL, err := parseReplyTargetURL(trimmedValue)
+	if err != nil {
+		return "", fmt.Errorf("--reply-to must be a quest UUID or quest link")
+	}
+
+	pathSegments := strings.Split(strings.Trim(parsedURL.Path, "/"), "/")
+	for index := 0; index < len(pathSegments)-1; index++ {
+		if pathSegments[index] != "quest" {
+			continue
+		}
+
+		candidateID := strings.TrimSpace(pathSegments[index+1])
+		if looksLikeUUID(candidateID) {
+			return candidateID, nil
+		}
+	}
+
+	return "", fmt.Errorf("--reply-to must be a quest UUID or quest link")
+}
+
+func parseReplyTargetURL(value string) (*neturl.URL, error) {
+	candidateValue := strings.TrimSpace(value)
+	if strings.HasPrefix(candidateValue, "/") {
+		candidateValue = "https://placeholder.invalid" + candidateValue
+	} else if !strings.Contains(candidateValue, "://") && strings.Contains(candidateValue, "/") {
+		candidateValue = "https://" + candidateValue
+	}
+
+	return neturl.Parse(candidateValue)
 }
 
 func createClipQuest(

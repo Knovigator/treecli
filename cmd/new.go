@@ -42,7 +42,7 @@ func init() {
 	NewCmd.AddCommand(newReplyCmd)
 	NewCmd.AddCommand(newClipCmd)
 
-	newReplyCmd.Flags().StringVar(&replyThreadID, "reply-to", "", "Reply to the thread/quest with this id instead of creating a new root thread")
+	newReplyCmd.Flags().StringVar(&replyThreadID, "reply-to", "", "Reply to the thread/quest with this id or link instead of creating a new root thread")
 	newReplyCmd.Flags().StringVar(&replyThreadID, "thread", "", "Compatibility alias for --reply-to")
 	newReplyCmd.Flags().StringVarP(&replyAttachment, "attachment", "f", "", "Path to the file to attach")
 	newReplyCmd.Flags().StringVar(&replySpaceID, "space-id", "", "Space ID to create the reply in")
@@ -68,10 +68,16 @@ func runNewReply(cmd *cobra.Command, args []string) {
 		return
 	}
 
+	replyToQuestID, err := normalizeReplyTarget(replyThreadID)
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
+
 	result, err := createReply(
 		profile,
 		replyCreateOptions{
-			ReplyToQuestID: replyThreadID,
+			ReplyToQuestID: replyToQuestID,
 			Content:        content,
 			Attachment:     replyAttachment,
 			SpaceID:        replySpaceID,

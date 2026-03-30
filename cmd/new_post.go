@@ -15,10 +15,11 @@ import (
 var newPostCmd = &cobra.Command{
 	Use:   "post <content>",
 	Short: "Create a new post",
-	Long:  `Create a new post with content and optional URL or attachment. Pass --reply-to <quest-id> to create a reply in an existing thread instead of a new root thread.`,
+	Long:  `Create a new post with content and optional URL or attachment. Pass --reply-to <quest-id-or-link> to create a reply in an existing thread instead of a new root thread.`,
 	Example: "  treectl new post \"hello world\"\n" +
 		"  treectl new post --stream public \"hello world\"\n" +
-		"  treectl new post --reply-to 7a5e85c9-9dca-4140-ba9a-f5db0030afca \"hello back\"",
+		"  treectl new post --reply-to 7a5e85c9-9dca-4140-ba9a-f5db0030afca \"hello back\"\n" +
+		"  treectl new post --reply-to http://localhost:5173/quest/7a5e85c9-9dca-4140-ba9a-f5db0030afca \"hello back\"",
 	Args: cobra.MinimumNArgs(1),
 	Run:  runNewPost,
 }
@@ -30,7 +31,8 @@ var ActionCmd = &cobra.Command{
 	Example: "  treectl action flux \"a red kite over Bangkok\"\n" +
 		"  treectl action !kling \"camera orbit around a bonsai tree\"\n" +
 		"  treectl action \"!veo3 slow dolly through a neon alley\"\n" +
-		"  treectl action --reply-to 7a5e85c9-9dca-4140-ba9a-f5db0030afca flux \"make this warmer\"",
+		"  treectl action --reply-to 7a5e85c9-9dca-4140-ba9a-f5db0030afca flux \"make this warmer\"\n" +
+		"  treectl action --reply-to http://localhost:5173/quest/7a5e85c9-9dca-4140-ba9a-f5db0030afca flux \"make this warmer\"",
 	Args:              cobra.MinimumNArgs(1),
 	Run:               runAction,
 	ValidArgsFunction: completeActionArgs,
@@ -132,7 +134,7 @@ func init() {
 	newPostCmd.Flags().StringVarP(&postUrl, "url", "u", "", "Optional URL for the post")
 	newPostCmd.Flags().StringVarP(&postAttachment, "attachment", "f", "", "Path to the file to attach")
 	newPostCmd.Flags().StringVar(&postStream, "stream", "", "Target stream name or UUID. Defaults to private.")
-	newPostCmd.Flags().StringVar(&postReplyTo, "reply-to", "", "Reply to the thread/quest with this id instead of creating a new root thread")
+	newPostCmd.Flags().StringVar(&postReplyTo, "reply-to", "", "Reply to the thread/quest with this id or link instead of creating a new root thread")
 	newPostCmd.Flags().StringVar(&postReplyTo, "thread", "", "Compatibility alias for --reply-to")
 	newPostCmd.Flags().StringVar(&postSpaceID, "space-id", "", "Space ID to create the post in")
 	newPostCmd.Flags().StringVar(&postThreadType, "thread-type", "", "Optional thread_type for the new thread")
@@ -146,7 +148,7 @@ func init() {
 
 	ActionCmd.Flags().StringVarP(&actionAttachment, "attachment", "f", "", "Path to the file to attach")
 	ActionCmd.Flags().StringVar(&actionStream, "stream", "", "Target stream name or UUID. Defaults to private.")
-	ActionCmd.Flags().StringVar(&actionReplyTo, "reply-to", "", "Reply to the thread/quest with this id instead of creating a new root thread")
+	ActionCmd.Flags().StringVar(&actionReplyTo, "reply-to", "", "Reply to the thread/quest with this id or link instead of creating a new root thread")
 	ActionCmd.Flags().StringVar(&actionReplyTo, "thread", "", "Compatibility alias for --reply-to")
 	ActionCmd.Flags().StringVar(&actionSpaceID, "space-id", "", "Space ID to create the action in")
 	ActionCmd.Flags().StringVar(&actionThreadType, "thread-type", "", "Optional thread_type for the new thread")
@@ -188,6 +190,12 @@ func runNewPost(cmd *cobra.Command, args []string) {
 	}
 
 	if strings.TrimSpace(postReplyTo) != "" {
+		replyToQuestID, err := normalizeReplyTarget(postReplyTo)
+		if err != nil {
+			fmt.Println("Error:", err)
+			return
+		}
+
 		err = rejectRootOnlyPostFlags(cmd, postReplyTo)
 		if err != nil {
 			fmt.Println("Error:", err)
@@ -197,7 +205,7 @@ func runNewPost(cmd *cobra.Command, args []string) {
 		result, replyErr := createReply(
 			profile,
 			replyCreateOptions{
-				ReplyToQuestID: strings.TrimSpace(postReplyTo),
+				ReplyToQuestID: replyToQuestID,
 				Content:        content,
 				Attachment:     postAttachment,
 				SpaceID:        postSpaceID,
@@ -788,7 +796,12 @@ func createActionSubmission(
 	}
 
 	if strings.TrimSpace(actionReplyTo) != "" {
-		err := rejectRootOnlyPostFlags(cmd, actionReplyTo)
+		replyToQuestID, err := normalizeReplyTarget(actionReplyTo)
+		if err != nil {
+			return actionSubmission{}, err
+		}
+
+		err = rejectRootOnlyPostFlags(cmd, actionReplyTo)
 		if err != nil {
 			return actionSubmission{}, err
 		}
@@ -796,7 +809,7 @@ func createActionSubmission(
 		replyResult, err := createReply(
 			profile,
 			replyCreateOptions{
-				ReplyToQuestID: strings.TrimSpace(actionReplyTo),
+				ReplyToQuestID: replyToQuestID,
 				Content:        invocation.NormalizedContent,
 				DeltaJSON:      actionDeltaJSON,
 				Attachment:     actionAttachment,
