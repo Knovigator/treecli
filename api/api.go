@@ -36,6 +36,7 @@ type CreateAnswerRequest struct {
 	ChildQuestID string
 	QuestID      string
 	SpaceID      string
+	UserID       string
 	Content      string
 	DeltaJSON    string
 	MessageType  string
@@ -280,6 +281,9 @@ func CreateAnswer(
 	form.Set("id", request.AnswerID)
 	form.Set("space_id", request.SpaceID)
 	form.Set("quest_id", request.QuestID)
+	if request.UserID != "" {
+		form.Set("user_id", request.UserID)
+	}
 	form.Set("content", request.Content)
 	if request.DeltaJSON != "" {
 		form.Set("delta_json", request.DeltaJSON)

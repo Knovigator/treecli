@@ -117,6 +117,7 @@ func createReply(profile profileConfig, options replyCreateOptions) (api.CreateA
 			ChildQuestID: childQuestID,
 			QuestID:      options.ReplyToQuestID,
 			SpaceID:      spaceID,
+			UserID:       profile.CurrentUserID,
 			Content:      options.Content,
 			DeltaJSON:    deltaJSON,
 			MessageType:  options.MessageType,
