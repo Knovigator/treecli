@@ -4,6 +4,8 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 )
@@ -93,6 +95,25 @@ func GetPackagedSkill(key string) (*PackagedSkill, error) {
 	}
 
 	return nil, nil
+}
+
+func InstallPackagedSkill(skill PackagedSkill, skillsRootDir string) (string, error) {
+	skillDir := filepath.Join(skillsRootDir, skill.Name)
+	agentsDir := filepath.Join(skillDir, "agents")
+
+	if err := os.MkdirAll(agentsDir, 0755); err != nil {
+		return "", fmt.Errorf("creating skill install directory %s: %w", agentsDir, err)
+	}
+
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skill.SkillMD), 0644); err != nil {
+		return "", fmt.Errorf("writing packaged skill markdown for %s: %w", skill.Name, err)
+	}
+
+	if err := os.WriteFile(filepath.Join(agentsDir, "openai.yaml"), []byte(skill.OpenAIYAML), 0644); err != nil {
+		return "", fmt.Errorf("writing packaged agent yaml for %s: %w", skill.Name, err)
+	}
+
+	return skillDir, nil
 }
 
 func loadPackagedSkill(key string) (PackagedSkill, error) {
