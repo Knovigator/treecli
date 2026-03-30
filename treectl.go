@@ -26,6 +26,7 @@ func init() {
 	rootCmd.AddCommand(cmd.ActionCmd)
 	rootCmd.AddCommand(cmd.NewCmd) // Add the new top-level command
 	rootCmd.AddCommand(cmd.ProfileCmd)
+	rootCmd.AddCommand(cmd.OnboardCmd)
 	rootCmd.AddCommand(cmd.SkillsCmd)
 	rootCmd.InitDefaultCompletionCmd()
 }
