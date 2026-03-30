@@ -33,7 +33,7 @@ treectl skills install all --pi
 Turn on live shell completion immediately in bash or zsh:
 
 ```bash
-source <(treectl completion $(basename "$SHELL"))
+if [ -n "${ZSH_VERSION:-}" ]; then autoload -U compinit && compinit; source <(treectl completion zsh); elif command -v complete >/dev/null 2>&1; then source <(treectl completion bash); else echo "Current shell does not support bash completion; use zsh or a bash with progcomp."; fi
 ```
 
 ---

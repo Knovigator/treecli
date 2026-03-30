@@ -51,5 +51,5 @@ Use `treectl` as the CLI surface for Treechat automation in this repo.
 
 ### Shell Completion
 
-- For bash and zsh, turn completions on in the current shell with `source <(treectl completion $(basename "$SHELL"))`.
+- For bash and zsh, turn completions on in the current shell with `if [ -n "${ZSH_VERSION:-}" ]; then autoload -U compinit && compinit; source <(treectl completion zsh); elif command -v complete >/dev/null 2>&1; then source <(treectl completion bash); else echo "Current shell does not support bash completion; use zsh or a bash with progcomp."; fi`.
 - Use `treectl completion bash` or `treectl completion zsh` directly if you want to install persistent completions.
