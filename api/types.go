@@ -41,6 +41,28 @@ type MessagesResponse struct {
 	Raw     json.RawMessage `json:"-"`
 }
 
+type UpvaluedContentLeaderboardResponse struct {
+	Period struct {
+		StartDate string `json:"start_date"`
+		EndDate   string `json:"end_date"`
+	} `json:"period"`
+	Limit int                              `json:"limit"`
+	Items []UpvaluedContentLeaderboardItem `json:"items"`
+	Raw   json.RawMessage                  `json:"-"`
+}
+
+type UpvaluedContentLeaderboardItem struct {
+	AnswerID      string `json:"answer_id"`
+	QuestID       string `json:"quest_id"`
+	QuestURL      string `json:"quest_url"`
+	User          User   `json:"user"`
+	TotalSats     int64  `json:"total_sats"`
+	UpvalueCount  int    `json:"upvalue_count"`
+	LastUpvalueAt string `json:"last_upvalue_at"`
+	Answer        Answer `json:"answer"`
+	Quest         Quest  `json:"quest"`
+}
+
 type AIModelRef struct {
 	ID               string `json:"id"`
 	Name             string `json:"name"`

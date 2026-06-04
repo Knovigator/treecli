@@ -134,6 +134,47 @@ func GetAnswer(backendURL, answerID, accessToken, client, uid string) (AnswerRes
 	return answerInfo, nil
 }
 
+func GetUpvaluedContentLeaderboard(
+	backendURL string,
+	accessToken string,
+	client string,
+	uid string,
+	startDate string,
+	endDate string,
+	limit int,
+) (UpvaluedContentLeaderboardResponse, error) {
+	request := newRequest(accessToken, client, uid).
+		SetHeader("accept", "application/json")
+
+	if strings.TrimSpace(startDate) != "" {
+		request.SetQueryParam("start_date", strings.TrimSpace(startDate))
+	}
+	if strings.TrimSpace(endDate) != "" {
+		request.SetQueryParam("end_date", strings.TrimSpace(endDate))
+	}
+	if limit > 0 {
+		request.SetQueryParam("limit", fmt.Sprintf("%d", limit))
+	}
+
+	resp, err := request.Get(fmt.Sprintf("%s/api/v1/leaderboards/upvalued_content", backendURL))
+	if err != nil {
+		return UpvaluedContentLeaderboardResponse{}, fmt.Errorf("error making request: %v", err)
+	}
+
+	if resp.StatusCode() != http.StatusOK {
+		return UpvaluedContentLeaderboardResponse{}, fmt.Errorf("received status code %d: %s", resp.StatusCode(), resp.Body())
+	}
+
+	var leaderboard UpvaluedContentLeaderboardResponse
+	err = json.Unmarshal(resp.Body(), &leaderboard)
+	if err != nil {
+		return UpvaluedContentLeaderboardResponse{}, fmt.Errorf("error parsing response: %v", err)
+	}
+	leaderboard.Raw = append(leaderboard.Raw[:0], resp.Body()...)
+
+	return leaderboard, nil
+}
+
 func ListAIModels(backendURL, accessToken, client, uid string) (AIModelsResponse, error) {
 	resp, err := newRequest(accessToken, client, uid).
 		SetHeader("accept", "application/json").

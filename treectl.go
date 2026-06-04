@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/Knovigator/knovigator/treectl/cmd"
@@ -151,7 +152,7 @@ You will need to start a new shell for this setup to take effect.`
 				completionChild.Example = "  if command -v complete >/dev/null 2>&1; then source <(treectl completion bash); else echo \"This bash build does not support programmable completion.\"; fi"
 				originalRunE := completionChild.RunE
 				completionChild.RunE = func(cmd *cobra.Command, args []string) error {
-					_, err := fmt.Fprint(cmd.OutOrStdout(), bashCompletionPrelude)
+					_, err := io.WriteString(cmd.OutOrStdout(), bashCompletionPrelude)
 					if err != nil {
 						return err
 					}
