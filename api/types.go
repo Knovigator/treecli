@@ -41,6 +41,18 @@ type MessagesResponse struct {
 	Raw     json.RawMessage `json:"-"`
 }
 
+type NotificationsResponse struct {
+	Quests      []Quest         `json:"quests"`
+	PinnedQuest *Quest          `json:"pinned_quest"`
+	Raw         json.RawMessage `json:"-"`
+}
+
+type NotificationsCountResponse struct {
+	NumNotifications *int            `json:"num_noti"`
+	ClientVersion    int             `json:"client_version"`
+	Raw              json.RawMessage `json:"-"`
+}
+
 type UpvaluedContentLeaderboardResponse struct {
 	Period struct {
 		StartDate string `json:"start_date"`
@@ -83,17 +95,18 @@ type TeamRef struct {
 }
 
 type Quest struct {
-	ID                string   `json:"id"`
-	SpaceID           string   `json:"space_id"`
-	UserID            string   `json:"user_id"`
-	Content           string   `json:"content"`
-	Path              string   `json:"path"`
-	QuestURL          string   `json:"quest_url"`
-	ParentID          string   `json:"parent_id"`
-	SortedAnswerIDs   []string `json:"sorted_answer_ids"`
-	MatchingAnswerIDs []string `json:"matching_answer_ids"`
-	Parent            *Answer  `json:"parent"`
-	SortedAnswers     []Answer `json:"sorted_answers"`
+	ID                      string   `json:"id"`
+	SpaceID                 string   `json:"space_id"`
+	UserID                  string   `json:"user_id"`
+	Content                 string   `json:"content"`
+	Path                    string   `json:"path"`
+	QuestURL                string   `json:"quest_url"`
+	ParentID                string   `json:"parent_id"`
+	NotificationReasonLabel string   `json:"notification_reason_label"`
+	SortedAnswerIDs         []string `json:"sorted_answer_ids"`
+	MatchingAnswerIDs       []string `json:"matching_answer_ids"`
+	Parent                  *Answer  `json:"parent"`
+	SortedAnswers           []Answer `json:"sorted_answers"`
 }
 
 type Answer struct {

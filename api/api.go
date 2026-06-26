@@ -113,6 +113,85 @@ func GetThread(backendURL, threadID, accessToken, client, uid string) (ThreadRes
 	return threadInfo, nil
 }
 
+func GetNotifications(
+	backendURL string,
+	accessToken string,
+	client string,
+	uid string,
+	spaceID string,
+	page int,
+	unseenOnly bool,
+	clear bool,
+) (NotificationsResponse, error) {
+	request := newRequest(accessToken, client, uid).
+		SetHeader("accept", "application/json").
+		SetQueryParam("notifications", "true")
+
+	if strings.TrimSpace(spaceID) != "" {
+		request.SetQueryParam("space_id", strings.TrimSpace(spaceID))
+	}
+	if page > 0 {
+		request.SetQueryParam("page", fmt.Sprintf("%d", page))
+	}
+	if unseenOnly {
+		request.SetQueryParam("unseen", "true")
+	}
+	if clear {
+		request.SetQueryParam("clear", "true")
+	}
+
+	resp, err := request.Get(fmt.Sprintf("%s/api/v1/quests", backendURL))
+	if err != nil {
+		return NotificationsResponse{}, fmt.Errorf("error making request: %v", err)
+	}
+
+	if resp.StatusCode() != http.StatusOK {
+		return NotificationsResponse{}, fmt.Errorf("received status code %d: %s", resp.StatusCode(), resp.Body())
+	}
+
+	var notifications NotificationsResponse
+	err = json.Unmarshal(resp.Body(), &notifications)
+	if err != nil {
+		return NotificationsResponse{}, fmt.Errorf("error parsing response: %v", err)
+	}
+	notifications.Raw = append(notifications.Raw[:0], resp.Body()...)
+
+	return notifications, nil
+}
+
+func GetNotificationsCount(
+	backendURL string,
+	accessToken string,
+	client string,
+	uid string,
+	spaceID string,
+) (NotificationsCountResponse, error) {
+	request := newRequest(accessToken, client, uid).
+		SetHeader("accept", "application/json")
+
+	if strings.TrimSpace(spaceID) != "" {
+		request.SetQueryParam("space_id", strings.TrimSpace(spaceID))
+	}
+
+	resp, err := request.Get(fmt.Sprintf("%s/api/v1/notifications/count", backendURL))
+	if err != nil {
+		return NotificationsCountResponse{}, fmt.Errorf("error making request: %v", err)
+	}
+
+	if resp.StatusCode() != http.StatusOK {
+		return NotificationsCountResponse{}, fmt.Errorf("received status code %d: %s", resp.StatusCode(), resp.Body())
+	}
+
+	var count NotificationsCountResponse
+	err = json.Unmarshal(resp.Body(), &count)
+	if err != nil {
+		return NotificationsCountResponse{}, fmt.Errorf("error parsing response: %v", err)
+	}
+	count.Raw = append(count.Raw[:0], resp.Body()...)
+
+	return count, nil
+}
+
 func GetAnswer(backendURL, answerID, accessToken, client, uid string) (AnswerResponse, error) {
 	resp, err := newRequest(accessToken, client, uid).
 		SetHeader("accept", "application/json").
