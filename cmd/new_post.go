@@ -27,10 +27,11 @@ var newPostCmd = &cobra.Command{
 var ActionCmd = &cobra.Command{
 	Use:   "action <tag-or-invocation> [prompt...]",
 	Short: "Create an action-tag post or reply and wait for generated media",
-	Long:  "Create an action-tag root thread or reply, then poll the submitted answer until media generation completes, fails, or times out.\n\nRun `treectl action tags` to see the current model-backed action tags.",
+	Long:  "Create an action-tag root thread or reply, then poll the submitted answer until media generation completes, fails, or times out.\n\nRun `treectl action tags` to see the current model-backed action tags.\n\nUse --duration to request a specific audio or video length in seconds; the backend clamps it to the model's allowed range.",
 	Example: "  treectl action flux \"a red kite over Bangkok\"\n" +
 		"  treectl action !kling \"camera orbit around a bonsai tree\"\n" +
 		"  treectl action \"!veo3 slow dolly through a neon alley\"\n" +
+		"  treectl action !stableaudio \"ambient build, 120 BPM\" --duration 90\n" +
 		"  treectl action --reply-to 7a5e85c9-9dca-4140-ba9a-f5db0030afca flux \"make this warmer\"\n" +
 		"  treectl action --reply-to http://localhost:5173/quest/7a5e85c9-9dca-4140-ba9a-f5db0030afca flux \"make this warmer\"",
 	Args:              cobra.MinimumNArgs(1),
@@ -84,6 +85,7 @@ var actionJSONOutput bool
 var actionPollInterval time.Duration
 var actionTimeout time.Duration
 var actionNoWait bool
+var actionDuration int
 var actionStatusAnswerID string
 var actionStatusThreadID string
 var actionStatusWatch bool
@@ -164,6 +166,7 @@ func init() {
 	ActionCmd.Flags().DurationVar(&actionPollInterval, "poll-interval", 3*time.Second, "Polling interval while waiting for generated media")
 	ActionCmd.Flags().DurationVar(&actionTimeout, "timeout", 10*time.Minute, "Maximum time to wait for generated media")
 	ActionCmd.Flags().BoolVar(&actionNoWait, "no-wait", false, "Submit the action and return immediately without polling")
+	ActionCmd.Flags().IntVar(&actionDuration, "duration", 0, "Duration in seconds for audio/video generation; the model clamps to its allowed range (0 = model default)")
 	_ = ActionCmd.Flags().MarkHidden("thread")
 	actionStatusCmd.Flags().StringVar(&actionStatusAnswerID, "answer", "", "Check the action result for this post/answer id or link")
 	actionStatusCmd.Flags().StringVar(&actionStatusAnswerID, "post", "", "Check the action result for this post/answer id or link")
@@ -262,6 +265,9 @@ func runAction(cmd *cobra.Command, args []string) error {
 	}
 	if actionTimeout <= 0 {
 		return fmt.Errorf("--timeout must be greater than zero")
+	}
+	if actionDuration < 0 {
+		return fmt.Errorf("--duration must be zero or greater")
 	}
 	resolvedOutputFormat := resolveOutputFormat(actionOutputFormat, actionJSONOutput)
 
@@ -817,7 +823,7 @@ func createActionSubmission(
 	if err != nil {
 		return actionSubmission{}, fmt.Errorf("building action delta_json: %w", err)
 	}
-	actionRequestsJSON, err := actionRequestsJSONString(invocation)
+	actionRequestsJSON, err := actionRequestsJSONString(invocation, actionDuration)
 	if err != nil {
 		return actionSubmission{}, fmt.Errorf("building action_requests: %w", err)
 	}
@@ -890,22 +896,28 @@ func createActionSubmission(
 	}, nil
 }
 
-func actionRequestsJSONString(invocation actionInvocation) (string, error) {
+func actionRequestsJSONString(invocation actionInvocation, durationSeconds int) (string, error) {
 	actionID, err := newUUID()
 	if err != nil {
 		return "", fmt.Errorf("error generating action request id: %w", err)
 	}
 
-	payload := []map[string]interface{}{
-		{
-			"id":               actionID,
-			"client_id":        actionID,
-			"tag":              invocation.Tag,
-			"prompt":           invocation.Prompt,
-			"kind":             "model",
-			"generation_count": 1,
-		},
+	request := map[string]interface{}{
+		"id":               actionID,
+		"client_id":        actionID,
+		"tag":              invocation.Tag,
+		"prompt":           invocation.Prompt,
+		"kind":             "model",
+		"generation_count": 1,
 	}
+
+	if durationSeconds > 0 {
+		request["settings"] = map[string]interface{}{
+			"duration_seconds": durationSeconds,
+		}
+	}
+
+	payload := []map[string]interface{}{request}
 
 	encoded, err := json.Marshal(payload)
 	if err != nil {

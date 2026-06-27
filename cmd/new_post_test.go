@@ -10,7 +10,7 @@ func TestActionRequestsJSONStringBuildsStructuredModelRequest(t *testing.T) {
 	payloadJSON, err := actionRequestsJSONString(actionInvocation{
 		Tag:    "fluxfast",
 		Prompt: "wide cover image",
-	})
+	}, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -42,6 +42,32 @@ func TestActionRequestsJSONStringBuildsStructuredModelRequest(t *testing.T) {
 	}
 	if action["generation_count"] != float64(1) {
 		t.Fatalf("expected generation_count 1, got %v", action["generation_count"])
+	}
+	if _, present := action["settings"]; present {
+		t.Fatalf("expected no settings when duration is unset, got %v", action["settings"])
+	}
+}
+
+func TestActionRequestsJSONStringIncludesDurationSetting(t *testing.T) {
+	payloadJSON, err := actionRequestsJSONString(actionInvocation{
+		Tag:    "stableaudio",
+		Prompt: "ambient build, 120 BPM",
+	}, 90)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var payload []map[string]interface{}
+	if err := json.Unmarshal([]byte(payloadJSON), &payload); err != nil {
+		t.Fatalf("invalid JSON payload: %v", err)
+	}
+
+	settings, ok := payload[0]["settings"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected settings object, got %v", payload[0]["settings"])
+	}
+	if settings["duration_seconds"] != float64(90) {
+		t.Fatalf("expected duration_seconds 90, got %v", settings["duration_seconds"])
 	}
 }
 
