@@ -570,8 +570,15 @@ func ClipLink(
 }
 
 func newRequest(accessToken, client, uid string) *resty.Request {
+	return newRequestWithTimeout(accessToken, client, uid, 10*time.Second)
+}
+
+func newRequestWithTimeout(accessToken, client, uid string, timeout time.Duration) *resty.Request {
+	if timeout <= 0 {
+		timeout = 10 * time.Second
+	}
 	restyClient := resty.New()
-	restyClient.SetTimeout(10 * time.Second)
+	restyClient.SetTimeout(timeout)
 
 	return restyClient.R().
 		SetHeader("access-token", accessToken).

@@ -3,7 +3,11 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	neturl "net/url"
+	"strings"
+	"time"
 )
 
 // GenerationResponse is the payload from the direct (post-less) generation endpoints.
@@ -28,13 +32,14 @@ func CreateGeneration(
 	tag string,
 	prompt string,
 	settings map[string]interface{},
+	timeout time.Duration,
 ) (GenerationResponse, error) {
 	body := map[string]interface{}{"tag": tag, "prompt": prompt}
 	if len(settings) > 0 {
 		body["settings"] = settings
 	}
 
-	resp, err := newRequest(accessToken, client, uid).
+	resp, err := newRequestWithTimeout(accessToken, client, uid, timeout).
 		SetHeader("accept", "application/json").
 		SetHeader("Content-Type", "application/json").
 		SetBody(body).
@@ -76,16 +81,57 @@ func GetGeneration(backendURL, id, accessToken, client, uid string) (GenerationR
 	return out, nil
 }
 
-// DownloadMedia fetches a generated media URL, sending auth headers in case the URL is an
-// app-served (non-CDN) media endpoint rather than a pre-signed object URL.
-func DownloadMedia(mediaURL, accessToken, client, uid string) ([]byte, error) {
-	resp, err := newRequest(accessToken, client, uid).
-		Get(mediaURL)
+// DownloadMedia fetches a generated media URL. Treechat auth headers are sent only
+// to same-origin API URLs so signed storage/CDN URLs never receive credentials.
+func DownloadMedia(mediaURL, backendURL, accessToken, client, uid string) ([]byte, error) {
+	canonicalURL := canonicalizeURL(mediaURL, backendURL)
+	if strings.TrimSpace(canonicalURL) == "" {
+		return nil, fmt.Errorf("download failed: empty media URL")
+	}
+
+	if shouldSendTreechatAuth(canonicalURL, backendURL) {
+		resp, err := newRequestWithTimeout(accessToken, client, uid, 60*time.Second).Get(canonicalURL)
+		if err != nil {
+			return nil, fmt.Errorf("error downloading media: %w", err)
+		}
+		if resp.StatusCode() != http.StatusOK {
+			return nil, fmt.Errorf("download failed (status %d)", resp.StatusCode())
+		}
+		return resp.Body(), nil
+	}
+
+	request, err := http.NewRequest(http.MethodGet, canonicalURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("error preparing media download: %w", err)
+	}
+	httpClient := &http.Client{Timeout: 60 * time.Second}
+	resp, err := httpClient.Do(request)
 	if err != nil {
 		return nil, fmt.Errorf("error downloading media: %w", err)
 	}
-	if resp.StatusCode() != http.StatusOK {
-		return nil, fmt.Errorf("download failed (status %d)", resp.StatusCode())
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("download failed (status %d)", resp.StatusCode)
 	}
-	return resp.Body(), nil
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("reading media response: %w", err)
+	}
+	return data, nil
+}
+
+func shouldSendTreechatAuth(requestURL, backendURL string) bool {
+	parsedRequestURL, err := neturl.Parse(requestURL)
+	if err != nil || parsedRequestURL.Scheme == "" || parsedRequestURL.Host == "" {
+		return false
+	}
+
+	parsedBackendURL, err := neturl.Parse(backendURL)
+	if err != nil || parsedBackendURL.Scheme == "" || parsedBackendURL.Host == "" {
+		return false
+	}
+
+	return strings.EqualFold(parsedRequestURL.Scheme, parsedBackendURL.Scheme) &&
+		strings.EqualFold(parsedRequestURL.Host, parsedBackendURL.Host) &&
+		strings.HasPrefix(parsedRequestURL.EscapedPath(), "/api/")
 }

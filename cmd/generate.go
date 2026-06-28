@@ -59,6 +59,12 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 	if generateDuration < 0 {
 		return fmt.Errorf("--duration must be zero or greater")
 	}
+	if generatePollInterval <= 0 {
+		return fmt.Errorf("--poll-interval must be greater than zero")
+	}
+	if generateTimeout <= 0 {
+		return fmt.Errorf("--timeout must be greater than zero")
+	}
 
 	settings := map[string]interface{}{}
 	if strings.TrimSpace(generateSettingsRaw) != "" {
@@ -83,6 +89,7 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 		tag,
 		prompt,
 		settings,
+		generateTimeout,
 	)
 	if err != nil {
 		return err
@@ -108,7 +115,13 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("generation did not succeed (status %q) %s", result.Status, reason)
 	}
 
-	data, err := api.DownloadMedia(result.MediaURLs[0], profile.AccessToken, profile.Client, profile.UID)
+	data, err := api.DownloadMedia(
+		result.MediaURLs[0],
+		profile.BackendURL,
+		profile.AccessToken,
+		profile.Client,
+		profile.UID,
+	)
 	if err != nil {
 		return err
 	}
