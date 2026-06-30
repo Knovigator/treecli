@@ -6,6 +6,8 @@ import (
 	"io"
 	"net/http"
 	neturl "net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -163,6 +165,49 @@ func shouldSendTreechatAuth(requestURL, backendURL string) bool {
 	return strings.EqualFold(parsedRequestURL.Scheme, parsedBackendURL.Scheme) &&
 		strings.EqualFold(parsedRequestURL.Host, parsedBackendURL.Host) &&
 		strings.HasPrefix(parsedRequestURL.EscapedPath(), "/api/")
+}
+
+// ReferenceUploadResponse is returned by the reference-upload endpoint.
+type ReferenceUploadResponse struct {
+	ID    string `json:"id"`
+	URL   string `json:"url"`
+	Error string `json:"error,omitempty"`
+}
+
+// UploadReference uploads a local file to use as a model reference and returns its presigned URL.
+// POST /api/v1/ai/generations/references (multipart). The file is held on a direct AiRun; no charge.
+func UploadReference(backendURL, accessToken, client, uid, filePath string) (ReferenceUploadResponse, error) {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return ReferenceUploadResponse{}, fmt.Errorf("reading reference file %s: %w", filePath, err)
+	}
+	uploads := []MultipartFile{{FieldName: "file", FileName: filepath.Base(filePath), Content: data}}
+
+	resp, err := postMultipart(
+		backendURL,
+		"/api/v1/ai/generations/references",
+		accessToken,
+		client,
+		uid,
+		neturl.Values{},
+		uploads,
+	)
+	if err != nil {
+		return ReferenceUploadResponse{}, err
+	}
+
+	var out ReferenceUploadResponse
+	if err := json.Unmarshal(resp.Body(), &out); err != nil {
+		return ReferenceUploadResponse{}, fmt.Errorf("parsing reference upload response: %w", err)
+	}
+	if out.URL == "" {
+		msg := out.Error
+		if msg == "" {
+			msg = string(resp.Body())
+		}
+		return out, fmt.Errorf("reference upload returned no url: %s", msg)
+	}
+	return out, nil
 }
 
 // ListGenerationTags fetches the model tags the direct generation endpoint supports and what each

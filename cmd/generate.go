@@ -51,7 +51,7 @@ func init() {
 	GenerateCmd.Flags().StringVarP(&generateOut, "out", "o", "", "Path to write the generated file (required unless --quote). Extra outputs get a -N suffix.")
 	GenerateCmd.Flags().StringVar(&generateSettingsRaw, "settings", "", "Optional JSON object of model settings (e.g. '{\"aspect_ratio\":\"1:1\"}')")
 	GenerateCmd.Flags().StringArrayVar(&generateInputs, "input", nil, "Model input as key=value (repeatable). Value parsed as JSON if possible, else string. e.g. --input style=ambient --input seed=42")
-	GenerateCmd.Flags().StringVar(&generateReference, "reference", "", "Reference media: run:<id> (chain a prior generation's output), a public URL, or @path (upload — not yet)")
+	GenerateCmd.Flags().StringVar(&generateReference, "reference", "", "Reference media: run:<id> (chain a prior generation's output), a public URL, or @path (upload a local file)")
 	GenerateCmd.Flags().BoolVar(&generateInstrumental, "instrumental", false, "For music models: generate instrumental (no vocals)")
 	GenerateCmd.Flags().IntVar(&generateDuration, "duration", 0, "Duration in seconds for audio/video models (sets settings.duration_seconds; the backend clamps to the model's range)")
 	GenerateCmd.Flags().BoolVar(&generateQuote, "quote", false, "Print the price for this generation without generating anything")
@@ -207,7 +207,15 @@ func resolveReference(profile profileConfig, ref string) (string, error) {
 	case strings.HasPrefix(ref, "http://"), strings.HasPrefix(ref, "https://"):
 		return ref, nil
 	case strings.HasPrefix(ref, "@"):
-		return "", fmt.Errorf("file references (@path) are not supported yet — use run:<id> to chain a prior generation, or a public URL")
+		path := strings.TrimSpace(strings.TrimPrefix(ref, "@"))
+		if path == "" {
+			return "", fmt.Errorf("invalid --reference: @path is empty")
+		}
+		res, err := api.UploadReference(profile.BackendURL, profile.AccessToken, profile.Client, profile.UID, path)
+		if err != nil {
+			return "", fmt.Errorf("uploading reference %s: %w", path, err)
+		}
+		return res.URL, nil
 	default:
 		return "", fmt.Errorf("invalid --reference %q: use run:<id>, a public URL, or @path", ref)
 	}
