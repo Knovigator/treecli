@@ -1,6 +1,6 @@
 ---
 name: treectl-action-workflows
-description: Use treectl action flows to discover tags, submit action-tag prompts, and manage synchronous or asynchronous generation workflows.
+description: Use treectl action flows to discover tags, submit structured action_requests, set duration when supported, and manage synchronous or asynchronous generation workflows.
 ---
 
 # treectl Action Workflows
@@ -22,16 +22,18 @@ Use this skill when you need to submit or inspect Treechat action-tag work throu
 ## Submit Action Work
 
 - Root action: `treectl action flux "a glass cathedral in the rain"`.
+- Root action with requested audio/video duration: `treectl action stableaudio "ambient build, 120 BPM" --duration 90`.
 - Reply action: `treectl action --reply-to <quest-id> animate_kling "animate this as a handheld push-in"`.
 - Existing-image animation: `treectl action --reply-to <quest-id> animate_kling "animate this still as a handheld push-in"`.
 - Existing-image edit: `treectl action --reply-to <quest-id> edit_flux "make this warmer and more cinematic"`.
 - Root actions default to private placement unless you pass a root-only stream flag like `--stream public`.
+- Use `--duration` only when the target model supports duration, such as audio or video generation; the backend clamps the value to the model's allowed range.
 
 ## Async Workflows
 
 - Submit without waiting: `treectl action --no-wait flux "prompt"`.
-- Check a specific answer later: `treectl action status --answer <answer-id>`.
-- Check a thread later: `treectl action status --thread <quest-id>`.
+- Check a thread later: `treectl action status <quest-id-or-link>`.
+- Check a specific post or answer later: `treectl action status --post <answer-id>` or `treectl action status --answer <answer-id>`.
 - Keep polling until completion: `treectl action status --answer <answer-id> --watch`.
 
 ## Output Rules
@@ -41,5 +43,7 @@ Use this skill when you need to submit or inspect Treechat action-tag work throu
 
 ## Notes
 
-- `treectl action` builds the same bolded action-tag delta shape the frontend uses.
+- `treectl action` writes structured `action_requests` for backend execution. Each request includes a generated `id`, matching `client_id`, model `tag`, `prompt`, `kind: "model"`, and `generation_count: 1`.
+- When `--duration` is present, `treectl action` adds `settings.duration_seconds` to the action request.
+- `treectl action` also writes display `delta_json` so the post content renders like a normal action-tag message in Treechat.
 - Interactive polling shows a spinner on `stderr`, so JSON output on `stdout` stays clean.
