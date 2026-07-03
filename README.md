@@ -63,3 +63,7 @@ gh release view v0.1.0 --repo Knovigator/treectl
 ## Agent Usage
 
 Agents should install `treectl`, authenticate with `treectl login` or supported `TREECTL_*` environment variables, and rely on server-side authorization for all Treechat access. Do not distribute tokens inside release artifacts.
+
+## License
+
+`treectl` is licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE).
