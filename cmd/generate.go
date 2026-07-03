@@ -27,7 +27,7 @@ var (
 
 // GenerateCmd generates AI media via the direct (post-less) API and saves it locally.
 var GenerateCmd = &cobra.Command{
-	Use:   "generate <tag> [prompt...]",
+	Use:   "generate <ai-action> [prompt...]",
 	Short: "Generate AI media directly and download it locally (never creates a post)",
 	Long: "Generate AI media through the direct generation API and save it to a local file.\n\n" +
 		"This charges your account (USD/BSV) and NEVER touches the posting infra — no Answer, " +
@@ -36,15 +36,17 @@ var GenerateCmd = &cobra.Command{
 		"when possible, else treated as a string). Chain generations or steer a model with " +
 		"--reference (run:<id> reuses a prior generation's output as the model's reference; a public " +
 		"URL is passed through). Music models accept --instrumental and --duration.\n\n" +
-		"Run `treectl generate tags` to see the available tags and what each accepts.",
+		"Run `treectl generate actions` to see all active AI actions and which ones support direct post-less generation.",
 	Example: "  treectl generate flux \"soft-gradient app icon, violet to indigo\" --out icon.png\n" +
 		"  treectl generate flux2 \"wide hero banner\" --out banner.webp --input aspect_ratio=3:1\n" +
-		"  treectl generate stableaudio \"warm ambient build, 122 BPM\" --duration 20 --out sketch.mp3\n" +
+		"  treectl generate suno \"warm ambient build, 122 BPM\" --duration 20 --out sketch.mp3\n" +
 		"  treectl generate suno \"cinematic electronic, builds to a drop\" --instrumental --duration 22 \\\n" +
 		"      --reference run:abc123 --out track.mp3\n" +
-		"  treectl generate suno \"...\" --duration 22 --quote",
-	Args: cobra.MinimumNArgs(1),
-	RunE: runGenerate,
+		"  treectl generate suno \"...\" --duration 22 --quote\n" +
+		"  treectl generate actions --direct-only",
+	Args:              cobra.MinimumNArgs(1),
+	RunE:              runGenerate,
+	ValidArgsFunction: completeGenerateArgs,
 }
 
 func init() {
@@ -58,14 +60,14 @@ func init() {
 	GenerateCmd.Flags().BoolVar(&generateJSONOutput, "json", false, "Print the result as JSON")
 	GenerateCmd.Flags().DurationVar(&generatePollInterval, "poll-interval", 3*time.Second, "Polling interval if the generation runs async")
 	GenerateCmd.Flags().DurationVar(&generateTimeout, "timeout", 5*time.Minute, "Maximum time to wait for generated media")
-	GenerateCmd.AddCommand(generateTagsCmd)
+	GenerateCmd.AddCommand(generateActionsCmd)
 }
 
 func runGenerate(cmd *cobra.Command, args []string) error {
 	tag := strings.TrimPrefix(strings.TrimSpace(args[0]), "!")
 	prompt := strings.TrimSpace(strings.Join(args[1:], " "))
 	if tag == "" {
-		return fmt.Errorf("an action tag is required")
+		return fmt.Errorf("an AI action is required")
 	}
 	if prompt == "" {
 		return fmt.Errorf("a prompt is required")
@@ -132,8 +134,7 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// The endpoint may return a finished run (sync image tags) or one still in flight
-	// (async audio/video tags); poll until it settles.
+	// The endpoint may return a finished run or one still in flight; poll until it settles.
 	switch result.Status {
 	case "pending", "running", "submitted":
 		result, err = pollGeneration(profile, result.ID)
@@ -161,6 +162,7 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 		payload := map[string]interface{}{
 			"id":         result.ID,
 			"status":     result.Status,
+			"action":     result.Tag,
 			"tag":        result.Tag,
 			"provider":   result.Provider,
 			"out":        written,
@@ -184,6 +186,14 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 		fmt.Printf("Saved %d bytes to %s (run %s)%s\n", totalBytes, strings.Join(written, ", "), result.ID, cost)
 	}
 	return nil
+}
+
+func completeGenerateArgs(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	if len(args) > 0 {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	return completeAIActionNames(toComplete)
 }
 
 // resolveReference turns a --reference value into a URL the model can fetch. `run:<id>` reuses a
@@ -277,7 +287,7 @@ func printQuote(tag string, res api.GenerationResponse) error {
 	}
 	if generateJSONOutput {
 		encoded, err := json.MarshalIndent(map[string]interface{}{
-			"tag": tag, "quote": true, "amount_sats": sats, "amount_usd": usd, "provider": res.Provider,
+			"action": tag, "tag": tag, "quote": true, "amount_sats": sats, "amount_usd": usd, "provider": res.Provider,
 		}, "", "  ")
 		if err != nil {
 			return err

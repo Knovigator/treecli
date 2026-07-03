@@ -31,10 +31,11 @@ treectl skills install all --pi
 ```
 
 Important Treechat action model:
-- Use plain generation tags like `flux`, `veo3`, or `kling` when you want a new asset from a prompt.
-- Use an `animate_*` tag when you want to animate an existing image.
-- Use an `edit_*` tag when you want to edit an existing image.
-- If the task is "animate this previous image" or "edit this previous image", do not pick a plain generation tag.
+- Use plain generation actions like `flux`, `veo3`, or `kling` when you want a new asset from a prompt.
+- Use an `animate_*` action when you want to animate an existing image.
+- Use an `edit_*` action when you want to edit an existing image.
+- If the task is "animate this previous image" or "edit this previous image", do not pick a plain generation action.
+- For post-less local media generation, inspect support with `treectl generate actions --direct-only`, then use `treectl generate <action> "prompt" --out <file>`.
 
 Turn on live shell completion immediately in bash or zsh:
 

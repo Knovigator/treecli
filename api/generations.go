@@ -36,7 +36,8 @@ type GenerationQuote struct {
 	Provider   string  `json:"provider,omitempty"`
 }
 
-// TagInfo describes one model tag available to the direct generation endpoint and what it accepts.
+// TagInfo describes one AI action available to the direct generation endpoint and what it accepts.
+// The JSON field is still named "tag" because that is the backend compatibility contract.
 type TagInfo struct {
 	Tag                  string   `json:"tag"`
 	Provider             string   `json:"provider"`
@@ -210,7 +211,7 @@ func UploadReference(backendURL, accessToken, client, uid, filePath string) (Ref
 	return out, nil
 }
 
-// ListGenerationTags fetches the model tags the direct generation endpoint supports and what each
+// ListGenerationTags fetches the AI actions the direct generation endpoint supports and what each
 // accepts. GET /api/v1/ai/generations/tags.
 func ListGenerationTags(backendURL, accessToken, client, uid string) ([]TagInfo, error) {
 	resp, err := newRequest(accessToken, client, uid).
