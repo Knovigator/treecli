@@ -77,7 +77,7 @@ func GetMessages(backendURL, accessToken, client, uid string, messageIDs []strin
 	}
 
 	if resp.StatusCode() != http.StatusOK {
-		return MessagesResponse{}, fmt.Errorf("error: received status code %d. Response body: %s", resp.StatusCode(), resp.Body())
+		return MessagesResponse{}, fmt.Errorf("error: received status code %d. Response body: %s", resp.StatusCode(), SafeResponseBody(resp.Body()))
 	}
 
 	var messagesInfo MessagesResponse
@@ -100,7 +100,7 @@ func GetThread(backendURL, threadID, accessToken, client, uid string) (ThreadRes
 	}
 
 	if resp.StatusCode() != http.StatusOK {
-		return ThreadResponse{}, fmt.Errorf("received status code %d: %s", resp.StatusCode(), resp.Body())
+		return ThreadResponse{}, fmt.Errorf("received status code %d: %s", resp.StatusCode(), SafeResponseBody(resp.Body()))
 	}
 
 	var threadInfo ThreadResponse
@@ -146,7 +146,7 @@ func GetNotifications(
 	}
 
 	if resp.StatusCode() != http.StatusOK {
-		return NotificationsResponse{}, fmt.Errorf("received status code %d: %s", resp.StatusCode(), resp.Body())
+		return NotificationsResponse{}, fmt.Errorf("received status code %d: %s", resp.StatusCode(), SafeResponseBody(resp.Body()))
 	}
 
 	var notifications NotificationsResponse
@@ -179,7 +179,7 @@ func GetNotificationsCount(
 	}
 
 	if resp.StatusCode() != http.StatusOK {
-		return NotificationsCountResponse{}, fmt.Errorf("received status code %d: %s", resp.StatusCode(), resp.Body())
+		return NotificationsCountResponse{}, fmt.Errorf("received status code %d: %s", resp.StatusCode(), SafeResponseBody(resp.Body()))
 	}
 
 	var count NotificationsCountResponse
@@ -202,7 +202,7 @@ func GetAnswer(backendURL, answerID, accessToken, client, uid string) (AnswerRes
 	}
 
 	if resp.StatusCode() != http.StatusOK {
-		return AnswerResponse{}, fmt.Errorf("received status code %d: %s", resp.StatusCode(), resp.Body())
+		return AnswerResponse{}, fmt.Errorf("received status code %d: %s", resp.StatusCode(), SafeResponseBody(resp.Body()))
 	}
 
 	var answerInfo AnswerResponse
@@ -243,7 +243,7 @@ func GetUpvaluedContentLeaderboard(
 	}
 
 	if resp.StatusCode() != http.StatusOK {
-		return UpvaluedContentLeaderboardResponse{}, fmt.Errorf("received status code %d: %s", resp.StatusCode(), resp.Body())
+		return UpvaluedContentLeaderboardResponse{}, fmt.Errorf("received status code %d: %s", resp.StatusCode(), SafeResponseBody(resp.Body()))
 	}
 
 	var leaderboard UpvaluedContentLeaderboardResponse
@@ -265,7 +265,7 @@ func ListAIModels(backendURL, accessToken, client, uid string) (AIModelsResponse
 	}
 
 	if resp.StatusCode() != http.StatusOK {
-		return nil, fmt.Errorf("received status code %d: %s", resp.StatusCode(), resp.Body())
+		return nil, fmt.Errorf("received status code %d: %s", resp.StatusCode(), SafeResponseBody(resp.Body()))
 	}
 
 	var models AIModelsResponse
@@ -301,7 +301,7 @@ func ListTeams(
 	}
 
 	if resp.StatusCode() != http.StatusOK {
-		return TeamsResponse{}, fmt.Errorf("received status code %d: %s", resp.StatusCode(), resp.Body())
+		return TeamsResponse{}, fmt.Errorf("received status code %d: %s", resp.StatusCode(), SafeResponseBody(resp.Body()))
 	}
 
 	var teamsResponse TeamsResponse
@@ -330,7 +330,7 @@ func ListPublicTeams(
 	}
 
 	if resp.StatusCode() != http.StatusOK {
-		return TeamsResponse{}, fmt.Errorf("received status code %d: %s", resp.StatusCode(), resp.Body())
+		return TeamsResponse{}, fmt.Errorf("received status code %d: %s", resp.StatusCode(), SafeResponseBody(resp.Body()))
 	}
 
 	var teamsResponse TeamsResponse
@@ -609,7 +609,7 @@ func postMultipart(
 	}
 
 	if resp.StatusCode() != http.StatusOK {
-		return nil, fmt.Errorf("received status code %d: %s", resp.StatusCode(), resp.Body())
+		return nil, fmt.Errorf("received status code %d: %s", resp.StatusCode(), SafeResponseBody(resp.Body()))
 	}
 
 	return resp, nil

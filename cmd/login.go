@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Knovigator/treectl/api"
 	"github.com/adrg/xdg"
 	"github.com/go-resty/resty/v2"
 	"github.com/spf13/cobra"
@@ -32,6 +34,8 @@ var profileShowJSON bool
 
 var loginEndpointCandidates = []string{"/auth/sign_in", "/auth/signin"}
 var builtInProfileOrder = []string{"dev", "staging", "prod"}
+
+const profileRedactedValue = "********"
 
 type authTokens struct {
 	AccessToken string
@@ -98,6 +102,7 @@ func init() {
 	LoginCmd.Flags().StringVarP(&loginEmail, "email", "e", "", "Email address for login")
 	LoginCmd.Flags().StringVarP(&loginPassword, "password", "p", "", "Password for login")
 	LoginCmd.Flags().BoolVar(&readPasswordFromStdin, "password-stdin", false, "Read password from stdin")
+	_ = LoginCmd.Flags().MarkDeprecated("password", "use the interactive prompt or --password-stdin; command-line passwords can be exposed via shell history and process listings")
 
 	ProfileCmd.AddCommand(profileListCmd)
 	ProfileCmd.AddCommand(profileUseCmd)
@@ -109,6 +114,9 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	profileName := resolveProfileName()
 	profile, err := resolveProfile(profileName)
 	if err != nil {
+		return fmt.Errorf("login failed: %w", err)
+	}
+	if err := validateCredentialTransport(profile.BackendURL); err != nil {
 		return fmt.Errorf("login failed: %w", err)
 	}
 
@@ -202,10 +210,7 @@ func runProfileShow(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	redactedProfile := profile
-	if redactedProfile.AccessToken != "" {
-		redactedProfile.AccessToken = redactValue(redactedProfile.AccessToken)
-	}
+	redactedProfile := redactProfile(profile)
 
 	if profileShowJSON {
 		prettyJSON, err := json.MarshalIndent(redactedProfile, "", "  ")
@@ -396,6 +401,9 @@ func requireAuthenticatedProfile() (profileConfig, error) {
 
 	if profile.AccessToken == "" || profile.Client == "" || profile.UID == "" {
 		return profileConfig{}, fmt.Errorf("missing credentials for profile %q; run treectl login --profile %s", profile.Name, profile.Name)
+	}
+	if err := validateCredentialTransport(profile.BackendURL); err != nil {
+		return profileConfig{}, err
 	}
 
 	return profile, nil
@@ -625,26 +633,64 @@ func normalizeAppHost(rawHost string) string {
 	return fmt.Sprintf("%s://%s", scheme, strings.TrimRight(trimmedHost, "/"))
 }
 
-func formatResponseError(resp *resty.Response) string {
-	body := strings.TrimSpace(string(resp.Body()))
-	if body == "" {
-		return fmt.Sprintf("status %d", resp.StatusCode())
+func validateCredentialTransport(backendURL string) error {
+	parsedURL, err := url.Parse(strings.TrimSpace(backendURL))
+	if err != nil {
+		return fmt.Errorf("invalid backend_url %q: %w", backendURL, err)
+	}
+	if parsedURL.Scheme == "https" {
+		return nil
+	}
+	if parsedURL.Scheme == "http" && isLoopbackHost(parsedURL.Hostname()) {
+		return nil
+	}
+	if parsedURL.Scheme == "http" && strings.EqualFold(strings.TrimSpace(os.Getenv("TREECTL_ALLOW_INSECURE_HTTP")), "1") {
+		return nil
+	}
+	if parsedURL.Scheme == "http" {
+		return fmt.Errorf("refusing to send credentials to insecure backend_url %q; use https, localhost, or set TREECTL_ALLOW_INSECURE_HTTP=1", backendURL)
 	}
 
-	var responseBody map[string]interface{}
-	if err := json.Unmarshal(resp.Body(), &responseBody); err == nil {
-		formattedJSON, marshalErr := json.Marshal(responseBody)
-		if marshalErr == nil {
-			return fmt.Sprintf("status %d: %s", resp.StatusCode(), string(formattedJSON))
-		}
+	return fmt.Errorf("refusing to send credentials to unsupported backend_url scheme %q", parsedURL.Scheme)
+}
+
+func isLoopbackHost(host string) bool {
+	normalizedHost := strings.ToLower(strings.TrimSpace(host))
+	if normalizedHost == "localhost" {
+		return true
+	}
+
+	ip := net.ParseIP(normalizedHost)
+	return ip != nil && ip.IsLoopback()
+}
+
+func formatResponseError(resp *resty.Response) string {
+	body := api.SafeResponseBody(resp.Body())
+	if body == "" {
+		return fmt.Sprintf("status %d", resp.StatusCode())
 	}
 
 	return fmt.Sprintf("status %d: %s", resp.StatusCode(), body)
 }
 
+func redactProfile(profile profileConfig) profileConfig {
+	redactedProfile := profile
+	if redactedProfile.AccessToken != "" {
+		redactedProfile.AccessToken = redactValue(redactedProfile.AccessToken)
+	}
+	if redactedProfile.Client != "" {
+		redactedProfile.Client = redactValue(redactedProfile.Client)
+	}
+	if strings.Contains(redactedProfile.UID, "@") {
+		redactedProfile.UID = profileRedactedValue
+	}
+
+	return redactedProfile
+}
+
 func redactValue(value string) string {
 	if len(value) <= 8 {
-		return "********"
+		return profileRedactedValue
 	}
 
 	return value[:4] + "..." + value[len(value)-4:]
