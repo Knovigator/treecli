@@ -35,7 +35,8 @@ Important Treechat action model:
 - Use an `animate_*` action when you want to animate an existing image.
 - Use an `edit_*` action when you want to edit an existing image.
 - If the task is "animate this previous image" or "edit this previous image", do not pick a plain generation action.
-- For post-less local media generation, inspect support with `treectl generate actions --direct-only`, then use `treectl generate <action> "prompt" --out <file>`.
+- For post-less local media generation, inspect support with `treectl generate actions --direct-only`; use `treectl generate actions --verbose` or `treectl generate describe <action>` for model descriptions, settings, and examples.
+- Generate local media with `treectl generate <action> "prompt" --out <file>` and pass settings with `--input key=value`, `--settings '{...}'`, `--duration`, `--instrumental`, or `--reference` as described by the action.
 
 Turn on live shell completion immediately in bash or zsh:
 

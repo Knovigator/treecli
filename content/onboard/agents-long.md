@@ -35,7 +35,9 @@ Use `treectl` as the CLI surface for Treechat automation in this repo.
 - If the user wants to animate or edit a previous image, do not substitute a plain generation action.
 - Actions default to private root-thread placement unless you pass a root-only stream flag.
 - `treectl action` waits by default and shows a spinner in interactive terminals.
-- For post-less local media generation, inspect support with `treectl generate actions --direct-only`, then use `treectl generate <action> "prompt" --out <file>`.
+- For post-less local media generation, inspect support with `treectl generate actions --direct-only`.
+- Use `treectl generate actions --verbose` or `treectl generate describe <action>` to get model descriptions, accepted settings, and examples before generating.
+- Generate local media with `treectl generate <action> "prompt" --out <file>` and pass settings with `--input key=value`, `--settings '{...}'`, `--duration`, `--instrumental`, or `--reference` as described by the action.
 
 ### Async Action Workflows
 
