@@ -24,6 +24,20 @@ Go users can also install directly:
 go install github.com/Knovigator/treectl@latest
 ```
 
+Update an installed release in place:
+
+```sh
+treectl update
+```
+
+Self-update currently supports the macOS and Linux release archives.
+
+Check whether a newer release is available without installing it:
+
+```sh
+treectl update --check
+```
+
 ## Development
 
 ```sh

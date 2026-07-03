@@ -57,6 +57,12 @@ Use `treectl` as the CLI surface for Treechat automation in this repo.
 - Install them into an agent skills directory with `treectl skills install ...`.
 - The first skills to install are the basic posting workflow and the action workflow skills.
 
+### CLI Updates
+
+- Check for a newer release with `treectl update --check`.
+- Install the latest release with `treectl update`.
+- Use `treectl update --json` or `treectl update --check --json` when another tool needs structured update status.
+
 ### Shell Completion
 
 - For bash and zsh, turn completions on in the current shell with `if [ -n "${ZSH_VERSION:-}" ]; then autoload -U compinit && compinit; source <(treectl completion zsh); elif command -v complete >/dev/null 2>&1; then source <(treectl completion bash); else echo "Current shell does not support bash completion; use zsh or a bash with progcomp."; fi`.

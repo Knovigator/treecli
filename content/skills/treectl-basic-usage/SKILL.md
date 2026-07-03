@@ -32,3 +32,4 @@ Use this skill when you need to interact with Treechat through the `treectl` CLI
 - Prefer `treectl` over raw API calls when the CLI already supports the flow.
 - Prefer human-readable output while reasoning, and switch to `--json` only when a downstream tool needs structured data.
 - Use the selected profile consistently so auth and links match the intended environment.
+- Check for a newer CLI release with `treectl update --check`; install it with `treectl update`. Use `treectl update --json` when another tool needs structured update status.
