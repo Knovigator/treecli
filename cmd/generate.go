@@ -36,14 +36,16 @@ var GenerateCmd = &cobra.Command{
 		"when possible, else treated as a string). Chain generations or steer a model with " +
 		"--reference (run:<id> reuses a prior generation's output as the model's reference; a public " +
 		"URL is passed through). Music models accept --instrumental and --duration.\n\n" +
-		"Run `treectl generate actions` to see all active AI actions and which ones support direct post-less generation.",
+		"Run `treectl generate actions --verbose` or `treectl generate describe <ai-action>` " +
+		"to see available AI actions, descriptions, settings, and examples.",
 	Example: "  treectl generate flux \"soft-gradient app icon, violet to indigo\" --out icon.png\n" +
 		"  treectl generate flux2 \"wide hero banner\" --out banner.webp --input aspect_ratio=3:1\n" +
 		"  treectl generate suno \"warm ambient build, 122 BPM\" --duration 20 --out sketch.mp3\n" +
 		"  treectl generate suno \"cinematic electronic, builds to a drop\" --instrumental --duration 22 \\\n" +
 		"      --reference run:abc123 --out track.mp3\n" +
 		"  treectl generate suno \"...\" --duration 22 --quote\n" +
-		"  treectl generate actions --direct-only",
+		"  treectl generate actions --direct-only\n" +
+		"  treectl generate describe flux2",
 	Args:              cobra.MinimumNArgs(1),
 	RunE:              runGenerate,
 	ValidArgsFunction: completeGenerateArgs,
@@ -61,6 +63,7 @@ func init() {
 	GenerateCmd.Flags().DurationVar(&generatePollInterval, "poll-interval", 3*time.Second, "Polling interval if the generation runs async")
 	GenerateCmd.Flags().DurationVar(&generateTimeout, "timeout", 5*time.Minute, "Maximum time to wait for generated media")
 	GenerateCmd.AddCommand(generateActionsCmd)
+	GenerateCmd.AddCommand(generateDescribeCmd)
 }
 
 func runGenerate(cmd *cobra.Command, args []string) error {
@@ -193,7 +196,7 @@ func completeGenerateArgs(cmd *cobra.Command, args []string, toComplete string) 
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 
-	return completeAIActionNames(toComplete)
+	return completeGenerationActionNames(toComplete, true)
 }
 
 // resolveReference turns a --reference value into a URL the model can fetch. `run:<id>` reuses a

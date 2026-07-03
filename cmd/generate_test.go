@@ -92,10 +92,14 @@ func TestGenerationActionRowsIncludesFullCatalogAndMarksDirectSupport(t *testing
 				Inputs:           []string{"aspect_ratio"},
 			},
 			{
-				Tag:      "suno",
-				Provider: "suno",
-				Kind:     "audio",
-				Async:    true,
+				Tag:                  "suno",
+				Provider:             "suno",
+				Kind:                 "audio",
+				Async:                true,
+				AcceptsReference:     true,
+				SupportsInstrumental: true,
+				DurationMin:          5,
+				DurationMax:          240,
 			},
 			{
 				Tag:      "openclaw",
@@ -117,11 +121,20 @@ func TestGenerationActionRowsIncludesFullCatalogAndMarksDirectSupport(t *testing
 	if got := byAction["flux2"]; !got.DirectGeneration || got.Name != "Flux 2 Pro" || !got.AcceptsReference {
 		t.Fatalf("expected flux2 direct support with catalog metadata, got %#v", got)
 	}
+	if got := byAction["flux2"]; !hasSetting(got.Settings, "prompt") || !hasSetting(got.Settings, "aspect_ratio") {
+		t.Fatalf("expected flux2 prompt and aspect_ratio setting help, got %#v", got.Settings)
+	}
 	if got := byAction["veo3"]; got.DirectGeneration || got.Kind != "video" {
 		t.Fatalf("expected veo3 catalog row without direct support, got %#v", got)
 	}
+	if got := byAction["veo3"]; len(got.Notes) == 0 || !strings.Contains(got.Examples[0], "treectl action veo3") {
+		t.Fatalf("expected veo3 post-backed guidance, got notes=%#v examples=%#v", got.Notes, got.Examples)
+	}
 	if got := byAction["suno"]; !got.DirectGeneration || !got.Async {
 		t.Fatalf("expected direct-only suno row to be included, got %#v", got)
+	}
+	if got := byAction["suno"]; !hasSetting(got.Settings, "lyrics") || !hasSetting(got.Settings, "reference_url") {
+		t.Fatalf("expected suno lyrics and reference_url setting help, got %#v", got.Settings)
 	}
 }
 
@@ -154,4 +167,41 @@ func TestGenerateActionsCommandKeepsTagsCompatibilityAlias(t *testing.T) {
 	if !found {
 		t.Fatal("expected generate actions to keep tags as a compatibility alias")
 	}
+}
+
+func TestFindGenerationActionRowNormalizesBangPrefix(t *testing.T) {
+	row, ok := findGenerationActionRow([]generationActionRow{{Action: "flux2"}}, "!FLUX2")
+	if !ok {
+		t.Fatal("expected to find action with bang-prefixed input")
+	}
+	if row.Action != "flux2" {
+		t.Fatalf("expected flux2 row, got %#v", row)
+	}
+}
+
+func TestCompleteGenerationActionRowNamesFiltersAndPreservesBangPrefix(t *testing.T) {
+	rows := []generationActionRow{
+		{Action: "flux2"},
+		{Action: "veo3"},
+		{Action: "suno"},
+		{Action: "!flux2"},
+	}
+
+	got := completeGenerationActionRowNames(rows, "!f")
+
+	if len(got) != 1 {
+		t.Fatalf("expected one completion, got %#v", got)
+	}
+	if got[0] != "!flux2" {
+		t.Fatalf("expected bang-prefixed flux2 completion, got %#v", got)
+	}
+}
+
+func hasSetting(settings []settingHelp, name string) bool {
+	for _, setting := range settings {
+		if setting.Name == name {
+			return true
+		}
+	}
+	return false
 }

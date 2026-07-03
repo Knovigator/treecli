@@ -40,7 +40,10 @@ Use this skill when you need to submit or inspect Treechat AI action work throug
 
 - Use `treectl generate actions` to list all active AI actions and see which support direct post-less generation.
 - Use `treectl generate actions --direct-only` when you only want actions that can save media locally without creating a post.
+- Use `treectl generate actions --verbose` for a full human/agent-readable catalog with model descriptions, inputs, settings, examples, and notes.
+- Use `treectl generate describe <action>` before generating when you need focused help for one model.
 - Run direct generation with `treectl generate <action> "prompt" --out <file>`.
+- Pass settings with `--input key=value` for individual values, `--settings '{...}'` for a JSON settings object, `--duration` for duration-aware actions, `--instrumental` for music actions, and `--reference run:<id>|https://...|@path` for reference-aware actions.
 
 ## Output Rules
 

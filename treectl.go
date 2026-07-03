@@ -15,6 +15,7 @@ var rootCmd = &cobra.Command{
 	Use:           "treectl",
 	Short:         "treectl controls Treechat",
 	Long:          `A CLI application for interacting with Treechat.`,
+	Version:       cmd.CurrentVersion,
 	SilenceErrors: true,
 	SilenceUsage:  true,
 }
@@ -78,6 +79,7 @@ func init() {
 	rootCmd.AddCommand(cmd.ProfileCmd)
 	rootCmd.AddCommand(cmd.OnboardCmd)
 	rootCmd.AddCommand(cmd.SkillsCmd)
+	rootCmd.AddCommand(cmd.UpdateCmd)
 	rootCmd.InitDefaultCompletionCmd()
 	configureCompletionHelp()
 }
