@@ -26,8 +26,8 @@ var newPostCmd = &cobra.Command{
 
 var ActionCmd = &cobra.Command{
 	Use:   "action <tag-or-invocation> [prompt...]",
-	Short: "Create an action-tag post or reply and wait for generated media",
-	Long:  "Create an action-tag root thread or reply, then poll the submitted answer until media generation completes, fails, or times out.\n\nRun `treectl action tags` to see the current model-backed action tags.\n\nUse --duration to request a specific audio or video length in seconds; the backend clamps it to the model's allowed range.",
+	Short: "Create an AI action post or reply and wait for generated media",
+	Long:  "Create an AI action root thread or reply, then poll the submitted answer until media generation completes, fails, or times out.\n\nRun `treectl action tags` to see the current model-backed AI actions.\n\nUse --duration to request a specific audio or video length in seconds; the backend clamps it to the model's allowed range.",
 	Example: "  treectl action flux \"a red kite over Bangkok\"\n" +
 		"  treectl action !kling \"camera orbit around a bonsai tree\"\n" +
 		"  treectl action \"!veo3 slow dolly through a neon alley\"\n" +
@@ -41,8 +41,8 @@ var ActionCmd = &cobra.Command{
 
 var actionTagsCmd = &cobra.Command{
 	Use:   "tags",
-	Short: "List model-backed action tags",
-	Long:  "List the current model-backed action tags from the authenticated backend profile.",
+	Short: "List model-backed AI actions",
+	Long:  "List the current model-backed AI actions from the authenticated backend profile.",
 	RunE:  runActionTags,
 }
 
@@ -160,7 +160,7 @@ func init() {
 	ActionCmd.Flags().StringVar(&actionTeamID, "team-id", "", "Optional stream/team ID to post into")
 	ActionCmd.Flags().BoolVar(&actionPublic, "public", false, "Mark the new thread as public")
 	ActionCmd.Flags().BoolVar(&actionPrivate, "private", false, "Mark the new thread as private")
-	ActionCmd.Flags().BoolVar(&actionAllowUnknownTag, "allow-unknown-tag", false, "Submit the action even if the tag is not present in the current model-backed tag list")
+	ActionCmd.Flags().BoolVar(&actionAllowUnknownTag, "allow-unknown-tag", false, "Submit the action even if it is not present in the current model-backed AI action list")
 	ActionCmd.Flags().StringVarP(&actionOutputFormat, "output", "o", "ascii", "Output format: ascii or json")
 	ActionCmd.Flags().BoolVar(&actionJSONOutput, "json", false, "Output JSON instead of human-readable text")
 	ActionCmd.Flags().DurationVar(&actionPollInterval, "poll-interval", 3*time.Second, "Polling interval while waiting for generated media")
@@ -278,11 +278,11 @@ func runAction(cmd *cobra.Command, args []string) error {
 
 	validTags, err := fetchKnownActionTags(profile)
 	if err != nil {
-		return fmt.Errorf("loading action tags: %w", err)
+		return fmt.Errorf("loading AI actions: %w", err)
 	}
 
 	if !validTags[strings.ToLower(invocation.Tag)] && !actionAllowUnknownTag {
-		return fmt.Errorf("unknown action tag %q; run `treectl action tags` to inspect the current model-backed tags, or pass --allow-unknown-tag to submit anyway", invocation.Tag)
+		return fmt.Errorf("unknown AI action %q; run `treectl action tags` to inspect the current model-backed actions, or pass --allow-unknown-tag to submit anyway", invocation.Tag)
 	}
 
 	var publicValue *bool
@@ -575,7 +575,7 @@ func runActionTags(cmd *cobra.Command, args []string) error {
 
 	models, err := fetchVisibleActionModels(profile)
 	if err != nil {
-		return fmt.Errorf("loading action tags: %w", err)
+		return fmt.Errorf("loading AI actions: %w", err)
 	}
 
 	groupedModels := map[string][]api.AIModelRef{}
@@ -653,17 +653,17 @@ func rejectRootOnlyPostFlags(cmd *cobra.Command, replyTo string) error {
 
 func parseActionInvocation(args []string) (actionInvocation, error) {
 	if len(args) == 0 {
-		return actionInvocation{}, fmt.Errorf("an action tag is required")
+		return actionInvocation{}, fmt.Errorf("an AI action is required")
 	}
 
 	combinedArgs := strings.TrimSpace(strings.Join(args, " "))
 	if combinedArgs == "" {
-		return actionInvocation{}, fmt.Errorf("an action tag is required")
+		return actionInvocation{}, fmt.Errorf("an AI action is required")
 	}
 
 	fields := strings.Fields(combinedArgs)
 	if len(fields) == 0 {
-		return actionInvocation{}, fmt.Errorf("an action tag is required")
+		return actionInvocation{}, fmt.Errorf("an AI action is required")
 	}
 
 	rawTag := strings.TrimSpace(fields[0])
@@ -676,7 +676,7 @@ func parseActionInvocation(args []string) (actionInvocation, error) {
 
 	normalizedTag := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(rawTag, "!")))
 	if normalizedTag == "" {
-		return actionInvocation{}, fmt.Errorf("an action tag is required")
+		return actionInvocation{}, fmt.Errorf("an AI action is required")
 	}
 
 	promptFields := fields[1:]
@@ -744,6 +744,10 @@ func completeActionArgs(cmd *cobra.Command, args []string, toComplete string) ([
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 
+	return completeAIActionNames(toComplete)
+}
+
+func completeAIActionNames(toComplete string) ([]string, cobra.ShellCompDirective) {
 	profile, err := requireAuthenticatedProfile()
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp

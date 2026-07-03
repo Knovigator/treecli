@@ -78,6 +78,7 @@ type AIModelRef struct {
 	ID               string `json:"id"`
 	Name             string `json:"name"`
 	HumanName        string `json:"human_name"`
+	DisplayName      string `json:"display_name"`
 	Description      string `json:"description"`
 	DescriptionShort string `json:"description_short"`
 	Provider         string `json:"provider"`
