@@ -86,7 +86,7 @@ func CreateGeneration(
 	if resp.StatusCode() != http.StatusCreated && resp.StatusCode() != http.StatusOK {
 		msg := out.Error
 		if msg == "" {
-			msg = string(resp.Body())
+			msg = SafeResponseBody(resp.Body())
 		}
 		return out, fmt.Errorf("generation request failed (status %d): %s", resp.StatusCode(), msg)
 	}
@@ -107,7 +107,7 @@ func GetGeneration(backendURL, id, accessToken, client, uid string) (GenerationR
 	out.Raw = append(out.Raw[:0], resp.Body()...)
 
 	if resp.StatusCode() != http.StatusOK {
-		return out, fmt.Errorf("status %d: %s", resp.StatusCode(), resp.Body())
+		return out, fmt.Errorf("status %d: %s", resp.StatusCode(), SafeResponseBody(resp.Body()))
 	}
 	return out, nil
 }
@@ -203,7 +203,7 @@ func UploadReference(backendURL, accessToken, client, uid, filePath string) (Ref
 	if out.URL == "" {
 		msg := out.Error
 		if msg == "" {
-			msg = string(resp.Body())
+			msg = SafeResponseBody(resp.Body())
 		}
 		return out, fmt.Errorf("reference upload returned no url: %s", msg)
 	}
@@ -220,7 +220,7 @@ func ListGenerationTags(backendURL, accessToken, client, uid string) ([]TagInfo,
 		return nil, fmt.Errorf("error making request: %w", err)
 	}
 	if resp.StatusCode() != http.StatusOK {
-		return nil, fmt.Errorf("status %d: %s", resp.StatusCode(), resp.Body())
+		return nil, fmt.Errorf("status %d: %s", resp.StatusCode(), SafeResponseBody(resp.Body()))
 	}
 
 	// Accept either a bare array or {"tags": [...]}.

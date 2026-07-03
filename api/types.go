@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -242,16 +241,6 @@ type PollOptionPayload struct {
 	Position   int      `json:"position"`
 	VotesCount *int     `json:"votes_count"`
 	Percentage *float64 `json:"percentage"`
-}
-
-func PrettyJSON(raw []byte) (string, error) {
-	var out bytes.Buffer
-	err := json.Indent(&out, raw, "", "  ")
-	if err != nil {
-		return "", err
-	}
-
-	return out.String(), nil
 }
 
 func (answer Answer) ToASCII() string {
