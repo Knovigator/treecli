@@ -88,6 +88,15 @@ func TestParseActionInvocationSeparatesTagAndPrompt(t *testing.T) {
 	}
 }
 
+func TestActionCommandKeepsHiddenTagsCompatibilityCommand(t *testing.T) {
+	if actionTagsCompatCmd.Use != "tags" {
+		t.Fatalf("expected hidden compatibility command to use tags, got %q", actionTagsCompatCmd.Use)
+	}
+	if !actionTagsCompatCmd.Hidden {
+		t.Fatal("expected tags compatibility command to be hidden from help")
+	}
+}
+
 func TestResolveRootThreadTargetRejectsAmbiguousPlacement(t *testing.T) {
 	public := true
 

@@ -35,7 +35,7 @@ Important Treechat action model:
 - Use an `animate_*` action when you want to animate an existing image.
 - Use an `edit_*` action when you want to edit an existing image.
 - If the task is "animate this previous image" or "edit this previous image", do not pick a plain generation action.
-- For post-less local media generation, inspect support with `treecli generate actions --direct-only`; use `treecli generate actions --verbose` or `treecli generate describe <action>` for model descriptions, settings, and examples.
+- For post-less local media generation, inspect support with `treecli generate actions --direct-only`; use `treecli generate actions --verbose` or `treecli generate describe <action>` for model descriptions, inputs, settings, reference behavior, and examples.
 - Generate local media with `treecli generate <action> "prompt" --out <file>` and pass settings with `--input key=value`, `--settings '{...}'`, `--duration`, `--instrumental`, or `--reference` as described by the action.
 - Check for a newer CLI release with `treecli update --check`; install it with `treecli update`. Use `--json` for machine-readable update status.
 
