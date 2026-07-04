@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	neturl "net/url"
 	"os"
@@ -14,18 +15,27 @@ import (
 
 // GenerationResponse is the payload from the direct (post-less) generation endpoints.
 type GenerationResponse struct {
-	ID         string                 `json:"id"`
-	Status     string                 `json:"status"`
-	Tag        string                 `json:"tag"`
-	Source     string                 `json:"source"`
-	Provider   string                 `json:"provider,omitempty"`
-	MediaURLs  []string               `json:"media_urls"`
-	AmountSats int64                  `json:"amount_sats,omitempty"`
-	AmountUSD  float64                `json:"amount_usd,omitempty"`
-	Quote      *GenerationQuote       `json:"quote,omitempty"`
-	Failure    map[string]interface{} `json:"failure,omitempty"`
-	Error      string                 `json:"error,omitempty"`
-	Raw        []byte                 `json:"-"`
+	ID           string                 `json:"id"`
+	Status       string                 `json:"status"`
+	Tag          string                 `json:"tag"`
+	Action       string                 `json:"action,omitempty"`
+	Source       string                 `json:"source"`
+	Provider     string                 `json:"provider,omitempty"`
+	MediaURLs    []string               `json:"media_urls"`
+	MediaOutputs []GenerationMedia      `json:"media_outputs,omitempty"`
+	AmountSats   int64                  `json:"amount_sats,omitempty"`
+	AmountUSD    float64                `json:"amount_usd,omitempty"`
+	Quote        *GenerationQuote       `json:"quote,omitempty"`
+	Failure      map[string]interface{} `json:"failure,omitempty"`
+	Error        string                 `json:"error,omitempty"`
+	Raw          []byte                 `json:"-"`
+}
+
+// GenerationMedia describes one generated media artifact.
+type GenerationMedia struct {
+	URL         string `json:"url"`
+	ContentType string `json:"content_type,omitempty"`
+	Kind        string `json:"kind,omitempty"`
 }
 
 // GenerationQuote is the price for a generation, returned when quote=true (no media is produced).
@@ -39,15 +49,27 @@ type GenerationQuote struct {
 // TagInfo describes one AI action available to the direct generation endpoint and what it accepts.
 // The JSON field is still named "tag" because that is the backend compatibility contract.
 type TagInfo struct {
-	Tag                  string   `json:"tag"`
-	Provider             string   `json:"provider"`
-	Kind                 string   `json:"kind"` // image | audio | video
-	Async                bool     `json:"async"`
-	AcceptsReference     bool     `json:"accepts_reference"`
-	SupportsInstrumental bool     `json:"supports_instrumental"`
-	DurationMin          int      `json:"duration_min,omitempty"`
-	DurationMax          int      `json:"duration_max,omitempty"`
-	Inputs               []string `json:"inputs,omitempty"`
+	Tag                  string        `json:"tag"`
+	Provider             string        `json:"provider"`
+	Kind                 string        `json:"kind"` // image | audio | video
+	Async                bool          `json:"async"`
+	AcceptsReference     bool          `json:"accepts_reference"`
+	SupportsInstrumental bool          `json:"supports_instrumental"`
+	Settings             []SettingInfo `json:"settings,omitempty"`
+	DurationMin          int           `json:"duration_min,omitempty"`
+	DurationMax          int           `json:"duration_max,omitempty"`
+	Inputs               []string      `json:"inputs,omitempty"`
+}
+
+// SettingInfo describes one backend-advertised direct generation setting.
+type SettingInfo struct {
+	Name          string      `json:"name"`
+	Type          string      `json:"type,omitempty"`
+	Description   string      `json:"description,omitempty"`
+	Default       interface{} `json:"default,omitempty"`
+	Min           int         `json:"min,omitempty"`
+	Max           int         `json:"max,omitempty"`
+	AllowedValues []int       `json:"allowed_values,omitempty"`
 }
 
 // CreateGeneration runs a direct AI generation that charges the user and returns media
@@ -63,9 +85,20 @@ func CreateGeneration(
 	quote bool,
 	timeout time.Duration,
 ) (GenerationResponse, error) {
-	body := map[string]interface{}{"tag": tag, "prompt": prompt}
+	actionRequest := map[string]interface{}{
+		"kind":             "model",
+		"tag":              tag,
+		"prompt":           prompt,
+		"generation_count": 1,
+	}
+	body := map[string]interface{}{
+		"action":         tag,
+		"prompt":         prompt,
+		"action_request": actionRequest,
+	}
 	if len(settings) > 0 {
 		body["settings"] = settings
+		actionRequest["settings"] = settings
 	}
 	if quote {
 		body["quote"] = true
@@ -83,6 +116,8 @@ func CreateGeneration(
 	var out GenerationResponse
 	_ = json.Unmarshal(resp.Body(), &out)
 	out.Raw = append(out.Raw[:0], resp.Body()...)
+	out.normalizeAction()
+	out.normalizeMediaOutputs()
 
 	if resp.StatusCode() != http.StatusCreated && resp.StatusCode() != http.StatusOK {
 		msg := out.Error
@@ -106,6 +141,8 @@ func GetGeneration(backendURL, id, accessToken, client, uid string) (GenerationR
 	var out GenerationResponse
 	_ = json.Unmarshal(resp.Body(), &out)
 	out.Raw = append(out.Raw[:0], resp.Body()...)
+	out.normalizeAction()
+	out.normalizeMediaOutputs()
 
 	if resp.StatusCode() != http.StatusOK {
 		return out, fmt.Errorf("status %d: %s", resp.StatusCode(), SafeResponseBody(resp.Body()))
@@ -170,9 +207,11 @@ func shouldSendTreechatAuth(requestURL, backendURL string) bool {
 
 // ReferenceUploadResponse is returned by the reference-upload endpoint.
 type ReferenceUploadResponse struct {
-	ID    string `json:"id"`
-	URL   string `json:"url"`
-	Error string `json:"error,omitempty"`
+	ID          string `json:"id"`
+	URL         string `json:"url"`
+	ContentType string `json:"content_type,omitempty"`
+	Kind        string `json:"kind,omitempty"`
+	Error       string `json:"error,omitempty"`
 }
 
 // UploadReference uploads a local file to use as a model reference and returns its presigned URL.
@@ -182,7 +221,15 @@ func UploadReference(backendURL, accessToken, client, uid, filePath string) (Ref
 	if err != nil {
 		return ReferenceUploadResponse{}, fmt.Errorf("reading reference file %s: %w", filePath, err)
 	}
-	uploads := []MultipartFile{{FieldName: "file", FileName: filepath.Base(filePath), Content: data}}
+	contentType := DetectFileContentType(filePath, data)
+	uploads := []MultipartFile{
+		{
+			FieldName:   "file",
+			FileName:    filepath.Base(filePath),
+			ContentType: contentType,
+			Content:     data,
+		},
+	}
 
 	resp, err := postMultipart(
 		backendURL,
@@ -208,7 +255,50 @@ func UploadReference(backendURL, accessToken, client, uid, filePath string) (Ref
 		}
 		return out, fmt.Errorf("reference upload returned no url: %s", msg)
 	}
+	if out.ContentType == "" {
+		out.ContentType = contentType
+	}
 	return out, nil
+}
+
+// DetectFileContentType returns a stable media MIME type for local upload paths.
+func DetectFileContentType(filePath string, data []byte) string {
+	if fromExt := strings.TrimSpace(mime.TypeByExtension(strings.ToLower(filepath.Ext(filePath)))); fromExt != "" {
+		return strings.Split(fromExt, ";")[0]
+	}
+	return http.DetectContentType(data)
+}
+
+func (out *GenerationResponse) normalizeMediaOutputs() {
+	if len(out.MediaURLs) == 0 && len(out.MediaOutputs) > 0 {
+		for _, media := range out.MediaOutputs {
+			if strings.TrimSpace(media.URL) != "" {
+				out.MediaURLs = append(out.MediaURLs, media.URL)
+			}
+		}
+	}
+	if len(out.MediaURLs) == 0 {
+		return
+	}
+	if len(out.MediaOutputs) > 0 {
+		return
+	}
+	out.MediaOutputs = make([]GenerationMedia, 0, len(out.MediaURLs))
+	for _, mediaURL := range out.MediaURLs {
+		if strings.TrimSpace(mediaURL) == "" {
+			continue
+		}
+		out.MediaOutputs = append(out.MediaOutputs, GenerationMedia{URL: mediaURL})
+	}
+}
+
+func (out *GenerationResponse) normalizeAction() {
+	if strings.TrimSpace(out.Tag) == "" {
+		out.Tag = out.Action
+	}
+	if strings.TrimSpace(out.Action) == "" {
+		out.Action = out.Tag
+	}
 }
 
 // ListGenerationTags fetches the AI actions the direct generation endpoint supports and what each

@@ -1,6 +1,9 @@
 package cmd
 
 import (
+	"net/http"
+	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -17,6 +20,10 @@ func withGenerateGlobals(t *testing.T) {
 	previousJSONOutput := generateJSONOutput
 	previousPollInterval := generatePollInterval
 	previousTimeout := generateTimeout
+	previousInputs := generateInputs
+	previousReference := generateReference
+	previousInstrumental := generateInstrumental
+	previousQuote := generateQuote
 
 	t.Cleanup(func() {
 		generateOut = previousOut
@@ -25,6 +32,10 @@ func withGenerateGlobals(t *testing.T) {
 		generateJSONOutput = previousJSONOutput
 		generatePollInterval = previousPollInterval
 		generateTimeout = previousTimeout
+		generateInputs = previousInputs
+		generateReference = previousReference
+		generateInstrumental = previousInstrumental
+		generateQuote = previousQuote
 	})
 }
 
@@ -194,6 +205,72 @@ func TestCompleteGenerationActionRowNamesFiltersAndPreservesBangPrefix(t *testin
 	}
 	if got[0] != "!flux2" {
 		t.Fatalf("expected bang-prefixed flux2 completion, got %#v", got)
+	}
+}
+
+func TestFirstGenerationMediaPrefersTypedMediaOutputs(t *testing.T) {
+	ref, ok := firstGenerationMedia(api.GenerationResponse{
+		MediaURLs: []string{"https://cdn.example.test/fallback.png"},
+		MediaOutputs: []api.GenerationMedia{
+			{
+				URL:         "https://cdn.example.test/source.mp4",
+				ContentType: "video/mp4",
+			},
+		},
+	})
+
+	if !ok {
+		t.Fatal("expected media reference")
+	}
+	if ref.URL != "https://cdn.example.test/source.mp4" || ref.Kind != "video" || ref.ContentType != "video/mp4" {
+		t.Fatalf("unexpected reference: %#v", ref)
+	}
+}
+
+func TestResolveFileInputSettingsUploadsReferenceLikeInput(t *testing.T) {
+	uploadSeen := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/ai/generations/references" {
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+		if err := r.ParseMultipartForm(2 << 20); err != nil {
+			t.Fatalf("parsing multipart: %v", err)
+		}
+		file, header, err := r.FormFile("file")
+		if err != nil {
+			t.Fatalf("expected file upload: %v", err)
+		}
+		defer file.Close()
+		uploadSeen = true
+		if got := header.Header.Get("Content-Type"); got != "image/png" {
+			t.Fatalf("expected image/png upload content type, got %q", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"ref-1","url":"https://cdn.example.test/ref.png","content_type":"image/png","kind":"image"}`))
+	}))
+	defer server.Close()
+
+	referenceFile := t.TempDir() + "/frame.png"
+	if err := os.WriteFile(referenceFile, []byte("\x89PNG\r\n\x1a\n"), 0o644); err != nil {
+		t.Fatalf("writing temp reference: %v", err)
+	}
+
+	settings := map[string]interface{}{"image": "@" + referenceFile}
+	err := resolveFileInputSettings(profileConfig{BackendURL: server.URL}, settings)
+	if err != nil {
+		t.Fatalf("resolveFileInputSettings returned error: %v", err)
+	}
+	if !uploadSeen {
+		t.Fatal("expected upload endpoint to be called")
+	}
+	if settings["image"] != "https://cdn.example.test/ref.png" {
+		t.Fatalf("expected image input URL, got %#v", settings["image"])
+	}
+	if settings["reference_url"] != "https://cdn.example.test/ref.png" {
+		t.Fatalf("expected reference_url to be seeded, got %#v", settings["reference_url"])
+	}
+	if settings["reference_content_type"] != "image/png" || settings["reference_kind"] != "image" {
+		t.Fatalf("expected reference media metadata, got %#v", settings)
 	}
 }
 

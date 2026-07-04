@@ -18,21 +18,22 @@ var generateActionsVerbose bool
 var generateDescribeJSON bool
 
 type generationActionRow struct {
-	Action               string        `json:"action"`
-	Name                 string        `json:"name,omitempty"`
-	Description          string        `json:"description,omitempty"`
-	Provider             string        `json:"provider,omitempty"`
-	Kind                 string        `json:"kind,omitempty"`
-	DirectGeneration     bool          `json:"direct_generation"`
-	Async                bool          `json:"async"`
-	AcceptsReference     bool          `json:"accepts_reference"`
-	SupportsInstrumental bool          `json:"supports_instrumental"`
-	DurationMin          int           `json:"duration_min,omitempty"`
-	DurationMax          int           `json:"duration_max,omitempty"`
-	Inputs               []string      `json:"inputs,omitempty"`
-	Settings             []settingHelp `json:"settings,omitempty"`
-	Examples             []string      `json:"examples,omitempty"`
-	Notes                []string      `json:"notes,omitempty"`
+	Action               string            `json:"action"`
+	Name                 string            `json:"name,omitempty"`
+	Description          string            `json:"description,omitempty"`
+	Provider             string            `json:"provider,omitempty"`
+	Kind                 string            `json:"kind,omitempty"`
+	DirectGeneration     bool              `json:"direct_generation"`
+	Async                bool              `json:"async"`
+	AcceptsReference     bool              `json:"accepts_reference"`
+	SupportsInstrumental bool              `json:"supports_instrumental"`
+	DurationMin          int               `json:"duration_min,omitempty"`
+	DurationMax          int               `json:"duration_max,omitempty"`
+	Inputs               []string          `json:"inputs,omitempty"`
+	Settings             []settingHelp     `json:"settings,omitempty"`
+	Examples             []string          `json:"examples,omitempty"`
+	Notes                []string          `json:"notes,omitempty"`
+	BackendSettings      []api.SettingInfo `json:"-"`
 }
 
 type settingHelp struct {
@@ -327,6 +328,7 @@ func generationActionRowFromModel(model api.AIModelRef, directTag api.TagInfo, d
 		row.DurationMin = directTag.DurationMin
 		row.DurationMax = directTag.DurationMax
 		row.Inputs = directTag.Inputs
+		row.BackendSettings = directTag.Settings
 	}
 	return row
 }
@@ -343,6 +345,7 @@ func generationActionRowFromDirectTag(directTag api.TagInfo) generationActionRow
 		DurationMin:          directTag.DurationMin,
 		DurationMax:          directTag.DurationMax,
 		Inputs:               directTag.Inputs,
+		BackendSettings:      directTag.Settings,
 	}
 }
 
@@ -411,6 +414,7 @@ func generationSettingsFor(row generationActionRow) []settingHelp {
 	}
 
 	settings = append(settings, knownSettingsFor(row)...)
+	settings = append(settings, backendSettingsFor(row)...)
 
 	seen := map[string]bool{}
 	filtered := make([]settingHelp, 0, len(settings)+len(row.Inputs))
@@ -435,6 +439,34 @@ func generationSettingsFor(row generationActionRow) []settingHelp {
 		})
 	}
 	return filtered
+}
+
+func backendSettingsFor(row generationActionRow) []settingHelp {
+	settings := make([]settingHelp, 0, len(row.BackendSettings))
+	for _, backendSetting := range row.BackendSettings {
+		name := strings.TrimSpace(backendSetting.Name)
+		if name == "" {
+			continue
+		}
+		help := settingHelp{
+			Name:        name,
+			Type:        backendSetting.Type,
+			How:         fmt.Sprintf("--input %s=<value>", name),
+			Description: backendSetting.Description,
+		}
+		if name == "duration_seconds" {
+			help.How = "--duration <seconds> or --input duration_seconds=<seconds>"
+		}
+		if name == "reference_url" {
+			help.Type = firstNonBlank(help.Type, "url")
+			help.How = "--reference run:<id>, --reference https://..., or --reference @path"
+		}
+		if name == "reference_content_type" || name == "reference_kind" {
+			help.How = "usually inferred by treectl; may be passed with --input"
+		}
+		settings = append(settings, help)
+	}
+	return settings
 }
 
 func knownSettingsFor(row generationActionRow) []settingHelp {

@@ -88,3 +88,48 @@ func TestCreateGenerationUsesCallerTimeout(t *testing.T) {
 		t.Fatalf("expected caller timeout to abort quickly, took %s", elapsed)
 	}
 }
+
+func TestCreateGenerationSendsActionRequestPayload(t *testing.T) {
+	var received map[string]interface{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/ai/generations" {
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&received); err != nil {
+			t.Fatalf("decoding request: %v", err)
+		}
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(GenerationResponse{ID: "run-1", Status: "submitted"})
+	}))
+	defer server.Close()
+
+	_, err := CreateGeneration(
+		server.URL,
+		"secret-token",
+		"client-id",
+		"user@example.test",
+		"kling3",
+		"animate this",
+		map[string]interface{}{"reference_url": "https://cdn.example.test/frame.png"},
+		false,
+		time.Second,
+	)
+	if err != nil {
+		t.Fatalf("CreateGeneration returned error: %v", err)
+	}
+
+	actionRequest, ok := received["action_request"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected action_request payload, got %#v", received)
+	}
+	if actionRequest["kind"] != "model" || actionRequest["tag"] != "kling3" || actionRequest["prompt"] != "animate this" {
+		t.Fatalf("unexpected action_request: %#v", actionRequest)
+	}
+	settings, ok := actionRequest["settings"].(map[string]interface{})
+	if !ok || settings["reference_url"] != "https://cdn.example.test/frame.png" {
+		t.Fatalf("expected action_request settings, got %#v", actionRequest["settings"])
+	}
+	if received["action"] != "kling3" {
+		t.Fatalf("expected top-level action compatibility field, got %#v", received["action"])
+	}
+}

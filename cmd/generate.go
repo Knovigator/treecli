@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	neturl "net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -33,9 +34,11 @@ var GenerateCmd = &cobra.Command{
 		"This charges your account (USD/BSV) and NEVER touches the posting infra — no Answer, " +
 		"no Quest, no thread, nothing on your feed.\n\n" +
 		"Pass arbitrary model inputs with repeatable --input key=value (values are parsed as JSON " +
-		"when possible, else treated as a string). Chain generations or steer a model with " +
-		"--reference (run:<id> reuses a prior generation's output as the model's reference; a public " +
-		"URL is passed through). Music models accept --instrumental and --duration.\n\n" +
+		"when possible, else treated as a string). Use @path in --input values to upload local " +
+		"images, video, or audio before generation. Chain generations or steer a model with " +
+		"--reference (run:<id> reuses a prior generation's output as the model's reference; " +
+		"@path uploads a local file; a public URL is passed through). Music models accept " +
+		"--instrumental and --duration.\n\n" +
 		"Run `treectl generate actions --verbose` or `treectl generate describe <ai-action>` " +
 		"to see available AI actions, descriptions, settings, and examples.",
 	Example: "  treectl generate flux \"soft-gradient app icon, violet to indigo\" --out icon.png\n" +
@@ -54,7 +57,7 @@ var GenerateCmd = &cobra.Command{
 func init() {
 	GenerateCmd.Flags().StringVarP(&generateOut, "out", "o", "", "Path to write the generated file (required unless --quote). Extra outputs get a -N suffix.")
 	GenerateCmd.Flags().StringVar(&generateSettingsRaw, "settings", "", "Optional JSON object of model settings (e.g. '{\"aspect_ratio\":\"1:1\"}')")
-	GenerateCmd.Flags().StringArrayVar(&generateInputs, "input", nil, "Model input as key=value (repeatable). Value parsed as JSON if possible, else string. e.g. --input style=ambient --input seed=42")
+	GenerateCmd.Flags().StringArrayVar(&generateInputs, "input", nil, "Model input as key=value (repeatable). Value parsed as JSON if possible, else string. Use @path to upload a local media file.")
 	GenerateCmd.Flags().StringVar(&generateReference, "reference", "", "Reference media: run:<id> (chain a prior generation's output), a public URL, or @path (upload a local file)")
 	GenerateCmd.Flags().BoolVar(&generateInstrumental, "instrumental", false, "For music models: generate instrumental (no vocals)")
 	GenerateCmd.Flags().IntVar(&generateDuration, "duration", 0, "Duration in seconds for audio/video models (sets settings.duration_seconds; the backend clamps to the model's range)")
@@ -109,14 +112,6 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if strings.TrimSpace(generateReference) != "" {
-		refURL, err := resolveReference(profile, generateReference)
-		if err != nil {
-			return err
-		}
-		settings["reference_url"] = refURL
-	}
-
 	// Quote-only: ask the backend for the price and stop.
 	if generateQuote {
 		res, err := api.CreateGeneration(
@@ -127,6 +122,17 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 			return err
 		}
 		return printQuote(tag, res)
+	}
+
+	if err := resolveFileInputSettings(profile, settings); err != nil {
+		return err
+	}
+	if strings.TrimSpace(generateReference) != "" {
+		ref, err := resolveReference(profile, generateReference)
+		if err != nil {
+			return err
+		}
+		applyReferenceSettings(settings, ref)
 	}
 
 	result, err := api.CreateGeneration(
@@ -172,6 +178,9 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 			"bytes":      totalBytes,
 			"media_urls": result.MediaURLs,
 		}
+		if len(result.MediaOutputs) > 0 {
+			payload["media_outputs"] = result.MediaOutputs
+		}
 		if result.AmountSats > 0 || result.AmountUSD > 0 {
 			payload["amount_sats"] = result.AmountSats
 			payload["amount_usd"] = result.AmountUSD
@@ -199,38 +208,203 @@ func completeGenerateArgs(cmd *cobra.Command, args []string, toComplete string) 
 	return completeGenerationActionNames(toComplete, true)
 }
 
+type resolvedReference struct {
+	URL         string
+	ContentType string
+	Kind        string
+}
+
 // resolveReference turns a --reference value into a URL the model can fetch. `run:<id>` reuses a
-// prior generation's first output; a public URL passes through; @file uploads are not wired yet.
-func resolveReference(profile profileConfig, ref string) (string, error) {
+// prior generation's first output; a public URL passes through; @file uploads a local media file.
+func resolveReference(profile profileConfig, ref string) (resolvedReference, error) {
 	ref = strings.TrimSpace(ref)
 	switch {
 	case strings.HasPrefix(ref, "run:"):
 		id := strings.TrimSpace(strings.TrimPrefix(ref, "run:"))
 		if id == "" {
-			return "", fmt.Errorf("invalid --reference: run id is empty")
+			return resolvedReference{}, fmt.Errorf("invalid --reference: run id is empty")
 		}
 		res, err := api.GetGeneration(profile.BackendURL, id, profile.AccessToken, profile.Client, profile.UID)
 		if err != nil {
-			return "", fmt.Errorf("resolving reference run %s: %w", id, err)
+			return resolvedReference{}, fmt.Errorf("resolving reference run %s: %w", id, err)
 		}
-		if len(res.MediaURLs) == 0 {
-			return "", fmt.Errorf("reference run %s has no output media (status %q)", id, res.Status)
+		media, ok := firstGenerationMedia(res)
+		if !ok {
+			return resolvedReference{}, fmt.Errorf("reference run %s has no output media (status %q)", id, res.Status)
 		}
-		return res.MediaURLs[0], nil
+		return media, nil
 	case strings.HasPrefix(ref, "http://"), strings.HasPrefix(ref, "https://"):
-		return ref, nil
+		return resolvedReference{URL: ref, Kind: mediaKindFromURL(ref)}, nil
 	case strings.HasPrefix(ref, "@"):
 		path := strings.TrimSpace(strings.TrimPrefix(ref, "@"))
 		if path == "" {
-			return "", fmt.Errorf("invalid --reference: @path is empty")
+			return resolvedReference{}, fmt.Errorf("invalid --reference: @path is empty")
 		}
-		res, err := api.UploadReference(profile.BackendURL, profile.AccessToken, profile.Client, profile.UID, path)
+		uploaded, err := uploadReferenceFile(profile, path)
 		if err != nil {
-			return "", fmt.Errorf("uploading reference %s: %w", path, err)
+			return resolvedReference{}, fmt.Errorf("uploading reference %s: %w", path, err)
 		}
-		return res.URL, nil
+		return uploaded, nil
 	default:
-		return "", fmt.Errorf("invalid --reference %q: use run:<id>, a public URL, or @path", ref)
+		return resolvedReference{}, fmt.Errorf("invalid --reference %q: use run:<id>, a public URL, or @path", ref)
+	}
+}
+
+func firstGenerationMedia(res api.GenerationResponse) (resolvedReference, bool) {
+	for _, media := range res.MediaOutputs {
+		if strings.TrimSpace(media.URL) == "" {
+			continue
+		}
+		return resolvedReference{
+			URL:         media.URL,
+			ContentType: media.ContentType,
+			Kind:        firstNonBlank(media.Kind, mediaKindFromContentType(media.ContentType), mediaKindFromURL(media.URL)),
+		}, true
+	}
+	for _, mediaURL := range res.MediaURLs {
+		if strings.TrimSpace(mediaURL) == "" {
+			continue
+		}
+		return resolvedReference{URL: mediaURL, Kind: mediaKindFromURL(mediaURL)}, true
+	}
+	return resolvedReference{}, false
+}
+
+func uploadReferenceFile(profile profileConfig, path string) (resolvedReference, error) {
+	res, err := api.UploadReference(profile.BackendURL, profile.AccessToken, profile.Client, profile.UID, path)
+	if err != nil {
+		return resolvedReference{}, err
+	}
+	return resolvedReference{
+		URL:         res.URL,
+		ContentType: res.ContentType,
+		Kind:        firstNonBlank(res.Kind, mediaKindFromContentType(res.ContentType), mediaKindFromURL(res.URL)),
+	}, nil
+}
+
+func applyReferenceSettings(settings map[string]interface{}, ref resolvedReference) {
+	if strings.TrimSpace(ref.URL) == "" {
+		return
+	}
+	settings["reference_url"] = ref.URL
+	if strings.TrimSpace(ref.ContentType) != "" {
+		settings["reference_content_type"] = ref.ContentType
+	}
+	if strings.TrimSpace(ref.Kind) != "" {
+		settings["reference_kind"] = ref.Kind
+	}
+}
+
+func resolveFileInputSettings(profile profileConfig, settings map[string]interface{}) error {
+	for key, value := range settings {
+		resolved, refs, err := resolveFileInputValue(profile, value)
+		if err != nil {
+			return fmt.Errorf("resolving --input %s: %w", key, err)
+		}
+		settings[key] = resolved
+		if len(refs) == 0 {
+			continue
+		}
+		firstRef := refs[0]
+		if strings.TrimSpace(firstRef.ContentType) != "" {
+			settings[key+"_content_type"] = firstRef.ContentType
+		}
+		if strings.TrimSpace(firstRef.Kind) != "" {
+			settings[key+"_kind"] = firstRef.Kind
+		}
+		if isReferenceInputKey(key) {
+			if _, exists := settings["reference_url"]; !exists {
+				applyReferenceSettings(settings, firstRef)
+			}
+		}
+	}
+	return nil
+}
+
+func resolveFileInputValue(profile profileConfig, value interface{}) (interface{}, []resolvedReference, error) {
+	switch typed := value.(type) {
+	case string:
+		if !strings.HasPrefix(strings.TrimSpace(typed), "@") {
+			return value, nil, nil
+		}
+		path := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(typed), "@"))
+		if path == "" {
+			return value, nil, fmt.Errorf("@path is empty")
+		}
+		ref, err := uploadReferenceFile(profile, path)
+		if err != nil {
+			return value, nil, err
+		}
+		return ref.URL, []resolvedReference{ref}, nil
+	case []interface{}:
+		resolved := make([]interface{}, 0, len(typed))
+		refs := []resolvedReference{}
+		for _, item := range typed {
+			resolvedItem, itemRefs, err := resolveFileInputValue(profile, item)
+			if err != nil {
+				return value, nil, err
+			}
+			resolved = append(resolved, resolvedItem)
+			refs = append(refs, itemRefs...)
+		}
+		return resolved, refs, nil
+	case map[string]interface{}:
+		resolved := make(map[string]interface{}, len(typed))
+		refs := []resolvedReference{}
+		for itemKey, item := range typed {
+			resolvedItem, itemRefs, err := resolveFileInputValue(profile, item)
+			if err != nil {
+				return value, nil, err
+			}
+			resolved[itemKey] = resolvedItem
+			refs = append(refs, itemRefs...)
+		}
+		return resolved, refs, nil
+	default:
+		return value, nil, nil
+	}
+}
+
+func isReferenceInputKey(key string) bool {
+	switch strings.ToLower(strings.TrimSpace(key)) {
+	case "reference", "reference_url", "image", "video", "audio", "input_image",
+		"reference_image", "reference_video", "reference_audio", "start_image",
+		"start_image_url", "first_frame_image", "input_reference":
+		return true
+	default:
+		return false
+	}
+}
+
+func mediaKindFromContentType(contentType string) string {
+	contentType = strings.ToLower(strings.TrimSpace(contentType))
+	switch {
+	case strings.HasPrefix(contentType, "image/"):
+		return "image"
+	case strings.HasPrefix(contentType, "video/"):
+		return "video"
+	case strings.HasPrefix(contentType, "audio/"):
+		return "audio"
+	default:
+		return ""
+	}
+}
+
+func mediaKindFromURL(rawURL string) string {
+	parsed, err := neturl.Parse(rawURL)
+	path := strings.ToLower(rawURL)
+	if err == nil && parsed.Path != "" {
+		path = strings.ToLower(parsed.Path)
+	}
+	switch filepath.Ext(path) {
+	case ".png", ".jpg", ".jpeg", ".webp", ".gif", ".heic":
+		return "image"
+	case ".mp4", ".mov", ".webm", ".m4v":
+		return "video"
+	case ".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg":
+		return "audio"
+	default:
+		return ""
 	}
 }
 
