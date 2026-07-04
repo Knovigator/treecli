@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	neturl "net/url"
 	"os"
@@ -14,40 +15,65 @@ import (
 
 // GenerationResponse is the payload from the direct (post-less) generation endpoints.
 type GenerationResponse struct {
-	ID         string                 `json:"id"`
-	Status     string                 `json:"status"`
-	Tag        string                 `json:"tag"`
-	Source     string                 `json:"source"`
-	Provider   string                 `json:"provider,omitempty"`
-	MediaURLs  []string               `json:"media_urls"`
-	AmountSats int64                  `json:"amount_sats,omitempty"`
-	AmountUSD  float64                `json:"amount_usd,omitempty"`
-	Quote      *GenerationQuote       `json:"quote,omitempty"`
-	Failure    map[string]interface{} `json:"failure,omitempty"`
-	Error      string                 `json:"error,omitempty"`
-	Raw        []byte                 `json:"-"`
+	ID           string                 `json:"id"`
+	Status       string                 `json:"status"`
+	Tag          string                 `json:"tag"`
+	Action       string                 `json:"action,omitempty"`
+	Source       string                 `json:"source"`
+	Provider     string                 `json:"provider,omitempty"`
+	MediaURLs    []string               `json:"media_urls"`
+	MediaOutputs []GenerationMedia      `json:"media_outputs,omitempty"`
+	AmountSats   int64                  `json:"amount_sats,omitempty"`
+	AmountUSD    float64                `json:"amount_usd,omitempty"`
+	Quote        *GenerationQuote       `json:"quote,omitempty"`
+	Failure      map[string]interface{} `json:"failure,omitempty"`
+	Error        string                 `json:"error,omitempty"`
+	Raw          []byte                 `json:"-"`
+}
+
+// GenerationMedia describes one generated media artifact.
+type GenerationMedia struct {
+	URL         string `json:"url"`
+	ContentType string `json:"content_type,omitempty"`
+	Kind        string `json:"kind,omitempty"`
 }
 
 // GenerationQuote is the price for a generation, returned when quote=true (no media is produced).
 type GenerationQuote struct {
 	AmountSats int64   `json:"amount_sats"`
 	AmountUSD  float64 `json:"amount_usd"`
+	Action     string  `json:"action,omitempty"`
 	Tag        string  `json:"tag"`
 	Provider   string  `json:"provider,omitempty"`
 }
 
-// TagInfo describes one AI action available to the direct generation endpoint and what it accepts.
-// The JSON field is still named "tag" because that is the backend compatibility contract.
-type TagInfo struct {
-	Tag                  string   `json:"tag"`
-	Provider             string   `json:"provider"`
-	Kind                 string   `json:"kind"` // image | audio | video
-	Async                bool     `json:"async"`
-	AcceptsReference     bool     `json:"accepts_reference"`
-	SupportsInstrumental bool     `json:"supports_instrumental"`
-	DurationMin          int      `json:"duration_min,omitempty"`
-	DurationMax          int      `json:"duration_max,omitempty"`
-	Inputs               []string `json:"inputs,omitempty"`
+// GenerationActionInfo describes one AI action available to the direct generation endpoint and what it accepts.
+type GenerationActionInfo struct {
+	Action               string        `json:"action"`
+	Tag                  string        `json:"tag,omitempty"`
+	Provider             string        `json:"provider"`
+	Kind                 string        `json:"kind"` // image | audio | video
+	Async                bool          `json:"async"`
+	AcceptsReference     bool          `json:"accepts_reference"`
+	SupportsInstrumental bool          `json:"supports_instrumental"`
+	Settings             []SettingInfo `json:"settings,omitempty"`
+	DurationMin          int           `json:"duration_min,omitempty"`
+	DurationMax          int           `json:"duration_max,omitempty"`
+	Inputs               []string      `json:"inputs,omitempty"`
+}
+
+// TagInfo is kept as a source-compatible alias for older callers.
+type TagInfo = GenerationActionInfo
+
+// SettingInfo describes one backend-advertised direct generation setting.
+type SettingInfo struct {
+	Name          string      `json:"name"`
+	Type          string      `json:"type,omitempty"`
+	Description   string      `json:"description,omitempty"`
+	Default       interface{} `json:"default,omitempty"`
+	Min           int         `json:"min,omitempty"`
+	Max           int         `json:"max,omitempty"`
+	AllowedValues []int       `json:"allowed_values,omitempty"`
 }
 
 // CreateGeneration runs a direct AI generation that charges the user and returns media
@@ -57,15 +83,26 @@ func CreateGeneration(
 	accessToken string,
 	client string,
 	uid string,
-	tag string,
+	action string,
 	prompt string,
 	settings map[string]interface{},
 	quote bool,
 	timeout time.Duration,
 ) (GenerationResponse, error) {
-	body := map[string]interface{}{"tag": tag, "prompt": prompt}
+	actionRequest := map[string]interface{}{
+		"kind":             "model",
+		"action":           action,
+		"prompt":           prompt,
+		"generation_count": 1,
+	}
+	body := map[string]interface{}{
+		"action_key":     action,
+		"prompt":         prompt,
+		"action_request": actionRequest,
+	}
 	if len(settings) > 0 {
 		body["settings"] = settings
+		actionRequest["settings"] = settings
 	}
 	if quote {
 		body["quote"] = true
@@ -83,6 +120,8 @@ func CreateGeneration(
 	var out GenerationResponse
 	_ = json.Unmarshal(resp.Body(), &out)
 	out.Raw = append(out.Raw[:0], resp.Body()...)
+	out.normalizeAction()
+	out.normalizeMediaOutputs()
 
 	if resp.StatusCode() != http.StatusCreated && resp.StatusCode() != http.StatusOK {
 		msg := out.Error
@@ -106,6 +145,8 @@ func GetGeneration(backendURL, id, accessToken, client, uid string) (GenerationR
 	var out GenerationResponse
 	_ = json.Unmarshal(resp.Body(), &out)
 	out.Raw = append(out.Raw[:0], resp.Body()...)
+	out.normalizeAction()
+	out.normalizeMediaOutputs()
 
 	if resp.StatusCode() != http.StatusOK {
 		return out, fmt.Errorf("status %d: %s", resp.StatusCode(), SafeResponseBody(resp.Body()))
@@ -170,9 +211,11 @@ func shouldSendTreechatAuth(requestURL, backendURL string) bool {
 
 // ReferenceUploadResponse is returned by the reference-upload endpoint.
 type ReferenceUploadResponse struct {
-	ID    string `json:"id"`
-	URL   string `json:"url"`
-	Error string `json:"error,omitempty"`
+	ID          string `json:"id"`
+	URL         string `json:"url"`
+	ContentType string `json:"content_type,omitempty"`
+	Kind        string `json:"kind,omitempty"`
+	Error       string `json:"error,omitempty"`
 }
 
 // UploadReference uploads a local file to use as a model reference and returns its presigned URL.
@@ -182,7 +225,15 @@ func UploadReference(backendURL, accessToken, client, uid, filePath string) (Ref
 	if err != nil {
 		return ReferenceUploadResponse{}, fmt.Errorf("reading reference file %s: %w", filePath, err)
 	}
-	uploads := []MultipartFile{{FieldName: "file", FileName: filepath.Base(filePath), Content: data}}
+	contentType := DetectFileContentType(filePath, data)
+	uploads := []MultipartFile{
+		{
+			FieldName:   "file",
+			FileName:    filepath.Base(filePath),
+			ContentType: contentType,
+			Content:     data,
+		},
+	}
 
 	resp, err := postMultipart(
 		backendURL,
@@ -208,32 +259,129 @@ func UploadReference(backendURL, accessToken, client, uid, filePath string) (Ref
 		}
 		return out, fmt.Errorf("reference upload returned no url: %s", msg)
 	}
+	if out.ContentType == "" {
+		out.ContentType = contentType
+	}
 	return out, nil
 }
 
-// ListGenerationTags fetches the AI actions the direct generation endpoint supports and what each
-// accepts. GET /api/v1/ai/generations/tags.
+// DetectFileContentType returns a stable media MIME type for local upload paths.
+func DetectFileContentType(filePath string, data []byte) string {
+	if fromExt := strings.TrimSpace(mime.TypeByExtension(strings.ToLower(filepath.Ext(filePath)))); fromExt != "" {
+		return strings.Split(fromExt, ";")[0]
+	}
+	return http.DetectContentType(data)
+}
+
+func (out *GenerationResponse) normalizeMediaOutputs() {
+	if len(out.MediaURLs) == 0 && len(out.MediaOutputs) > 0 {
+		for _, media := range out.MediaOutputs {
+			if strings.TrimSpace(media.URL) != "" {
+				out.MediaURLs = append(out.MediaURLs, media.URL)
+			}
+		}
+	}
+	if len(out.MediaURLs) == 0 {
+		return
+	}
+	if len(out.MediaOutputs) > 0 {
+		return
+	}
+	out.MediaOutputs = make([]GenerationMedia, 0, len(out.MediaURLs))
+	for _, mediaURL := range out.MediaURLs {
+		if strings.TrimSpace(mediaURL) == "" {
+			continue
+		}
+		out.MediaOutputs = append(out.MediaOutputs, GenerationMedia{URL: mediaURL})
+	}
+}
+
+func (out *GenerationResponse) normalizeAction() {
+	if strings.TrimSpace(out.Tag) == "" {
+		out.Tag = out.Action
+	}
+	if strings.TrimSpace(out.Action) == "" {
+		out.Action = out.Tag
+	}
+}
+
+func (info *GenerationActionInfo) normalizeAction() {
+	if strings.TrimSpace(info.Action) == "" {
+		info.Action = info.Tag
+	}
+	if strings.TrimSpace(info.Tag) == "" {
+		info.Tag = info.Action
+	}
+}
+
+// ListGenerationActions fetches the AI actions the direct generation endpoint supports and what each
+// accepts. It prefers GET /api/v1/ai/generations/actions and falls back to /tags for older backends.
+func ListGenerationActions(backendURL, accessToken, client, uid string) ([]GenerationActionInfo, error) {
+	actions, statusCode, err := listGenerationActionsAt(backendURL, accessToken, client, uid, "/api/v1/ai/generations/actions")
+	if err == nil {
+		return actions, nil
+	}
+	if statusCode != http.StatusNotFound {
+		return nil, err
+	}
+	actions, _, err = listGenerationActionsAt(backendURL, accessToken, client, uid, "/api/v1/ai/generations/tags")
+	return actions, err
+}
+
+// ListGenerationTags is kept as a compatibility wrapper for older callers.
 func ListGenerationTags(backendURL, accessToken, client, uid string) ([]TagInfo, error) {
+	return ListGenerationActions(backendURL, accessToken, client, uid)
+}
+
+func listGenerationActionsAt(backendURL, accessToken, client, uid, path string) ([]GenerationActionInfo, int, error) {
 	resp, err := newRequest(accessToken, client, uid).
 		SetHeader("accept", "application/json").
-		Get(fmt.Sprintf("%s/api/v1/ai/generations/tags", backendURL))
+		Get(fmt.Sprintf("%s%s", backendURL, path))
 	if err != nil {
-		return nil, fmt.Errorf("error making request: %w", err)
+		return nil, 0, fmt.Errorf("error making request: %w", err)
 	}
 	if resp.StatusCode() != http.StatusOK {
-		return nil, fmt.Errorf("status %d: %s", resp.StatusCode(), SafeResponseBody(resp.Body()))
+		return nil, resp.StatusCode(), fmt.Errorf("status %d: %s", resp.StatusCode(), SafeResponseBody(resp.Body()))
 	}
 
-	// Accept either a bare array or {"tags": [...]}.
-	var wrapped struct {
-		Tags []TagInfo `json:"tags"`
+	actions, err := parseGenerationActions(resp.Body())
+	if err != nil {
+		return nil, resp.StatusCode(), err
 	}
-	if err := json.Unmarshal(resp.Body(), &wrapped); err == nil && len(wrapped.Tags) > 0 {
-		return wrapped.Tags, nil
+	return actions, resp.StatusCode(), nil
+}
+
+func parseGenerationActions(body []byte) ([]GenerationActionInfo, error) {
+	var envelope map[string]json.RawMessage
+	if err := json.Unmarshal(body, &envelope); err == nil {
+		if raw, ok := envelope["actions"]; ok {
+			var actions []GenerationActionInfo
+			if err := json.Unmarshal(raw, &actions); err != nil {
+				return nil, fmt.Errorf("parsing actions response: %w", err)
+			}
+			normalizeGenerationActions(actions)
+			return actions, nil
+		}
+		if raw, ok := envelope["tags"]; ok {
+			var actions []GenerationActionInfo
+			if err := json.Unmarshal(raw, &actions); err != nil {
+				return nil, fmt.Errorf("parsing tags response: %w", err)
+			}
+			normalizeGenerationActions(actions)
+			return actions, nil
+		}
 	}
-	var bare []TagInfo
-	if err := json.Unmarshal(resp.Body(), &bare); err != nil {
-		return nil, fmt.Errorf("parsing tags response: %w", err)
+
+	var bare []GenerationActionInfo
+	if err := json.Unmarshal(body, &bare); err != nil {
+		return nil, fmt.Errorf("parsing actions response: %w", err)
 	}
+	normalizeGenerationActions(bare)
 	return bare, nil
+}
+
+func normalizeGenerationActions(actions []GenerationActionInfo) {
+	for index := range actions {
+		actions[index].normalizeAction()
+	}
 }

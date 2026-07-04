@@ -13,9 +13,10 @@ import (
 )
 
 type MultipartFile struct {
-	FieldName string
-	FileName  string
-	Content   []byte
+	FieldName   string
+	FileName    string
+	ContentType string
+	Content     []byte
 }
 
 type CreateQuestRequest struct {
@@ -600,7 +601,16 @@ func postMultipart(
 		SetFormDataFromValues(form)
 
 	for _, upload := range uploads {
-		request.SetFileReader(upload.FieldName, upload.FileName, bytes.NewReader(upload.Content))
+		if strings.TrimSpace(upload.ContentType) != "" {
+			request.SetMultipartField(
+				upload.FieldName,
+				upload.FileName,
+				upload.ContentType,
+				bytes.NewReader(upload.Content),
+			)
+		} else {
+			request.SetFileReader(upload.FieldName, upload.FileName, bytes.NewReader(upload.Content))
+		}
 	}
 
 	resp, err := request.Post(fmt.Sprintf("%s%s", backendURL, path))

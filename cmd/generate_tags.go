@@ -18,21 +18,22 @@ var generateActionsVerbose bool
 var generateDescribeJSON bool
 
 type generationActionRow struct {
-	Action               string        `json:"action"`
-	Name                 string        `json:"name,omitempty"`
-	Description          string        `json:"description,omitempty"`
-	Provider             string        `json:"provider,omitempty"`
-	Kind                 string        `json:"kind,omitempty"`
-	DirectGeneration     bool          `json:"direct_generation"`
-	Async                bool          `json:"async"`
-	AcceptsReference     bool          `json:"accepts_reference"`
-	SupportsInstrumental bool          `json:"supports_instrumental"`
-	DurationMin          int           `json:"duration_min,omitempty"`
-	DurationMax          int           `json:"duration_max,omitempty"`
-	Inputs               []string      `json:"inputs,omitempty"`
-	Settings             []settingHelp `json:"settings,omitempty"`
-	Examples             []string      `json:"examples,omitempty"`
-	Notes                []string      `json:"notes,omitempty"`
+	Action               string            `json:"action"`
+	Name                 string            `json:"name,omitempty"`
+	Description          string            `json:"description,omitempty"`
+	Provider             string            `json:"provider,omitempty"`
+	Kind                 string            `json:"kind,omitempty"`
+	DirectGeneration     bool              `json:"direct_generation"`
+	Async                bool              `json:"async"`
+	AcceptsReference     bool              `json:"accepts_reference"`
+	SupportsInstrumental bool              `json:"supports_instrumental"`
+	DurationMin          int               `json:"duration_min,omitempty"`
+	DurationMax          int               `json:"duration_max,omitempty"`
+	Inputs               []string          `json:"inputs,omitempty"`
+	Settings             []settingHelp     `json:"settings,omitempty"`
+	Examples             []string          `json:"examples,omitempty"`
+	Notes                []string          `json:"notes,omitempty"`
+	BackendSettings      []api.SettingInfo `json:"-"`
 }
 
 type settingHelp struct {
@@ -86,12 +87,12 @@ func runGenerateActions(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("loading AI actions: %w", err)
 	}
 
-	directTags, err := api.ListGenerationTags(profile.BackendURL, profile.AccessToken, profile.Client, profile.UID)
+	directActions, err := api.ListGenerationActions(profile.BackendURL, profile.AccessToken, profile.Client, profile.UID)
 	if err != nil {
 		return fmt.Errorf("loading direct generation support: %w", err)
 	}
 
-	rows := generationActionRows(models, directTags, generateActionsDirectOnly)
+	rows := generationActionRows(models, directActions, generateActionsDirectOnly)
 
 	if generateActionsJSON {
 		encoded, err := json.MarshalIndent(rows, "", "  ")
@@ -141,12 +142,12 @@ func runGenerateDescribe(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("loading AI actions: %w", err)
 	}
 
-	directTags, err := api.ListGenerationTags(profile.BackendURL, profile.AccessToken, profile.Client, profile.UID)
+	directActions, err := api.ListGenerationActions(profile.BackendURL, profile.AccessToken, profile.Client, profile.UID)
 	if err != nil {
 		return fmt.Errorf("loading direct generation support: %w", err)
 	}
 
-	row, ok := findGenerationActionRow(generationActionRows(models, directTags, false), args[0])
+	row, ok := findGenerationActionRow(generationActionRows(models, directActions, false), args[0])
 	if !ok {
 		return fmt.Errorf("unknown AI action %q; run `treectl generate actions` to inspect available actions", args[0])
 	}
@@ -171,17 +172,17 @@ func completeGenerateDescribeArgs(cmd *cobra.Command, args []string, toComplete 
 	return completeGenerationActionNames(toComplete, false)
 }
 
-func generationActionRows(models []api.AIModelRef, directTags []api.TagInfo, directOnly bool) []generationActionRow {
-	directByAction := map[string]api.TagInfo{}
-	for _, directTag := range directTags {
-		if shouldHideDirectGenerationAction(directTag) {
+func generationActionRows(models []api.AIModelRef, directActions []api.GenerationActionInfo, directOnly bool) []generationActionRow {
+	directByAction := map[string]api.GenerationActionInfo{}
+	for _, directAction := range directActions {
+		if shouldHideDirectGenerationAction(directAction) {
 			continue
 		}
-		action := normalizedActionName(directTag.Tag)
+		action := normalizedActionName(generationActionInfoName(directAction))
 		if action == "" {
 			continue
 		}
-		directByAction[action] = directTag
+		directByAction[action] = directAction
 	}
 
 	rows := []generationActionRow{}
@@ -205,15 +206,15 @@ func generationActionRows(models []api.AIModelRef, directTags []api.TagInfo, dir
 		seen[action] = true
 	}
 
-	for _, directTag := range directTags {
-		if shouldHideDirectGenerationAction(directTag) {
+	for _, directAction := range directActions {
+		if shouldHideDirectGenerationAction(directAction) {
 			continue
 		}
-		action := normalizedActionName(directTag.Tag)
+		action := normalizedActionName(generationActionInfoName(directAction))
 		if action == "" || seen[action] {
 			continue
 		}
-		rows = append(rows, enrichGenerationActionRow(generationActionRowFromDirectTag(directTag)))
+		rows = append(rows, enrichGenerationActionRow(generationActionRowFromDirectAction(directAction)))
 		seen[action] = true
 	}
 
@@ -240,7 +241,7 @@ func completeGenerationActionNames(toComplete string, directOnly bool) ([]string
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 
-	directTags, err := api.ListGenerationTags(profile.BackendURL, profile.AccessToken, profile.Client, profile.UID)
+	directActions, err := api.ListGenerationActions(profile.BackendURL, profile.AccessToken, profile.Client, profile.UID)
 	if err != nil {
 		if directOnly {
 			return nil, cobra.ShellCompDirectiveNoFileComp
@@ -248,7 +249,7 @@ func completeGenerationActionNames(toComplete string, directOnly bool) ([]string
 		return completeGenerationActionRowNames(actionRowsFromModels(models), toComplete), cobra.ShellCompDirectiveNoFileComp
 	}
 
-	rows := generationActionRows(models, directTags, directOnly)
+	rows := generationActionRows(models, directActions, directOnly)
 	return completeGenerationActionRowNames(rows, toComplete), cobra.ShellCompDirectiveNoFileComp
 }
 
@@ -306,7 +307,7 @@ func findGenerationActionRow(rows []generationActionRow, action string) (generat
 	return generationActionRow{}, false
 }
 
-func generationActionRowFromModel(model api.AIModelRef, directTag api.TagInfo, direct bool) generationActionRow {
+func generationActionRowFromModel(model api.AIModelRef, directTag api.GenerationActionInfo, direct bool) generationActionRow {
 	name := firstNonBlank(model.DisplayName, model.HumanName, model.Name)
 	description := firstNonBlank(model.DescriptionShort, model.Description)
 	provider := firstNonBlank(directTag.Provider, model.Provider)
@@ -327,13 +328,14 @@ func generationActionRowFromModel(model api.AIModelRef, directTag api.TagInfo, d
 		row.DurationMin = directTag.DurationMin
 		row.DurationMax = directTag.DurationMax
 		row.Inputs = directTag.Inputs
+		row.BackendSettings = directTag.Settings
 	}
 	return row
 }
 
-func generationActionRowFromDirectTag(directTag api.TagInfo) generationActionRow {
+func generationActionRowFromDirectAction(directTag api.GenerationActionInfo) generationActionRow {
 	return generationActionRow{
-		Action:               strings.TrimSpace(directTag.Tag),
+		Action:               generationActionInfoName(directTag),
 		Provider:             strings.TrimSpace(directTag.Provider),
 		Kind:                 strings.TrimSpace(directTag.Kind),
 		DirectGeneration:     true,
@@ -343,14 +345,19 @@ func generationActionRowFromDirectTag(directTag api.TagInfo) generationActionRow
 		DurationMin:          directTag.DurationMin,
 		DurationMax:          directTag.DurationMax,
 		Inputs:               directTag.Inputs,
+		BackendSettings:      directTag.Settings,
 	}
 }
 
-func shouldHideDirectGenerationAction(directTag api.TagInfo) bool {
+func shouldHideDirectGenerationAction(directTag api.GenerationActionInfo) bool {
 	if strings.EqualFold(strings.TrimSpace(directTag.Provider), "openclaw") {
 		return true
 	}
-	return strings.HasPrefix(normalizedActionName(directTag.Tag), "openclaw")
+	return strings.HasPrefix(normalizedActionName(generationActionInfoName(directTag)), "openclaw")
+}
+
+func generationActionInfoName(info api.GenerationActionInfo) string {
+	return strings.TrimSpace(firstNonBlank(info.Action, info.Tag))
 }
 
 func enrichGenerationActionRow(row generationActionRow) generationActionRow {
@@ -411,6 +418,7 @@ func generationSettingsFor(row generationActionRow) []settingHelp {
 	}
 
 	settings = append(settings, knownSettingsFor(row)...)
+	settings = append(settings, backendSettingsFor(row)...)
 
 	seen := map[string]bool{}
 	filtered := make([]settingHelp, 0, len(settings)+len(row.Inputs))
@@ -435,6 +443,34 @@ func generationSettingsFor(row generationActionRow) []settingHelp {
 		})
 	}
 	return filtered
+}
+
+func backendSettingsFor(row generationActionRow) []settingHelp {
+	settings := make([]settingHelp, 0, len(row.BackendSettings))
+	for _, backendSetting := range row.BackendSettings {
+		name := strings.TrimSpace(backendSetting.Name)
+		if name == "" {
+			continue
+		}
+		help := settingHelp{
+			Name:        name,
+			Type:        backendSetting.Type,
+			How:         fmt.Sprintf("--input %s=<value>", name),
+			Description: backendSetting.Description,
+		}
+		if name == "duration_seconds" {
+			help.How = "--duration <seconds> or --input duration_seconds=<seconds>"
+		}
+		if name == "reference_url" {
+			help.Type = firstNonBlank(help.Type, "url")
+			help.How = "--reference run:<id>, --reference https://..., or --reference @path"
+		}
+		if name == "reference_content_type" || name == "reference_kind" {
+			help.How = "usually inferred by treectl; may be passed with --input"
+		}
+		settings = append(settings, help)
+	}
+	return settings
 }
 
 func knownSettingsFor(row generationActionRow) []settingHelp {
