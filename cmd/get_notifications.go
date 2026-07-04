@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/Knovigator/treectl/api"
+	"github.com/Knovigator/treecli/api"
 	"github.com/spf13/cobra"
 )
 
@@ -21,10 +21,10 @@ var getNotificationsCmd = &cobra.Command{
 	Aliases: []string{"notis", "unseen", "unseen-notifications"},
 	Short:   "Get unseen notifications",
 	Long:    `Fetch unseen notification threads for the active Treechat profile and resolved space.`,
-	Example: `  treectl get notifications
-  treectl get notifications --space-id <space-id> --json
-  treectl get notifications --all
-  treectl get notifications --clear`,
+	Example: `  treecli get notifications
+  treecli get notifications --space-id <space-id> --json
+  treecli get notifications --all
+  treecli get notifications --clear`,
 	Args: cobra.NoArgs,
 	Run:  runGetNotifications,
 }

@@ -1,3 +1,0 @@
-display_name: treectl Action Workflows
-short_description: Use treectl to submit, poll, and inspect structured action_requests generation flows.
-default_prompt: Use this skill when you need treectl AI actions, structured action_requests, duration-aware generation, async no-wait submission, or status/watch polling.

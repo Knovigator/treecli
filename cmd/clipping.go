@@ -12,7 +12,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/Knovigator/treectl/api"
+	"github.com/Knovigator/treecli/api"
 )
 
 type streamTarget struct {
@@ -45,7 +45,7 @@ func resolveSpaceID(profile profileConfig, explicitSpaceID string) (string, erro
 		return strings.TrimSpace(profile.ActiveSpaceID), nil
 	}
 
-	return "", fmt.Errorf("missing space_id; pass --space-id or re-run treectl login for this profile")
+	return "", fmt.Errorf("missing space_id; pass --space-id or re-run treecli login for this profile")
 }
 
 func textToDeltaJSONString(content string) (string, error) {

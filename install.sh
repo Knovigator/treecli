@@ -1,13 +1,14 @@
 #!/usr/bin/env sh
 set -eu
 
-repo="${TREECTL_REPO:-Knovigator/treectl}"
-install_dir="${TREECTL_INSTALL_DIR:-$HOME/.local/bin}"
-version="${TREECTL_VERSION:-latest}"
+repo="${TREECLI_REPO:-${TREECTL_REPO:-Knovigator/treecli}}"
+install_dir="${TREECLI_INSTALL_DIR:-${TREECTL_INSTALL_DIR:-$HOME/.local/bin}}"
+version="${TREECLI_VERSION:-${TREECTL_VERSION:-latest}}"
+install_legacy="${TREECLI_INSTALL_LEGACY:-${TREECTL_INSTALL_LEGACY:-1}}"
 
 need() {
     if ! command -v "$1" >/dev/null 2>&1; then
-        echo "treectl installer requires $1" >&2
+        echo "treecli installer requires $1" >&2
         exit 1
     fi
 }
@@ -41,7 +42,7 @@ if [ "$version" = "latest" ]; then
             head -n 1
     )"
     if [ -z "$tag" ]; then
-        echo "could not find a treectl release for ${repo}" >&2
+        echo "could not find a treecli release for ${repo}" >&2
         exit 1
     fi
 else
@@ -51,7 +52,8 @@ else
     esac
 fi
 
-asset="treectl_${tag}_${os}_${arch}.tar.gz"
+asset="treecli_${tag}_${os}_${arch}.tar.gz"
+legacy_asset="treectl_${tag}_${os}_${arch}.tar.gz"
 base_url="https://github.com/${repo}/releases/download/${tag}"
 
 tmpdir="$(mktemp -d)"
@@ -61,7 +63,13 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 echo "Downloading ${asset} from ${repo} ${tag}"
-curl -fL "${base_url}/${asset}" -o "${tmpdir}/${asset}"
+if curl -fL "${base_url}/${asset}" -o "${tmpdir}/${asset}"; then
+    :
+else
+    echo "Could not download ${asset}; trying legacy ${legacy_asset}"
+    asset="$legacy_asset"
+    curl -fL "${base_url}/${asset}" -o "${tmpdir}/${asset}"
+fi
 curl -fsSL "${base_url}/checksums.txt" -o "${tmpdir}/checksums.txt"
 
 expected="$(grep " ${asset}$" "${tmpdir}/checksums.txt" | awk '{print $1}')"
@@ -87,17 +95,36 @@ fi
 tar -C "$tmpdir" -xzf "${tmpdir}/${asset}"
 mkdir -p "$install_dir"
 
-if command -v install >/dev/null 2>&1; then
-    install -m 0755 "${tmpdir}/treectl" "${install_dir}/treectl"
-else
-    cp "${tmpdir}/treectl" "${install_dir}/treectl"
-    chmod 0755 "${install_dir}/treectl"
+binary="${tmpdir}/treecli"
+if [ ! -f "$binary" ] && [ -f "${tmpdir}/treectl" ]; then
+    binary="${tmpdir}/treectl"
+fi
+if [ ! -f "$binary" ]; then
+    echo "archive did not contain treecli" >&2
+    exit 1
 fi
 
-echo "Installed treectl to ${install_dir}/treectl"
+if command -v install >/dev/null 2>&1; then
+    install -m 0755 "$binary" "${install_dir}/treecli"
+    if [ "$install_legacy" != "0" ]; then
+        install -m 0755 "$binary" "${install_dir}/treectl"
+    fi
+else
+    cp "$binary" "${install_dir}/treecli"
+    chmod 0755 "${install_dir}/treecli"
+    if [ "$install_legacy" != "0" ]; then
+        cp "$binary" "${install_dir}/treectl"
+        chmod 0755 "${install_dir}/treectl"
+    fi
+fi
+
+echo "Installed treecli to ${install_dir}/treecli"
+if [ "$install_legacy" != "0" ]; then
+    echo "Installed compatibility command to ${install_dir}/treectl"
+fi
 case ":$PATH:" in
     *":${install_dir}:"*) ;;
     *)
-        echo "Add ${install_dir} to PATH to run treectl from any directory."
+        echo "Add ${install_dir} to PATH to run treecli from any directory."
         ;;
 esac

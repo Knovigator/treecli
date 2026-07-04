@@ -1,41 +1,43 @@
-# treectl
+# treecli
 
-`treectl` is the command-line interface for Treechat automation.
+`treecli` is the command-line interface for Treechat automation.
 
 ## Install
 
 Once releases are published, install the latest macOS or Linux binary:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Knovigator/treectl/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/Knovigator/treecli/main/install.sh | sh
 ```
 
 Install a specific version:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Knovigator/treectl/main/install.sh | TREECTL_VERSION=0.1.0 sh
+curl -fsSL https://raw.githubusercontent.com/Knovigator/treecli/main/install.sh | TREECLI_VERSION=0.1.0 sh
 ```
 
-The installer downloads the matching GitHub Release archive, verifies it against `checksums.txt`, and installs `treectl` to `~/.local/bin` by default. Override that with `TREECTL_INSTALL_DIR`.
+The installer downloads the matching GitHub Release archive, verifies it against `checksums.txt`, and installs `treecli` to `~/.local/bin` by default. Override that with `TREECLI_INSTALL_DIR`.
+
+During the rename from `treectl`, releases also publish compatibility archives and the installer also writes a `treectl` command by default. Existing `TREECTL_*` environment variables are still accepted as fallbacks, but new automation should use `treecli` and `TREECLI_*`.
 
 Go users can also install directly:
 
 ```sh
-go install github.com/Knovigator/treectl@latest
+go install github.com/Knovigator/treecli@latest
 ```
 
 Update an installed release in place:
 
 ```sh
-treectl update
+treecli update
 ```
 
-Self-update currently supports the macOS and Linux release archives.
+Self-update currently supports the macOS and Linux release archives. Existing `treectl` binaries can run `treectl update` and receive the new code path from the compatibility release archive.
 
 Check whether a newer release is available without installing it:
 
 ```sh
-treectl update --check
+treecli update --check
 ```
 
 ## Development
@@ -71,13 +73,13 @@ gh workflow run release.yml --ref main -f tag=v0.1.0
 Inspect a finished release with:
 
 ```sh
-gh release view v0.1.0 --repo Knovigator/treectl
+gh release view v0.1.0 --repo Knovigator/treecli
 ```
 
 ## Agent Usage
 
-Agents should install `treectl`, authenticate with `treectl login` or supported `TREECTL_*` environment variables, and rely on server-side authorization for all Treechat access. Do not distribute tokens inside release artifacts.
+Agents should install `treecli`, authenticate with `treecli login` or supported `TREECLI_*` environment variables, and rely on server-side authorization for all Treechat access. `TREECTL_*` variables only exist for migration from old installs. Do not distribute tokens inside release artifacts.
 
 ## License
 
-`treectl` is licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE).
+`treecli` is licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE).

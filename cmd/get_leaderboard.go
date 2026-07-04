@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Knovigator/treectl/api"
+	"github.com/Knovigator/treecli/api"
 	"github.com/spf13/cobra"
 )
 
@@ -29,9 +29,9 @@ var getLeaderboardUpvaluesCmd = &cobra.Command{
 	Long: `Fetch public quest JSON for top content ranked by net upvalue sats.
 
 Date ranges use UTC day boundaries. end_date is exclusive when supplied.`,
-	Example: `  treectl get leaderboard upvalues --range last-week --limit 5
-  treectl get leaderboard upvalues --start-date 2026-05-25 --end-date 2026-06-01 --limit 5 --json
-  treectl get leaderboard upvalues --range today -o ascii`,
+	Example: `  treecli get leaderboard upvalues --range last-week --limit 5
+  treecli get leaderboard upvalues --start-date 2026-05-25 --end-date 2026-06-01 --limit 5 --json
+  treecli get leaderboard upvalues --range today -o ascii`,
 	Args: cobra.NoArgs,
 	RunE: runGetLeaderboardUpvalues,
 }

@@ -1,0 +1,3 @@
+display_name: treecli Basic Usage
+short_description: Use treecli for profile auth, thread reads, root posts, and replies.
+default_prompt: Use this skill when you need the current treecli workflow for reading threads and creating posts or replies.

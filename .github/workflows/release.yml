@@ -33,7 +33,7 @@ jobs:
                   case "$tag" in
                       v*) ;;
                       *)
-                          echo "treectl releases must use tags like v0.1.0" >&2
+                          echo "treecli releases must use tags like v0.1.0" >&2
                           exit 1
                           ;;
                   esac
@@ -43,11 +43,11 @@ jobs:
             - name: Checkout requested tag
               if: github.event_name == 'workflow_dispatch'
               env:
-                  TREECTL_RELEASE_TAG: ${{ steps.release.outputs.tag }}
+                  TREECLI_RELEASE_TAG: ${{ steps.release.outputs.tag }}
               run: |
                   set -euo pipefail
-                  git fetch --force origin "refs/tags/${TREECTL_RELEASE_TAG}:refs/tags/${TREECTL_RELEASE_TAG}"
-                  git checkout --detach "$TREECTL_RELEASE_TAG"
+                  git fetch --force origin "refs/tags/${TREECLI_RELEASE_TAG}:refs/tags/${TREECLI_RELEASE_TAG}"
+                  git checkout --detach "$TREECLI_RELEASE_TAG"
 
             - uses: actions/setup-go@v5
               with:
@@ -59,7 +59,7 @@ jobs:
 
             - name: Build release artifacts
               env:
-                  TREECTL_VERSION: ${{ steps.release.outputs.tag }}
+                  TREECLI_VERSION: ${{ steps.release.outputs.tag }}
               run: |
                   set -euo pipefail
 
@@ -74,20 +74,24 @@ jobs:
                           ext=".exe"
                       fi
 
-                      package="treectl_${TREECTL_VERSION}_${goos}_${goarch}"
+                      package="treecli_${TREECLI_VERSION}_${goos}_${goarch}"
+                      legacy_package="treectl_${TREECLI_VERSION}_${goos}_${goarch}"
                       workdir="dist/${package}"
                       mkdir -p "$workdir"
 
                       CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" go build \
                           -trimpath \
-                          -ldflags "-s -w -X github.com/Knovigator/treectl/cmd.CurrentVersion=${TREECTL_VERSION}" \
-                          -o "${workdir}/treectl${ext}" \
+                          -ldflags "-s -w -X github.com/Knovigator/treecli/cmd.CurrentVersion=${TREECLI_VERSION}" \
+                          -o "${workdir}/treecli${ext}" \
                           .
+                      cp "${workdir}/treecli${ext}" "${workdir}/treectl${ext}"
 
                       if [ "$goos" = "windows" ]; then
                           (cd "$workdir" && zip -q -r "../${package}.zip" .)
+                          cp "dist/${package}.zip" "dist/${legacy_package}.zip"
                       else
                           tar -C "$workdir" -czf "dist/${package}.tar.gz" .
+                          tar -C "$workdir" -czf "dist/${legacy_package}.tar.gz" .
                       fi
 
                       rm -rf "$workdir"
@@ -99,12 +103,12 @@ jobs:
                   build_target linux arm64
                   build_target windows amd64
 
-                  (cd dist && sha256sum treectl_* > checksums.txt)
+                  (cd dist && sha256sum treecli_* treectl_* > checksums.txt)
 
             - name: Publish GitHub release
               uses: softprops/action-gh-release@v2
               with:
                   tag_name: ${{ steps.release.outputs.tag }}
-                  name: treectl ${{ steps.release.outputs.tag }}
+                  name: treecli ${{ steps.release.outputs.tag }}
                   files: dist/*
                   generate_release_notes: true

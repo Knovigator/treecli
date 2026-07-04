@@ -1,4 +1,4 @@
-module github.com/Knovigator/treectl
+module github.com/Knovigator/treecli
 
 go 1.22.3
 

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Knovigator/treectl/api"
+	"github.com/Knovigator/treecli/api"
 	"github.com/spf13/cobra"
 )
 
@@ -39,16 +39,16 @@ var GenerateCmd = &cobra.Command{
 		"--reference (run:<id> reuses a prior generation's output as the model's reference; " +
 		"@path uploads a local file; a public URL is passed through). Music models accept " +
 		"--instrumental and --duration.\n\n" +
-		"Run `treectl generate actions --verbose` or `treectl generate describe <ai-action>` " +
+		"Run `treecli generate actions --verbose` or `treecli generate describe <ai-action>` " +
 		"to see available AI actions, descriptions, settings, and examples.",
-	Example: "  treectl generate flux \"soft-gradient app icon, violet to indigo\" --out icon.png\n" +
-		"  treectl generate flux2 \"wide hero banner\" --out banner.webp --input aspect_ratio=3:1\n" +
-		"  treectl generate suno \"warm ambient build, 122 BPM\" --duration 20 --out sketch.mp3\n" +
-		"  treectl generate suno \"cinematic electronic, builds to a drop\" --instrumental --duration 22 \\\n" +
+	Example: "  treecli generate flux \"soft-gradient app icon, violet to indigo\" --out icon.png\n" +
+		"  treecli generate flux2 \"wide hero banner\" --out banner.webp --input aspect_ratio=3:1\n" +
+		"  treecli generate suno \"warm ambient build, 122 BPM\" --duration 20 --out sketch.mp3\n" +
+		"  treecli generate suno \"cinematic electronic, builds to a drop\" --instrumental --duration 22 \\\n" +
 		"      --reference run:abc123 --out track.mp3\n" +
-		"  treectl generate suno \"...\" --duration 22 --quote\n" +
-		"  treectl generate actions --direct-only\n" +
-		"  treectl generate describe flux2",
+		"  treecli generate suno \"...\" --duration 22 --quote\n" +
+		"  treecli generate actions --direct-only\n" +
+		"  treecli generate describe flux2",
 	Args:              cobra.MinimumNArgs(1),
 	RunE:              runGenerate,
 	ValidArgsFunction: completeGenerateArgs,

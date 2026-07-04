@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Knovigator/treectl/api"
+	"github.com/Knovigator/treecli/api"
 	"github.com/spf13/cobra"
 )
 
@@ -16,10 +16,10 @@ var newPostCmd = &cobra.Command{
 	Use:   "post <content>",
 	Short: "Create a new post",
 	Long:  `Create a new post with content and optional URL or attachment. Pass --reply-to <quest-id-or-link> to create a reply in an existing thread instead of a new root thread.`,
-	Example: "  treectl new post \"hello world\"\n" +
-		"  treectl new post --stream public \"hello world\"\n" +
-		"  treectl new post --reply-to 7a5e85c9-9dca-4140-ba9a-f5db0030afca \"hello back\"\n" +
-		"  treectl new post --reply-to http://localhost:5173/quest/7a5e85c9-9dca-4140-ba9a-f5db0030afca \"hello back\"",
+	Example: "  treecli new post \"hello world\"\n" +
+		"  treecli new post --stream public \"hello world\"\n" +
+		"  treecli new post --reply-to 7a5e85c9-9dca-4140-ba9a-f5db0030afca \"hello back\"\n" +
+		"  treecli new post --reply-to http://localhost:5173/quest/7a5e85c9-9dca-4140-ba9a-f5db0030afca \"hello back\"",
 	Args: cobra.MinimumNArgs(1),
 	RunE: runNewPost,
 }
@@ -27,13 +27,13 @@ var newPostCmd = &cobra.Command{
 var ActionCmd = &cobra.Command{
 	Use:   "action <tag-or-invocation> [prompt...]",
 	Short: "Create an AI action post or reply and wait for generated media",
-	Long:  "Create an AI action root thread or reply, then poll the submitted answer until media generation completes, fails, or times out.\n\nRun `treectl action tags` to see the current model-backed AI actions.\n\nUse --duration to request a specific audio or video length in seconds; the backend clamps it to the model's allowed range.",
-	Example: "  treectl action flux \"a red kite over Bangkok\"\n" +
-		"  treectl action !kling \"camera orbit around a bonsai tree\"\n" +
-		"  treectl action \"!veo3 slow dolly through a neon alley\"\n" +
-		"  treectl action !stableaudio \"ambient build, 120 BPM\" --duration 90\n" +
-		"  treectl action --reply-to 7a5e85c9-9dca-4140-ba9a-f5db0030afca flux \"make this warmer\"\n" +
-		"  treectl action --reply-to http://localhost:5173/quest/7a5e85c9-9dca-4140-ba9a-f5db0030afca flux \"make this warmer\"",
+	Long:  "Create an AI action root thread or reply, then poll the submitted answer until media generation completes, fails, or times out.\n\nRun `treecli action tags` to see the current model-backed AI actions.\n\nUse --duration to request a specific audio or video length in seconds; the backend clamps it to the model's allowed range.",
+	Example: "  treecli action flux \"a red kite over Bangkok\"\n" +
+		"  treecli action !kling \"camera orbit around a bonsai tree\"\n" +
+		"  treecli action \"!veo3 slow dolly through a neon alley\"\n" +
+		"  treecli action !stableaudio \"ambient build, 120 BPM\" --duration 90\n" +
+		"  treecli action --reply-to 7a5e85c9-9dca-4140-ba9a-f5db0030afca flux \"make this warmer\"\n" +
+		"  treecli action --reply-to http://localhost:5173/quest/7a5e85c9-9dca-4140-ba9a-f5db0030afca flux \"make this warmer\"",
 	Args:              cobra.MinimumNArgs(1),
 	RunE:              runAction,
 	ValidArgsFunction: completeActionArgs,
@@ -50,10 +50,10 @@ var actionStatusCmd = &cobra.Command{
 	Use:   "status [quest-id-or-link]",
 	Short: "Check an existing action result at the thread or post level",
 	Long:  "Check an existing action result at the thread/quest level by default, or inspect a specific post with --post or --answer. Use --watch to keep polling until it completes, fails, or times out.",
-	Example: "  treectl action status ec587036-f0f8-423a-8ffb-12658f7ac3ce\n" +
-		"  treectl action status http://localhost:5173/quest/ec587036-f0f8-423a-8ffb-12658f7ac3ce\n" +
-		"  treectl action status --post aeaacf68-d1a7-4f78-8fb0-a39c66ca1cc7\n" +
-		"  treectl action status --answer aeaacf68-d1a7-4f78-8fb0-a39c66ca1cc7 --watch",
+	Example: "  treecli action status ec587036-f0f8-423a-8ffb-12658f7ac3ce\n" +
+		"  treecli action status http://localhost:5173/quest/ec587036-f0f8-423a-8ffb-12658f7ac3ce\n" +
+		"  treecli action status --post aeaacf68-d1a7-4f78-8fb0-a39c66ca1cc7\n" +
+		"  treecli action status --answer aeaacf68-d1a7-4f78-8fb0-a39c66ca1cc7 --watch",
 	Args: cobra.MaximumNArgs(1),
 	RunE: runActionStatus,
 }
@@ -282,7 +282,7 @@ func runAction(cmd *cobra.Command, args []string) error {
 	}
 
 	if !validTags[strings.ToLower(invocation.Tag)] && !actionAllowUnknownTag {
-		return fmt.Errorf("unknown AI action %q; run `treectl action tags` to inspect the current model-backed actions, or pass --allow-unknown-tag to submit anyway", invocation.Tag)
+		return fmt.Errorf("unknown AI action %q; run `treecli action tags` to inspect the current model-backed actions, or pass --allow-unknown-tag to submit anyway", invocation.Tag)
 	}
 
 	var publicValue *bool

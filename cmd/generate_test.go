@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Knovigator/treectl/api"
+	"github.com/Knovigator/treecli/api"
 )
 
 func withGenerateGlobals(t *testing.T) {
@@ -138,7 +138,7 @@ func TestGenerationActionRowsIncludesFullCatalogAndMarksDirectSupport(t *testing
 	if got := byAction["veo3"]; got.DirectGeneration || got.Kind != "video" {
 		t.Fatalf("expected veo3 catalog row without direct support, got %#v", got)
 	}
-	if got := byAction["veo3"]; len(got.Notes) == 0 || !strings.Contains(got.Examples[0], "treectl action veo3") {
+	if got := byAction["veo3"]; len(got.Notes) == 0 || !strings.Contains(got.Examples[0], "treecli action veo3") {
 		t.Fatalf("expected veo3 post-backed guidance, got notes=%#v examples=%#v", got.Notes, got.Examples)
 	}
 	if got := byAction["suno"]; !got.DirectGeneration || !got.Async {

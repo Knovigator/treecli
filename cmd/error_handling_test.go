@@ -105,9 +105,17 @@ func TestValidateCredentialTransportRejectsNonLocalHTTP(t *testing.T) {
 }
 
 func TestValidateCredentialTransportAllowsExplicitInsecureOverride(t *testing.T) {
-	t.Setenv("TREECTL_ALLOW_INSECURE_HTTP", "1")
+	t.Setenv("TREECLI_ALLOW_INSECURE_HTTP", "1")
 
 	if err := validateCredentialTransport("http://example.test"); err != nil {
 		t.Fatalf("expected explicit insecure override to allow backend, got %v", err)
+	}
+}
+
+func TestValidateCredentialTransportAllowsLegacyExplicitInsecureOverride(t *testing.T) {
+	t.Setenv("TREECTL_ALLOW_INSECURE_HTTP", "1")
+
+	if err := validateCredentialTransport("http://example.test"); err != nil {
+		t.Fatalf("expected legacy explicit insecure override to allow backend, got %v", err)
 	}
 }

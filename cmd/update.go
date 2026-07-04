@@ -20,8 +20,10 @@ import (
 )
 
 const (
-	defaultUpdateRepo = "Knovigator/treectl"
+	defaultUpdateRepo = "Knovigator/treecli"
 	githubAPIBaseURL  = "https://api.github.com"
+	treecliBinaryName = "treecli"
+	legacyBinaryName  = "treectl"
 )
 
 // CurrentVersion is replaced by the release workflow. Dev builds keep "dev".
@@ -53,16 +55,16 @@ type latestReleaseResponse struct {
 
 var UpdateCmd = &cobra.Command{
 	Use:   "update [version]",
-	Short: "Update treectl to the latest release",
-	Long: "Download a treectl GitHub Release archive, verify it against checksums.txt, " +
+	Short: "Update treecli to the latest release",
+	Long: "Download a treecli GitHub Release archive, verify it against checksums.txt, " +
 		"and replace the current CLI binary.\n\n" +
-		"Without a version argument, treectl installs the latest published release. Pass a " +
+		"Without a version argument, treecli installs the latest published release. Pass a " +
 		"specific tag such as v0.1.2 to install that release instead. Self-update currently " +
 		"supports macOS and Linux release archives.",
-	Example: "  treectl update\n" +
-		"  treectl update --check\n" +
-		"  treectl update v0.1.2\n" +
-		"  treectl update --install-dir ~/.local/bin",
+	Example: "  treecli update\n" +
+		"  treecli update --check\n" +
+		"  treecli update v0.1.2\n" +
+		"  treecli update --install-dir ~/.local/bin",
 	Args: cobra.MaximumNArgs(1),
 	RunE: runUpdate,
 }
@@ -115,15 +117,15 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 
 	if updateOptions.check {
 		if updateAvailable {
-			result.Message = fmt.Sprintf("treectl %s is available", tag)
+			result.Message = fmt.Sprintf("treecli %s is available", tag)
 		} else {
-			result.Message = fmt.Sprintf("treectl is already at %s", tag)
+			result.Message = fmt.Sprintf("treecli is already at %s", tag)
 		}
 		return printUpdateResult(result)
 	}
 
 	if !updateAvailable && !updateOptions.force {
-		result.Message = fmt.Sprintf("treectl is already at %s", tag)
+		result.Message = fmt.Sprintf("treecli is already at %s", tag)
 		return printUpdateResult(result)
 	}
 
@@ -133,7 +135,7 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 	}
 
 	result.Updated = true
-	result.Message = fmt.Sprintf("Installed treectl %s to %s", tag, installPath)
+	result.Message = fmt.Sprintf("Installed treecli %s to %s", tag, installPath)
 	return printUpdateResult(result)
 }
 
@@ -152,7 +154,7 @@ func fetchLatestReleaseTag(client *http.Client, apiBaseURL string, repo string) 
 		return "", err
 	}
 	req.Header.Set("accept", "application/vnd.github+json")
-	req.Header.Set("user-agent", "treectl/"+CurrentVersion)
+	req.Header.Set("user-agent", "treecli/"+CurrentVersion)
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -200,7 +202,7 @@ func releaseAssetName(tag string, goos string, goarch string) (string, error) {
 		return "", fmt.Errorf("self-update is not supported on %s/%s", goos, goarch)
 	}
 
-	return fmt.Sprintf("treectl_%s_%s_%s.tar.gz", tag, goos, goarch), nil
+	return fmt.Sprintf("%s_%s_%s_%s.tar.gz", treecliBinaryName, tag, goos, goarch), nil
 }
 
 func versionsEqual(current string, target string) bool {
@@ -218,7 +220,7 @@ func updateInstallPath(installDir string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		return filepath.Join(dir, "treectl"), nil
+		return filepath.Join(dir, treecliBinaryName), nil
 	}
 
 	executable, err := os.Executable()
@@ -250,7 +252,7 @@ func expandHomeDir(path string) (string, error) {
 }
 
 func downloadVerifyAndInstall(client *http.Client, baseURL string, assetName string, installPath string) error {
-	tmpdir, err := os.MkdirTemp("", "treectl-update-*")
+	tmpdir, err := os.MkdirTemp("", "treecli-update-*")
 	if err != nil {
 		return fmt.Errorf("creating temp dir: %w", err)
 	}
@@ -282,8 +284,8 @@ func downloadVerifyAndInstall(client *http.Client, baseURL string, assetName str
 		return fmt.Errorf("checksum mismatch for %s", assetName)
 	}
 
-	extractedPath := filepath.Join(tmpdir, "treectl")
-	if err := extractTreectlBinary(assetPath, extractedPath); err != nil {
+	extractedPath := filepath.Join(tmpdir, treecliBinaryName)
+	if err := extractTreecliBinary(assetPath, extractedPath); err != nil {
 		return err
 	}
 
@@ -298,7 +300,7 @@ func downloadToFile(client *http.Client, url string, path string) error {
 	if err != nil {
 		return err
 	}
-	req.Header.Set("user-agent", "treectl/"+CurrentVersion)
+	req.Header.Set("user-agent", "treecli/"+CurrentVersion)
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -349,7 +351,7 @@ func sha256File(path string) (string, error) {
 	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
-func extractTreectlBinary(archivePath string, outputPath string) error {
+func extractTreecliBinary(archivePath string, outputPath string) error {
 	file, err := os.Open(archivePath)
 	if err != nil {
 		return fmt.Errorf("opening archive: %w", err)
@@ -374,7 +376,7 @@ func extractTreectlBinary(archivePath string, outputPath string) error {
 		if header == nil || header.FileInfo().IsDir() {
 			continue
 		}
-		if filepath.Base(header.Name) != "treectl" {
+		if archiveBinaryName := filepath.Base(header.Name); archiveBinaryName != treecliBinaryName && archiveBinaryName != legacyBinaryName {
 			continue
 		}
 
@@ -392,7 +394,7 @@ func extractTreectlBinary(archivePath string, outputPath string) error {
 		return os.Chmod(outputPath, 0755)
 	}
 
-	return fmt.Errorf("archive did not contain treectl")
+	return fmt.Errorf("archive did not contain %s", treecliBinaryName)
 }
 
 func installExecutable(sourcePath string, targetPath string) error {
@@ -409,7 +411,7 @@ func installExecutable(sourcePath string, targetPath string) error {
 		}
 	}
 
-	tmp, err := os.CreateTemp(targetDir, ".treectl-update-*")
+	tmp, err := os.CreateTemp(targetDir, ".treecli-update-*")
 	if err != nil {
 		return fmt.Errorf("creating replacement file in %s: %w", targetDir, err)
 	}

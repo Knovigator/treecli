@@ -8,7 +8,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/Knovigator/treectl/api"
+	"github.com/Knovigator/treecli/api"
 	"github.com/spf13/cobra"
 )
 
@@ -50,8 +50,8 @@ var generateActionsCmd = &cobra.Command{
 	Aliases: []string{"tags"},
 	Short:   "List AI actions available from the active backend profile",
 	Long: "List active AI actions from the backend model catalog and mark which ones support " +
-		"direct post-less generation through `treectl generate`.\n\n" +
-		"`treectl generate tags` is kept as a compatibility alias for older scripts.",
+		"direct post-less generation through `treecli generate`.\n\n" +
+		"`treecli generate tags` is kept as a compatibility alias for older scripts.",
 	Args: cobra.NoArgs,
 	RunE: runGenerateActions,
 }
@@ -61,9 +61,9 @@ var generateDescribeCmd = &cobra.Command{
 	Short: "Show detailed help for one AI action",
 	Long: "Show detailed help for one AI action, including model description, direct-generation " +
 		"support, accepted settings, and example commands for humans and agents.",
-	Example: "  treectl generate describe flux2\n" +
-		"  treectl generate describe suno --json\n" +
-		"  treectl generate describe veo3",
+	Example: "  treecli generate describe flux2\n" +
+		"  treecli generate describe suno --json\n" +
+		"  treecli generate describe veo3",
 	Args:              cobra.ExactArgs(1),
 	RunE:              runGenerateDescribe,
 	ValidArgsFunction: completeGenerateDescribeArgs,
@@ -149,7 +149,7 @@ func runGenerateDescribe(cmd *cobra.Command, args []string) error {
 
 	row, ok := findGenerationActionRow(generationActionRows(models, directActions, false), args[0])
 	if !ok {
-		return fmt.Errorf("unknown AI action %q; run `treectl generate actions` to inspect available actions", args[0])
+		return fmt.Errorf("unknown AI action %q; run `treecli generate actions` to inspect available actions", args[0])
 	}
 
 	if generateDescribeJSON {
@@ -368,10 +368,10 @@ func enrichGenerationActionRow(row generationActionRow) generationActionRow {
 		return row
 	}
 
-	row.Examples = []string{fmt.Sprintf("treectl action %s \"prompt\"", row.Action)}
+	row.Examples = []string{fmt.Sprintf("treecli action %s \"prompt\"", row.Action)}
 	row.Notes = []string{
 		"This AI action is available for post-backed Treechat action workflows.",
-		"It is not currently advertised by the direct post-less generation endpoint, so use `treectl action` instead of `treectl generate`.",
+		"It is not currently advertised by the direct post-less generation endpoint, so use `treecli action` instead of `treecli generate`.",
 	}
 	return row
 }
@@ -383,7 +383,7 @@ func generationSettingsFor(row generationActionRow) []settingHelp {
 			Type:        "string",
 			How:         "positional argument",
 			Description: "Primary generation prompt. Pass it after the action name.",
-			Example:     fmt.Sprintf("treectl generate %s \"a cinematic mountain sunrise\" --out output.%s", row.Action, defaultOutputExtension(row.Kind)),
+			Example:     fmt.Sprintf("treecli generate %s \"a cinematic mountain sunrise\" --out output.%s", row.Action, defaultOutputExtension(row.Kind)),
 		},
 	}
 
@@ -466,7 +466,7 @@ func backendSettingsFor(row generationActionRow) []settingHelp {
 			help.How = "--reference run:<id>, --reference https://..., or --reference @path"
 		}
 		if name == "reference_content_type" || name == "reference_kind" {
-			help.How = "usually inferred by treectl; may be passed with --input"
+			help.How = "usually inferred by treecli; may be passed with --input"
 		}
 		settings = append(settings, help)
 	}
@@ -572,23 +572,23 @@ func knownSettingsFor(row generationActionRow) []settingHelp {
 
 func generationExamplesFor(row generationActionRow) []string {
 	ext := defaultOutputExtension(row.Kind)
-	examples := []string{fmt.Sprintf("treectl generate %s \"prompt\" --out output.%s", row.Action, ext)}
+	examples := []string{fmt.Sprintf("treecli generate %s \"prompt\" --out output.%s", row.Action, ext)}
 
 	switch normalizedActionName(row.Action) {
 	case "flux2":
-		examples = append(examples, fmt.Sprintf("treectl generate %s \"wide hero banner\" --out banner.webp --input aspect_ratio=3:1", row.Action))
+		examples = append(examples, fmt.Sprintf("treecli generate %s \"wide hero banner\" --out banner.webp --input aspect_ratio=3:1", row.Action))
 	case "suno":
 		examples = append(examples,
-			fmt.Sprintf("treectl generate %s \"warm ambient build, 122 BPM\" --duration 22 --out sketch.mp3", row.Action),
-			fmt.Sprintf("treectl generate %s \"cinematic electronic\" --instrumental --reference run:abc123 --out track.mp3", row.Action),
+			fmt.Sprintf("treecli generate %s \"warm ambient build, 122 BPM\" --duration 22 --out sketch.mp3", row.Action),
+			fmt.Sprintf("treecli generate %s \"cinematic electronic\" --instrumental --reference run:abc123 --out track.mp3", row.Action),
 		)
 	default:
 		if row.AcceptsReference {
-			examples = append(examples, fmt.Sprintf("treectl generate %s \"prompt\" --reference @reference.png --out output.%s", row.Action, ext))
+			examples = append(examples, fmt.Sprintf("treecli generate %s \"prompt\" --reference @reference.png --out output.%s", row.Action, ext))
 		}
 	}
 
-	examples = append(examples, fmt.Sprintf("treectl generate %s \"prompt\" --quote", row.Action))
+	examples = append(examples, fmt.Sprintf("treecli generate %s \"prompt\" --quote", row.Action))
 	return examples
 }
 
@@ -599,7 +599,7 @@ func directGenerationNotesFor(row generationActionRow) []string {
 		"Use `--settings '{...}'` when an agent already has a JSON settings object.",
 	}
 	if row.Async {
-		notes = append(notes, "This action can run asynchronously; treectl polls until completion using --poll-interval and --timeout.")
+		notes = append(notes, "This action can run asynchronously; treecli polls until completion using --poll-interval and --timeout.")
 	}
 	return notes
 }
