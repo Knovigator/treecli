@@ -167,16 +167,12 @@ func TestGenerationActionRowsCanFilterToDirectOnly(t *testing.T) {
 	}
 }
 
-func TestGenerateActionsCommandKeepsTagsCompatibilityAlias(t *testing.T) {
-	found := false
-	for _, alias := range generateActionsCmd.Aliases {
-		if alias == "tags" {
-			found = true
-			break
-		}
+func TestGenerateActionsCommandKeepsHiddenTagsCompatibilityCommand(t *testing.T) {
+	if generateTagsCompatCmd.Use != "tags" {
+		t.Fatalf("expected hidden compatibility command to use tags, got %q", generateTagsCompatCmd.Use)
 	}
-	if !found {
-		t.Fatal("expected generate actions to keep tags as a compatibility alias")
+	if !generateTagsCompatCmd.Hidden {
+		t.Fatal("expected tags compatibility command to be hidden from help")
 	}
 }
 

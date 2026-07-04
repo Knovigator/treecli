@@ -66,6 +66,7 @@ func init() {
 	GenerateCmd.Flags().DurationVar(&generatePollInterval, "poll-interval", 3*time.Second, "Polling interval if the generation runs async")
 	GenerateCmd.Flags().DurationVar(&generateTimeout, "timeout", 5*time.Minute, "Maximum time to wait for generated media")
 	GenerateCmd.AddCommand(generateActionsCmd)
+	GenerateCmd.AddCommand(generateTagsCompatCmd)
 	GenerateCmd.AddCommand(generateDescribeCmd)
 }
 

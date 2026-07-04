@@ -1,10 +1,10 @@
 # treecli
 
-`treecli` is the command-line interface for Treechat automation.
+`treecli` is the command-line interface for Treechat automation. It lets humans and agents read Treechat threads, create posts, submit AI action requests, generate local media, and keep the CLI updated from GitHub Releases.
 
 ## Install
 
-Once releases are published, install the latest macOS or Linux binary:
+Install the latest macOS or Linux binary:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/Knovigator/treecli/main/install.sh | sh
@@ -13,12 +13,10 @@ curl -fsSL https://raw.githubusercontent.com/Knovigator/treecli/main/install.sh 
 Install a specific version:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Knovigator/treecli/main/install.sh | TREECLI_VERSION=0.1.0 sh
+curl -fsSL https://raw.githubusercontent.com/Knovigator/treecli/main/install.sh | TREECLI_VERSION=0.2.0 sh
 ```
 
 The installer downloads the matching GitHub Release archive, verifies it against `checksums.txt`, and installs `treecli` to `~/.local/bin` by default. Override that with `TREECLI_INSTALL_DIR`.
-
-During the rename from `treectl`, releases also publish compatibility archives and the installer also writes a `treectl` command by default. Existing `TREECTL_*` environment variables are still accepted as fallbacks, but new automation should use `treecli` and `TREECLI_*`.
 
 Go users can also install directly:
 
@@ -32,13 +30,59 @@ Update an installed release in place:
 treecli update
 ```
 
-Self-update currently supports the macOS and Linux release archives. Existing `treectl` binaries can run `treectl update` and receive the new code path from the compatibility release archive.
+Self-update currently supports the macOS and Linux release archives.
 
 Check whether a newer release is available without installing it:
 
 ```sh
 treecli update --check
 ```
+
+## Migration From treectl
+
+The project was renamed from `treectl` to `treecli` in `v0.2.0`.
+
+- New automation should use `treecli`, `TREECLI_*` environment variables, and the `Knovigator/treecli` repo.
+- Existing `treectl` binaries can run `treectl update` or `treectl update v0.2.0`.
+- Release archives still include a `treectl` compatibility binary, and the installer writes it by default. Set `TREECLI_INSTALL_LEGACY=0` to skip that compatibility command.
+- Existing `TREECTL_*` environment variables and `treectl/config.toml` are accepted as migration fallbacks.
+
+## Common Commands
+
+```sh
+treecli profile list
+treecli profile show
+treecli login --profile dev
+
+treecli get thread <quest-id>
+treecli get messages <answer-id> [...]
+
+treecli new post "hello world"
+treecli new post --reply-to <quest-id> "reply text"
+```
+
+## AI Actions And Media
+
+Use action requests for Treechat-posted AI work:
+
+```sh
+treecli action actions
+treecli action flux "a glass cathedral in the rain"
+treecli action --reply-to <quest-id> animate_kling "animate this still"
+treecli action status --answer <answer-id> --watch
+```
+
+Use direct generation when an agent or script needs local media files without creating a post:
+
+```sh
+treecli generate actions --direct-only
+treecli generate actions --verbose
+treecli generate describe flux2
+treecli generate flux2 "wide cinematic hero banner" --out banner.webp --input aspect_ratio=3:1
+treecli generate suno "warm ambient build, 122 BPM" --duration 20 --out sketch.mp3
+```
+
+`treecli generate` supports repeatable `--input key=value`, JSON `--settings`, `--duration`, `--instrumental`, and `--reference run:<id>|https://...|@path`. Use `treecli generate describe <action>` before generating when an agent needs model descriptions, accepted inputs, settings, examples, and reference behavior.
 
 ## Development
 
@@ -52,8 +96,8 @@ go run . --help
 Create a public CLI release by pushing a normal version tag:
 
 ```sh
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.2.1
+git push origin v0.2.1
 ```
 
 The `release` GitHub Actions workflow builds:
@@ -67,18 +111,18 @@ It uploads the archives and `checksums.txt` to the GitHub Release.
 If the tag already exists and you need to rerun the release through GitHub CLI:
 
 ```sh
-gh workflow run release.yml --ref main -f tag=v0.1.0
+gh workflow run release.yml --ref main -f tag=v0.2.1
 ```
 
 Inspect a finished release with:
 
 ```sh
-gh release view v0.1.0 --repo Knovigator/treecli
+gh release view v0.2.0 --repo Knovigator/treecli
 ```
 
 ## Agent Usage
 
-Agents should install `treecli`, authenticate with `treecli login` or supported `TREECLI_*` environment variables, and rely on server-side authorization for all Treechat access. `TREECTL_*` variables only exist for migration from old installs. Do not distribute tokens inside release artifacts.
+Agents should install `treecli`, authenticate with `treecli login` or supported `TREECLI_*` environment variables, inspect model capabilities with `treecli generate actions --verbose` or `treecli generate describe <action>`, and rely on server-side authorization for all Treechat access. Do not distribute tokens inside release artifacts.
 
 ## License
 

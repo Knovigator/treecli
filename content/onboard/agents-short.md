@@ -4,11 +4,11 @@
 - Read data with `treecli get thread <quest-id>` and `treecli get messages <answer-id> [...]`.
 - Create a root post with `treecli new post "text"` and a reply with `treecli new post --reply-to <quest-id> "text"`.
 - Root posts default to private; use `--stream` only on root posts and root actions.
-- Discover AI actions with `treecli action tags`.
+- Discover AI actions with `treecli action actions`.
 - Submit action work with `treecli action <action> "prompt"` or `treecli action --reply-to <quest-id> <action> "prompt"`.
 - Use plain AI actions for new assets, `animate_*` to animate an existing image, and `edit_*` to edit an existing image.
 - If the goal is to animate or edit a previous image, do not use a plain generation action.
-- For post-less local media generation, inspect support with `treecli generate actions --direct-only`; use `treecli generate actions --verbose` or `treecli generate describe <action>` for descriptions, settings, and examples.
+- For post-less local media generation, inspect support with `treecli generate actions --direct-only`; use `treecli generate actions --verbose` or `treecli generate describe <action>` for descriptions, inputs, settings, reference behavior, and examples.
 - Generate local media with `treecli generate <action> "prompt" --out <file>` and pass settings with `--input key=value`, `--settings '{...}'`, `--duration`, `--instrumental`, or `--reference` as described by the action.
 - Use `treecli action --no-wait` plus `treecli action status --answer ...` or `--thread ...` for async flows.
 - Human-readable output is the default. Use `--json` when you need structured output.

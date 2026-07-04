@@ -46,14 +46,19 @@ type settingHelp struct {
 
 // generateActionsCmd lists active AI actions and marks which ones the direct generation endpoint supports.
 var generateActionsCmd = &cobra.Command{
-	Use:     "actions",
-	Aliases: []string{"tags"},
-	Short:   "List AI actions available from the active backend profile",
+	Use:   "actions",
+	Short: "List AI actions available from the active backend profile",
 	Long: "List active AI actions from the backend model catalog and mark which ones support " +
-		"direct post-less generation through `treecli generate`.\n\n" +
-		"`treecli generate tags` is kept as a compatibility alias for older scripts.",
+		"direct post-less generation through `treecli generate`.",
 	Args: cobra.NoArgs,
 	RunE: runGenerateActions,
+}
+
+var generateTagsCompatCmd = &cobra.Command{
+	Use:    "tags",
+	Hidden: true,
+	Args:   cobra.NoArgs,
+	RunE:   runGenerateActions,
 }
 
 var generateDescribeCmd = &cobra.Command{
@@ -70,10 +75,15 @@ var generateDescribeCmd = &cobra.Command{
 }
 
 func init() {
-	generateActionsCmd.Flags().BoolVar(&generateActionsJSON, "json", false, "Print the actions as JSON")
-	generateActionsCmd.Flags().BoolVar(&generateActionsDirectOnly, "direct-only", false, "Only list AI actions supported by post-less generation")
-	generateActionsCmd.Flags().BoolVar(&generateActionsVerbose, "verbose", false, "Print descriptions, settings, examples, and notes for each action")
+	configureGenerateActionsFlags(generateActionsCmd)
+	configureGenerateActionsFlags(generateTagsCompatCmd)
 	generateDescribeCmd.Flags().BoolVar(&generateDescribeJSON, "json", false, "Print the action detail as JSON")
+}
+
+func configureGenerateActionsFlags(command *cobra.Command) {
+	command.Flags().BoolVar(&generateActionsJSON, "json", false, "Print the actions as JSON")
+	command.Flags().BoolVar(&generateActionsDirectOnly, "direct-only", false, "Only list AI actions supported by post-less generation")
+	command.Flags().BoolVar(&generateActionsVerbose, "verbose", false, "Print descriptions, settings, examples, and notes for each action")
 }
 
 func runGenerateActions(cmd *cobra.Command, args []string) error {

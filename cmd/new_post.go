@@ -25,9 +25,9 @@ var newPostCmd = &cobra.Command{
 }
 
 var ActionCmd = &cobra.Command{
-	Use:   "action <tag-or-invocation> [prompt...]",
+	Use:   "action <ai-action-or-invocation> [prompt...]",
 	Short: "Create an AI action post or reply and wait for generated media",
-	Long:  "Create an AI action root thread or reply, then poll the submitted answer until media generation completes, fails, or times out.\n\nRun `treecli action tags` to see the current model-backed AI actions.\n\nUse --duration to request a specific audio or video length in seconds; the backend clamps it to the model's allowed range.",
+	Long:  "Create an AI action root thread or reply, then poll the submitted answer until media generation completes, fails, or times out.\n\nRun `treecli action actions` to see the current model-backed AI actions.\n\nUse --duration to request a specific audio or video length in seconds; the backend clamps it to the model's allowed range.",
 	Example: "  treecli action flux \"a red kite over Bangkok\"\n" +
 		"  treecli action !kling \"camera orbit around a bonsai tree\"\n" +
 		"  treecli action \"!veo3 slow dolly through a neon alley\"\n" +
@@ -39,11 +39,17 @@ var ActionCmd = &cobra.Command{
 	ValidArgsFunction: completeActionArgs,
 }
 
-var actionTagsCmd = &cobra.Command{
-	Use:   "tags",
+var actionActionsCmd = &cobra.Command{
+	Use:   "actions",
 	Short: "List model-backed AI actions",
 	Long:  "List the current model-backed AI actions from the authenticated backend profile.",
-	RunE:  runActionTags,
+	RunE:  runActionActions,
+}
+
+var actionTagsCompatCmd = &cobra.Command{
+	Use:    "tags",
+	Hidden: true,
+	RunE:   runActionActions,
 }
 
 var actionStatusCmd = &cobra.Command{
@@ -160,7 +166,8 @@ func init() {
 	ActionCmd.Flags().StringVar(&actionTeamID, "team-id", "", "Optional stream/team ID to post into")
 	ActionCmd.Flags().BoolVar(&actionPublic, "public", false, "Mark the new thread as public")
 	ActionCmd.Flags().BoolVar(&actionPrivate, "private", false, "Mark the new thread as private")
-	ActionCmd.Flags().BoolVar(&actionAllowUnknownTag, "allow-unknown-tag", false, "Submit the action even if it is not present in the current model-backed AI action list")
+	ActionCmd.Flags().BoolVar(&actionAllowUnknownTag, "allow-unknown-action", false, "Submit the action even if it is not present in the current model-backed AI action list")
+	ActionCmd.Flags().BoolVar(&actionAllowUnknownTag, "allow-unknown-tag", false, "Compatibility alias for --allow-unknown-action")
 	ActionCmd.Flags().StringVarP(&actionOutputFormat, "output", "o", "ascii", "Output format: ascii or json")
 	ActionCmd.Flags().BoolVar(&actionJSONOutput, "json", false, "Output JSON instead of human-readable text")
 	ActionCmd.Flags().DurationVar(&actionPollInterval, "poll-interval", 3*time.Second, "Polling interval while waiting for generated media")
@@ -168,6 +175,7 @@ func init() {
 	ActionCmd.Flags().BoolVar(&actionNoWait, "no-wait", false, "Submit the action and return immediately without polling")
 	ActionCmd.Flags().IntVar(&actionDuration, "duration", 0, "Duration in seconds for audio/video generation; the model clamps to its allowed range (0 = model default)")
 	_ = ActionCmd.Flags().MarkHidden("thread")
+	_ = ActionCmd.Flags().MarkHidden("allow-unknown-tag")
 	actionStatusCmd.Flags().StringVar(&actionStatusAnswerID, "answer", "", "Check the action result for this post/answer id or link")
 	actionStatusCmd.Flags().StringVar(&actionStatusAnswerID, "post", "", "Check the action result for this post/answer id or link")
 	actionStatusCmd.Flags().StringVar(&actionStatusThreadID, "thread", "", "Compatibility alias for the default quest/thread target")
@@ -177,7 +185,8 @@ func init() {
 	actionStatusCmd.Flags().DurationVar(&actionStatusPollInterval, "poll-interval", 3*time.Second, "Polling interval while waiting in watch mode")
 	actionStatusCmd.Flags().DurationVar(&actionStatusTimeout, "timeout", 10*time.Minute, "Maximum time to wait in watch mode")
 	_ = actionStatusCmd.Flags().MarkHidden("thread")
-	ActionCmd.AddCommand(actionTagsCmd)
+	ActionCmd.AddCommand(actionActionsCmd)
+	ActionCmd.AddCommand(actionTagsCompatCmd)
 	ActionCmd.AddCommand(actionStatusCmd)
 }
 
@@ -282,7 +291,7 @@ func runAction(cmd *cobra.Command, args []string) error {
 	}
 
 	if !validTags[strings.ToLower(invocation.Tag)] && !actionAllowUnknownTag {
-		return fmt.Errorf("unknown AI action %q; run `treecli action tags` to inspect the current model-backed actions, or pass --allow-unknown-tag to submit anyway", invocation.Tag)
+		return fmt.Errorf("unknown AI action %q; run `treecli action actions` to inspect the current model-backed actions, or pass --allow-unknown-action to submit anyway", invocation.Tag)
 	}
 
 	var publicValue *bool
@@ -567,7 +576,7 @@ func printActionResult(result actionResult, outputFormat string) error {
 	return nil
 }
 
-func runActionTags(cmd *cobra.Command, args []string) error {
+func runActionActions(cmd *cobra.Command, args []string) error {
 	profile, err := requireAuthenticatedProfile()
 	if err != nil {
 		return err

@@ -9,8 +9,8 @@ Use this skill when you need to submit or inspect Treechat AI action work throug
 
 ## Discover AI Actions
 
-- Run `treecli action tags` to inspect the current model-backed AI actions for the active profile.
-- Use `--allow-unknown-tag` only when you intentionally need to bypass local AI action validation.
+- Run `treecli action actions` to inspect the current model-backed AI actions for the active profile.
+- Use `--allow-unknown-action` only when you intentionally need to bypass local AI action validation.
 
 ## Treechat Action Model
 
@@ -40,7 +40,7 @@ Use this skill when you need to submit or inspect Treechat AI action work throug
 
 - Use `treecli generate actions` to list all active AI actions and see which support direct post-less generation.
 - Use `treecli generate actions --direct-only` when you only want actions that can save media locally without creating a post.
-- Use `treecli generate actions --verbose` for a full human/agent-readable catalog with model descriptions, inputs, settings, examples, and notes.
+- Use `treecli generate actions --verbose` for a full human/agent-readable catalog with model descriptions, inputs, settings, reference behavior, examples, and notes.
 - Use `treecli generate describe <action>` before generating when you need focused help for one model.
 - Run direct generation with `treecli generate <action> "prompt" --out <file>`.
 - Pass settings with `--input key=value` for individual values, `--settings '{...}'` for a JSON settings object, `--duration` for duration-aware actions, `--instrumental` for music actions, and `--reference run:<id>|https://...|@path` for reference-aware actions.

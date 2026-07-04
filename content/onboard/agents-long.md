@@ -25,7 +25,7 @@ Use `treecli` as the CLI surface for Treechat automation in this repo.
 
 ### Running AI Actions
 
-- Discover model-backed AI actions with `treecli action tags`.
+- Discover model-backed AI actions with `treecli action actions`.
 - Root action: `treecli action flux "a glass cathedral in the rain"`.
 - Reply action: `treecli action --reply-to <quest-id> animate_kling "animate this as a handheld push-in"`.
 - Treechat action model:
@@ -36,7 +36,7 @@ Use `treecli` as the CLI surface for Treechat automation in this repo.
 - Actions default to private root-thread placement unless you pass a root-only stream flag.
 - `treecli action` waits by default and shows a spinner in interactive terminals.
 - For post-less local media generation, inspect support with `treecli generate actions --direct-only`.
-- Use `treecli generate actions --verbose` or `treecli generate describe <action>` to get model descriptions, accepted settings, and examples before generating.
+- Use `treecli generate actions --verbose` or `treecli generate describe <action>` to get model descriptions, accepted inputs, settings, reference behavior, and examples before generating.
 - Generate local media with `treecli generate <action> "prompt" --out <file>` and pass settings with `--input key=value`, `--settings '{...}'`, `--duration`, `--instrumental`, or `--reference` as described by the action.
 
 ### Async Action Workflows
