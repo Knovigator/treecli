@@ -22,6 +22,7 @@ func withGenerateGlobals(t *testing.T) {
 	previousTimeout := generateTimeout
 	previousInputs := generateInputs
 	previousReference := generateReference
+	previousPaymentMode := generatePaymentMode
 	previousInstrumental := generateInstrumental
 	previousQuote := generateQuote
 
@@ -34,6 +35,7 @@ func withGenerateGlobals(t *testing.T) {
 		generateTimeout = previousTimeout
 		generateInputs = previousInputs
 		generateReference = previousReference
+		generatePaymentMode = previousPaymentMode
 		generateInstrumental = previousInstrumental
 		generateQuote = previousQuote
 	})
