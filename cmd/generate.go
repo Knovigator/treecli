@@ -70,9 +70,9 @@ func init() {
 }
 
 func runGenerate(cmd *cobra.Command, args []string) error {
-	tag := strings.TrimPrefix(strings.TrimSpace(args[0]), "!")
+	action := strings.TrimPrefix(strings.TrimSpace(args[0]), "!")
 	prompt := strings.TrimSpace(strings.Join(args[1:], " "))
-	if tag == "" {
+	if action == "" {
 		return fmt.Errorf("an AI action is required")
 	}
 	if prompt == "" {
@@ -116,12 +116,12 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 	if generateQuote {
 		res, err := api.CreateGeneration(
 			profile.BackendURL, profile.AccessToken, profile.Client, profile.UID,
-			tag, prompt, settings, true, generateTimeout,
+			action, prompt, settings, true, generateTimeout,
 		)
 		if err != nil {
 			return err
 		}
-		return printQuote(tag, res)
+		return printQuote(action, res)
 	}
 
 	if err := resolveFileInputSettings(profile, settings); err != nil {
@@ -137,7 +137,7 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 
 	result, err := api.CreateGeneration(
 		profile.BackendURL, profile.AccessToken, profile.Client, profile.UID,
-		tag, prompt, settings, false, generateTimeout,
+		action, prompt, settings, false, generateTimeout,
 	)
 	if err != nil {
 		return err
@@ -168,11 +168,12 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 	}
 
 	if generateJSONOutput {
+		actionName := firstNonBlank(result.Action, result.Tag, action)
 		payload := map[string]interface{}{
 			"id":         result.ID,
 			"status":     result.Status,
-			"action":     result.Tag,
-			"tag":        result.Tag,
+			"action":     actionName,
+			"tag":        actionName,
 			"provider":   result.Provider,
 			"out":        written,
 			"bytes":      totalBytes,
@@ -455,7 +456,7 @@ func writeOutputs(base string, urls []string, profile profileConfig) ([]string, 
 	return written, total, nil
 }
 
-func printQuote(tag string, res api.GenerationResponse) error {
+func printQuote(action string, res api.GenerationResponse) error {
 	sats := res.AmountSats
 	usd := res.AmountUSD
 	if res.Quote != nil {
@@ -463,16 +464,22 @@ func printQuote(tag string, res api.GenerationResponse) error {
 		usd = res.Quote.AmountUSD
 	}
 	if generateJSONOutput {
-		encoded, err := json.MarshalIndent(map[string]interface{}{
-			"action": tag, "tag": tag, "quote": true, "amount_sats": sats, "amount_usd": usd, "provider": res.Provider,
-		}, "", "  ")
+		payload := map[string]interface{}{
+			"action":      action,
+			"tag":         action,
+			"quote":       true,
+			"amount_sats": sats,
+			"amount_usd":  usd,
+			"provider":    res.Provider,
+		}
+		encoded, err := json.MarshalIndent(payload, "", "  ")
 		if err != nil {
 			return err
 		}
 		fmt.Println(string(encoded))
 		return nil
 	}
-	fmt.Printf("Quote for %q: %d sats ($%.4f)\n", tag, sats, usd)
+	fmt.Printf("Quote for %q: %d sats ($%.4f)\n", action, sats, usd)
 	return nil
 }
 

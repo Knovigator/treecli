@@ -122,14 +122,72 @@ func TestCreateGenerationSendsActionRequestPayload(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected action_request payload, got %#v", received)
 	}
-	if actionRequest["kind"] != "model" || actionRequest["tag"] != "kling3" || actionRequest["prompt"] != "animate this" {
+	if actionRequest["kind"] != "model" || actionRequest["action"] != "kling3" || actionRequest["prompt"] != "animate this" {
 		t.Fatalf("unexpected action_request: %#v", actionRequest)
+	}
+	if _, ok := actionRequest["tag"]; ok {
+		t.Fatalf("expected action_request to use action instead of legacy tag, got %#v", actionRequest)
 	}
 	settings, ok := actionRequest["settings"].(map[string]interface{})
 	if !ok || settings["reference_url"] != "https://cdn.example.test/frame.png" {
 		t.Fatalf("expected action_request settings, got %#v", actionRequest["settings"])
 	}
-	if received["action"] != "kling3" {
-		t.Fatalf("expected top-level action compatibility field, got %#v", received["action"])
+	if received["action_key"] != "kling3" {
+		t.Fatalf("expected top-level action_key field, got %#v", received["action_key"])
+	}
+	if _, ok := received["action"]; ok {
+		t.Fatalf("expected no top-level action field because Rails reserves params[:action], got %#v", received["action"])
+	}
+}
+
+func TestListGenerationActionsPrefersActionsEndpoint(t *testing.T) {
+	var seenPaths []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seenPaths = append(seenPaths, r.URL.Path)
+		if r.URL.Path != "/api/v1/ai/generations/actions" {
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"actions":[{"action":"flux2","provider":"replicate","kind":"image"}]}`))
+	}))
+	defer server.Close()
+
+	actions, err := ListGenerationActions(server.URL, "secret-token", "client-id", "user@example.test")
+	if err != nil {
+		t.Fatalf("ListGenerationActions returned error: %v", err)
+	}
+	if len(actions) != 1 || actions[0].Action != "flux2" || actions[0].Tag != "flux2" {
+		t.Fatalf("unexpected actions: %#v", actions)
+	}
+	if len(seenPaths) != 1 {
+		t.Fatalf("expected one request to the actions endpoint, got %#v", seenPaths)
+	}
+}
+
+func TestListGenerationActionsFallsBackToLegacyTagsEndpoint(t *testing.T) {
+	var seenPaths []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seenPaths = append(seenPaths, r.URL.Path)
+		switch r.URL.Path {
+		case "/api/v1/ai/generations/actions":
+			http.NotFound(w, r)
+		case "/api/v1/ai/generations/tags":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"tags":[{"tag":"suno","provider":"suno","kind":"audio"}]}`))
+		default:
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	actions, err := ListGenerationActions(server.URL, "secret-token", "client-id", "user@example.test")
+	if err != nil {
+		t.Fatalf("ListGenerationActions returned error: %v", err)
+	}
+	if len(actions) != 1 || actions[0].Action != "suno" || actions[0].Tag != "suno" {
+		t.Fatalf("unexpected actions: %#v", actions)
+	}
+	if len(seenPaths) != 2 || seenPaths[0] != "/api/v1/ai/generations/actions" || seenPaths[1] != "/api/v1/ai/generations/tags" {
+		t.Fatalf("expected actions then tags fallback, got %#v", seenPaths)
 	}
 }

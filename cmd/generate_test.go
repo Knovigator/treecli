@@ -94,16 +94,16 @@ func TestGenerationActionRowsIncludesFullCatalogAndMarksDirectSupport(t *testing
 				ActionTagName: "openclaw",
 			},
 		},
-		[]api.TagInfo{
+		[]api.GenerationActionInfo{
 			{
-				Tag:              "flux2",
+				Action:           "flux2",
 				Provider:         "replicate",
 				Kind:             "image",
 				AcceptsReference: true,
 				Inputs:           []string{"aspect_ratio"},
 			},
 			{
-				Tag:                  "suno",
+				Action:               "suno",
 				Provider:             "suno",
 				Kind:                 "audio",
 				Async:                true,
@@ -113,7 +113,7 @@ func TestGenerationActionRowsIncludesFullCatalogAndMarksDirectSupport(t *testing
 				DurationMax:          240,
 			},
 			{
-				Tag:      "openclaw",
+				Action:   "openclaw",
 				Provider: "openclaw",
 				Kind:     "text",
 			},
@@ -155,7 +155,7 @@ func TestGenerationActionRowsCanFilterToDirectOnly(t *testing.T) {
 			{HumanName: "Flux 2 Pro", Provider: "replicate", ModelType: "image", ActionTagName: "flux2"},
 			{HumanName: "Veo 3", Provider: "google", ModelType: "video", ActionTagName: "veo3"},
 		},
-		[]api.TagInfo{{Tag: "flux2", Provider: "replicate", Kind: "image"}},
+		[]api.GenerationActionInfo{{Action: "flux2", Provider: "replicate", Kind: "image"}},
 		true,
 	)
 

@@ -42,14 +42,15 @@ type GenerationMedia struct {
 type GenerationQuote struct {
 	AmountSats int64   `json:"amount_sats"`
 	AmountUSD  float64 `json:"amount_usd"`
+	Action     string  `json:"action,omitempty"`
 	Tag        string  `json:"tag"`
 	Provider   string  `json:"provider,omitempty"`
 }
 
-// TagInfo describes one AI action available to the direct generation endpoint and what it accepts.
-// The JSON field is still named "tag" because that is the backend compatibility contract.
-type TagInfo struct {
-	Tag                  string        `json:"tag"`
+// GenerationActionInfo describes one AI action available to the direct generation endpoint and what it accepts.
+type GenerationActionInfo struct {
+	Action               string        `json:"action"`
+	Tag                  string        `json:"tag,omitempty"`
 	Provider             string        `json:"provider"`
 	Kind                 string        `json:"kind"` // image | audio | video
 	Async                bool          `json:"async"`
@@ -60,6 +61,9 @@ type TagInfo struct {
 	DurationMax          int           `json:"duration_max,omitempty"`
 	Inputs               []string      `json:"inputs,omitempty"`
 }
+
+// TagInfo is kept as a source-compatible alias for older callers.
+type TagInfo = GenerationActionInfo
 
 // SettingInfo describes one backend-advertised direct generation setting.
 type SettingInfo struct {
@@ -79,7 +83,7 @@ func CreateGeneration(
 	accessToken string,
 	client string,
 	uid string,
-	tag string,
+	action string,
 	prompt string,
 	settings map[string]interface{},
 	quote bool,
@@ -87,12 +91,12 @@ func CreateGeneration(
 ) (GenerationResponse, error) {
 	actionRequest := map[string]interface{}{
 		"kind":             "model",
-		"tag":              tag,
+		"action":           action,
 		"prompt":           prompt,
 		"generation_count": 1,
 	}
 	body := map[string]interface{}{
-		"action":         tag,
+		"action_key":     action,
 		"prompt":         prompt,
 		"action_request": actionRequest,
 	}
@@ -301,29 +305,83 @@ func (out *GenerationResponse) normalizeAction() {
 	}
 }
 
-// ListGenerationTags fetches the AI actions the direct generation endpoint supports and what each
-// accepts. GET /api/v1/ai/generations/tags.
+func (info *GenerationActionInfo) normalizeAction() {
+	if strings.TrimSpace(info.Action) == "" {
+		info.Action = info.Tag
+	}
+	if strings.TrimSpace(info.Tag) == "" {
+		info.Tag = info.Action
+	}
+}
+
+// ListGenerationActions fetches the AI actions the direct generation endpoint supports and what each
+// accepts. It prefers GET /api/v1/ai/generations/actions and falls back to /tags for older backends.
+func ListGenerationActions(backendURL, accessToken, client, uid string) ([]GenerationActionInfo, error) {
+	actions, statusCode, err := listGenerationActionsAt(backendURL, accessToken, client, uid, "/api/v1/ai/generations/actions")
+	if err == nil {
+		return actions, nil
+	}
+	if statusCode != http.StatusNotFound {
+		return nil, err
+	}
+	actions, _, err = listGenerationActionsAt(backendURL, accessToken, client, uid, "/api/v1/ai/generations/tags")
+	return actions, err
+}
+
+// ListGenerationTags is kept as a compatibility wrapper for older callers.
 func ListGenerationTags(backendURL, accessToken, client, uid string) ([]TagInfo, error) {
+	return ListGenerationActions(backendURL, accessToken, client, uid)
+}
+
+func listGenerationActionsAt(backendURL, accessToken, client, uid, path string) ([]GenerationActionInfo, int, error) {
 	resp, err := newRequest(accessToken, client, uid).
 		SetHeader("accept", "application/json").
-		Get(fmt.Sprintf("%s/api/v1/ai/generations/tags", backendURL))
+		Get(fmt.Sprintf("%s%s", backendURL, path))
 	if err != nil {
-		return nil, fmt.Errorf("error making request: %w", err)
+		return nil, 0, fmt.Errorf("error making request: %w", err)
 	}
 	if resp.StatusCode() != http.StatusOK {
-		return nil, fmt.Errorf("status %d: %s", resp.StatusCode(), SafeResponseBody(resp.Body()))
+		return nil, resp.StatusCode(), fmt.Errorf("status %d: %s", resp.StatusCode(), SafeResponseBody(resp.Body()))
 	}
 
-	// Accept either a bare array or {"tags": [...]}.
-	var wrapped struct {
-		Tags []TagInfo `json:"tags"`
+	actions, err := parseGenerationActions(resp.Body())
+	if err != nil {
+		return nil, resp.StatusCode(), err
 	}
-	if err := json.Unmarshal(resp.Body(), &wrapped); err == nil && len(wrapped.Tags) > 0 {
-		return wrapped.Tags, nil
+	return actions, resp.StatusCode(), nil
+}
+
+func parseGenerationActions(body []byte) ([]GenerationActionInfo, error) {
+	var envelope map[string]json.RawMessage
+	if err := json.Unmarshal(body, &envelope); err == nil {
+		if raw, ok := envelope["actions"]; ok {
+			var actions []GenerationActionInfo
+			if err := json.Unmarshal(raw, &actions); err != nil {
+				return nil, fmt.Errorf("parsing actions response: %w", err)
+			}
+			normalizeGenerationActions(actions)
+			return actions, nil
+		}
+		if raw, ok := envelope["tags"]; ok {
+			var actions []GenerationActionInfo
+			if err := json.Unmarshal(raw, &actions); err != nil {
+				return nil, fmt.Errorf("parsing tags response: %w", err)
+			}
+			normalizeGenerationActions(actions)
+			return actions, nil
+		}
 	}
-	var bare []TagInfo
-	if err := json.Unmarshal(resp.Body(), &bare); err != nil {
-		return nil, fmt.Errorf("parsing tags response: %w", err)
+
+	var bare []GenerationActionInfo
+	if err := json.Unmarshal(body, &bare); err != nil {
+		return nil, fmt.Errorf("parsing actions response: %w", err)
 	}
+	normalizeGenerationActions(bare)
 	return bare, nil
+}
+
+func normalizeGenerationActions(actions []GenerationActionInfo) {
+	for index := range actions {
+		actions[index].normalizeAction()
+	}
 }
