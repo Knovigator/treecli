@@ -68,6 +68,7 @@ Use action requests for Treechat-posted AI work:
 ```sh
 treecli action actions
 treecli action flux "a glass cathedral in the rain"
+treecli action flux "a glass cathedral in the rain" --payment usd
 treecli action --reply-to <quest-id> animate_kling "animate this still"
 treecli action status --answer <answer-id> --watch
 ```
@@ -79,8 +80,11 @@ treecli generate actions --direct-only
 treecli generate actions --verbose
 treecli generate describe flux2
 treecli generate flux2 "wide cinematic hero banner" --out banner.webp --input aspect_ratio=3:1
+treecli generate flux2 "wide cinematic hero banner" --out banner.webp --payment bsv
 treecli generate suno "warm ambient build, 122 BPM" --duration 20 --out sketch.mp3
 ```
+
+`treecli action` and `treecli generate` accept `--payment usd` for Stripe metered AI billing or `--payment bsv` / `--payment bitcoinsv` for Bitcoin SV. Omit `--payment` to use the account default.
 
 `treecli generate` supports repeatable `--input key=value`, JSON `--settings`, `--duration`, `--instrumental`, and `--reference run:<id>|https://...|@path`. Use `treecli generate describe <action>` before generating when an agent needs model descriptions, accepted inputs, settings, examples, and reference behavior.
 

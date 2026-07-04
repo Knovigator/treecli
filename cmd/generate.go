@@ -22,6 +22,7 @@ var (
 	generateTimeout      time.Duration
 	generateInputs       []string
 	generateReference    string
+	generatePaymentMode  string
 	generateInstrumental bool
 	generateQuote        bool
 )
@@ -38,7 +39,8 @@ var GenerateCmd = &cobra.Command{
 		"images, video, or audio before generation. Chain generations or steer a model with " +
 		"--reference (run:<id> reuses a prior generation's output as the model's reference; " +
 		"@path uploads a local file; a public URL is passed through). Music models accept " +
-		"--instrumental and --duration.\n\n" +
+		"--instrumental and --duration. Use --payment usd or --payment bsv to choose the " +
+		"payment rail for this generation; omit it to use your account default.\n\n" +
 		"Run `treecli generate actions --verbose` or `treecli generate describe <ai-action>` " +
 		"to see available AI actions, descriptions, settings, and examples.",
 	Example: "  treecli generate flux \"soft-gradient app icon, violet to indigo\" --out icon.png\n" +
@@ -59,6 +61,7 @@ func init() {
 	GenerateCmd.Flags().StringVar(&generateSettingsRaw, "settings", "", "Optional JSON object of model settings (e.g. '{\"aspect_ratio\":\"1:1\"}')")
 	GenerateCmd.Flags().StringArrayVar(&generateInputs, "input", nil, "Model input as key=value (repeatable). Value parsed as JSON if possible, else string. Use @path to upload a local media file.")
 	GenerateCmd.Flags().StringVar(&generateReference, "reference", "", "Reference media: run:<id> (chain a prior generation's output), a public URL, or @path (upload a local file)")
+	GenerateCmd.Flags().StringVar(&generatePaymentMode, "payment", "", "Payment rail for this generation: usd or bsv/bitcoinsv (default: account setting)")
 	GenerateCmd.Flags().BoolVar(&generateInstrumental, "instrumental", false, "For music models: generate instrumental (no vocals)")
 	GenerateCmd.Flags().IntVar(&generateDuration, "duration", 0, "Duration in seconds for audio/video models (sets settings.duration_seconds; the backend clamps to the model's range)")
 	GenerateCmd.Flags().BoolVar(&generateQuote, "quote", false, "Print the price for this generation without generating anything")
@@ -91,6 +94,10 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 	if generateTimeout <= 0 {
 		return fmt.Errorf("--timeout must be greater than zero")
 	}
+	paymentMode, err := normalizePaymentMode(generatePaymentMode)
+	if err != nil {
+		return err
+	}
 
 	settings := map[string]interface{}{}
 	if strings.TrimSpace(generateSettingsRaw) != "" {
@@ -117,7 +124,7 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 	if generateQuote {
 		res, err := api.CreateGeneration(
 			profile.BackendURL, profile.AccessToken, profile.Client, profile.UID,
-			action, prompt, settings, true, generateTimeout,
+			action, prompt, settings, paymentMode, true, generateTimeout,
 		)
 		if err != nil {
 			return err
@@ -138,7 +145,7 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 
 	result, err := api.CreateGeneration(
 		profile.BackendURL, profile.AccessToken, profile.Client, profile.UID,
-		action, prompt, settings, false, generateTimeout,
+		action, prompt, settings, paymentMode, false, generateTimeout,
 	)
 	if err != nil {
 		return err
@@ -187,17 +194,27 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 			payload["amount_sats"] = result.AmountSats
 			payload["amount_usd"] = result.AmountUSD
 		}
+		if result.PaymentMode != "" {
+			payload["payment_mode"] = result.PaymentMode
+		}
 		encoded, err := json.MarshalIndent(payload, "", "  ")
 		if err != nil {
 			return fmt.Errorf("formatting JSON: %w", err)
 		}
 		fmt.Println(string(encoded))
 	} else {
-		cost := ""
+		details := []string{}
 		if result.AmountSats > 0 || result.AmountUSD > 0 {
-			cost = fmt.Sprintf(" — charged %d sats ($%.4f)", result.AmountSats, result.AmountUSD)
+			details = append(details, fmt.Sprintf("charged %d sats ($%.4f)", result.AmountSats, result.AmountUSD))
 		}
-		fmt.Printf("Saved %d bytes to %s (run %s)%s\n", totalBytes, strings.Join(written, ", "), result.ID, cost)
+		if result.PaymentMode != "" {
+			details = append(details, "payment: "+paymentModeDisplay(result.PaymentMode))
+		}
+		suffix := ""
+		if len(details) > 0 {
+			suffix = " — " + strings.Join(details, ", ")
+		}
+		fmt.Printf("Saved %d bytes to %s (run %s)%s\n", totalBytes, strings.Join(written, ", "), result.ID, suffix)
 	}
 	return nil
 }
@@ -464,6 +481,10 @@ func printQuote(action string, res api.GenerationResponse) error {
 		sats = res.Quote.AmountSats
 		usd = res.Quote.AmountUSD
 	}
+	paymentMode := res.PaymentMode
+	if res.Quote != nil && res.Quote.PaymentMode != "" {
+		paymentMode = res.Quote.PaymentMode
+	}
 	if generateJSONOutput {
 		payload := map[string]interface{}{
 			"action":      action,
@@ -473,6 +494,9 @@ func printQuote(action string, res api.GenerationResponse) error {
 			"amount_usd":  usd,
 			"provider":    res.Provider,
 		}
+		if paymentMode != "" {
+			payload["payment_mode"] = paymentMode
+		}
 		encoded, err := json.MarshalIndent(payload, "", "  ")
 		if err != nil {
 			return err
@@ -480,7 +504,11 @@ func printQuote(action string, res api.GenerationResponse) error {
 		fmt.Println(string(encoded))
 		return nil
 	}
-	fmt.Printf("Quote for %q: %d sats ($%.4f)\n", action, sats, usd)
+	paymentSuffix := ""
+	if paymentMode != "" {
+		paymentSuffix = " via " + paymentModeDisplay(paymentMode)
+	}
+	fmt.Printf("Quote for %q%s: %d sats ($%.4f)\n", action, paymentSuffix, sats, usd)
 	return nil
 }
 
