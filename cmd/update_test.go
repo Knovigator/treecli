@@ -16,7 +16,7 @@ import (
 
 func TestResolveUpdateTagFetchesLatestRelease(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/repos/Knovigator/treectl/releases/latest" {
+		if r.URL.Path != "/repos/Knovigator/treecli/releases/latest" {
 			t.Fatalf("unexpected path %s", r.URL.Path)
 		}
 		_, _ = w.Write([]byte(`{"tag_name":"v0.2.0"}`))
@@ -51,7 +51,7 @@ func TestReleaseAssetName(t *testing.T) {
 	if err != nil {
 		t.Fatalf("releaseAssetName returned error: %v", err)
 	}
-	if asset != "treectl_v0.2.0_darwin_arm64.tar.gz" {
+	if asset != "treecli_v0.2.0_darwin_arm64.tar.gz" {
 		t.Fatalf("unexpected asset name %q", asset)
 	}
 
@@ -61,7 +61,7 @@ func TestReleaseAssetName(t *testing.T) {
 }
 
 func TestChecksumForAsset(t *testing.T) {
-	checksum, err := checksumForAsset("abc123  treectl_v0.2.0_linux_amd64.tar.gz\n", "treectl_v0.2.0_linux_amd64.tar.gz")
+	checksum, err := checksumForAsset("abc123  treecli_v0.2.0_linux_amd64.tar.gz\n", "treecli_v0.2.0_linux_amd64.tar.gz")
 	if err != nil {
 		t.Fatalf("checksumForAsset returned error: %v", err)
 	}
@@ -86,7 +86,7 @@ func TestUpdateInstallPathDoesNotCreateInstallDir(t *testing.T) {
 	if err != nil {
 		t.Fatalf("updateInstallPath returned error: %v", err)
 	}
-	if path != filepath.Join(dir, "treectl") {
+	if path != filepath.Join(dir, "treecli") {
 		t.Fatalf("unexpected install path %q", path)
 	}
 	if _, err := os.Stat(dir); !os.IsNotExist(err) {
@@ -94,18 +94,18 @@ func TestUpdateInstallPathDoesNotCreateInstallDir(t *testing.T) {
 	}
 }
 
-func TestExtractTreectlBinary(t *testing.T) {
+func TestExtractTreecliBinary(t *testing.T) {
 	dir := t.TempDir()
-	archivePath := filepath.Join(dir, "treectl.tar.gz")
-	outputPath := filepath.Join(dir, "treectl")
+	archivePath := filepath.Join(dir, "treecli.tar.gz")
+	outputPath := filepath.Join(dir, "treecli")
 
-	archive := buildTreectlArchive(t, []byte("new-binary"))
+	archive := buildTreecliArchive(t, "treecli", []byte("new-binary"))
 	if err := os.WriteFile(archivePath, archive, 0644); err != nil {
 		t.Fatalf("write archive: %v", err)
 	}
 
-	if err := extractTreectlBinary(archivePath, outputPath); err != nil {
-		t.Fatalf("extractTreectlBinary returned error: %v", err)
+	if err := extractTreecliBinary(archivePath, outputPath); err != nil {
+		t.Fatalf("extractTreecliBinary returned error: %v", err)
 	}
 
 	got, err := os.ReadFile(outputPath)
@@ -117,9 +117,32 @@ func TestExtractTreectlBinary(t *testing.T) {
 	}
 }
 
+func TestExtractTreecliBinaryAcceptsLegacyBinaryName(t *testing.T) {
+	dir := t.TempDir()
+	archivePath := filepath.Join(dir, "treectl.tar.gz")
+	outputPath := filepath.Join(dir, "treecli")
+
+	archive := buildTreecliArchive(t, "treectl", []byte("legacy-binary"))
+	if err := os.WriteFile(archivePath, archive, 0644); err != nil {
+		t.Fatalf("write archive: %v", err)
+	}
+
+	if err := extractTreecliBinary(archivePath, outputPath); err != nil {
+		t.Fatalf("extractTreecliBinary returned error: %v", err)
+	}
+
+	got, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("read extracted binary: %v", err)
+	}
+	if string(got) != "legacy-binary" {
+		t.Fatalf("unexpected binary content %q", got)
+	}
+}
+
 func TestDownloadVerifyAndInstall(t *testing.T) {
-	assetName := "treectl_v0.2.0_linux_amd64.tar.gz"
-	archive := buildTreectlArchive(t, []byte("new-binary"))
+	assetName := "treecli_v0.2.0_linux_amd64.tar.gz"
+	archive := buildTreecliArchive(t, "treecli", []byte("new-binary"))
 	sum := sha256.Sum256(archive)
 	checksums := fmt.Sprintf("%s  %s\n", hex.EncodeToString(sum[:]), assetName)
 
@@ -135,7 +158,7 @@ func TestDownloadVerifyAndInstall(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	targetPath := filepath.Join(t.TempDir(), "bin", "treectl")
+	targetPath := filepath.Join(t.TempDir(), "bin", "treecli")
 	if err := downloadVerifyAndInstall(server.Client(), server.URL+"/release", assetName, targetPath); err != nil {
 		t.Fatalf("downloadVerifyAndInstall returned error: %v", err)
 	}
@@ -157,7 +180,7 @@ func TestDownloadVerifyAndInstall(t *testing.T) {
 	}
 }
 
-func buildTreectlArchive(t *testing.T, binary []byte) []byte {
+func buildTreecliArchive(t *testing.T, name string, binary []byte) []byte {
 	t.Helper()
 
 	var buf bytes.Buffer
@@ -165,7 +188,7 @@ func buildTreectlArchive(t *testing.T, binary []byte) []byte {
 	tarWriter := tar.NewWriter(gzipWriter)
 
 	header := &tar.Header{
-		Name: "treectl",
+		Name: name,
 		Mode: 0755,
 		Size: int64(len(binary)),
 	}

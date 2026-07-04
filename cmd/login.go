@@ -15,7 +15,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Knovigator/treectl/api"
+	"github.com/Knovigator/treecli/api"
 	"github.com/adrg/xdg"
 	"github.com/go-resty/resty/v2"
 	"github.com/spf13/cobra"
@@ -74,8 +74,8 @@ var LoginCmd = &cobra.Command{
 
 var ProfileCmd = &cobra.Command{
 	Use:   "profile",
-	Short: "Inspect and switch treectl profiles",
-	Long:  `List, inspect, and switch the saved treectl profiles.`,
+	Short: "Inspect and switch treecli profiles",
+	Long:  `List, inspect, and switch the saved treecli profiles.`,
 }
 
 var profileListCmd = &cobra.Command{
@@ -280,7 +280,7 @@ func resolveProfileName() string {
 		return normalizeProfileName(SelectedProfile)
 	}
 
-	if profileName := strings.TrimSpace(os.Getenv("TREECTL_PROFILE")); profileName != "" {
+	if profileName := firstEnv("TREECLI_PROFILE", "TREECTL_PROFILE"); profileName != "" {
 		return normalizeProfileName(profileName)
 	}
 
@@ -295,6 +295,15 @@ func normalizeProfileName(profileName string) string {
 	return strings.ToLower(strings.TrimSpace(profileName))
 }
 
+func firstEnv(names ...string) string {
+	for _, name := range names {
+		if value := strings.TrimSpace(os.Getenv(name)); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
 func resolveProfile(profileName string) (profileConfig, error) {
 	resolvedProfileName := normalizeProfileName(profileName)
 	profile := builtInProfiles()[resolvedProfileName]
@@ -305,7 +314,7 @@ func resolveProfile(profileName string) (profileConfig, error) {
 
 	backendURLOverride := strings.TrimSpace(BackendURLOverride)
 	if backendURLOverride == "" {
-		backendURLOverride = strings.TrimSpace(os.Getenv("TREECTL_BACKEND_URL"))
+		backendURLOverride = firstEnv("TREECLI_BACKEND_URL", "TREECTL_BACKEND_URL")
 	}
 	if backendURLOverride != "" {
 		profile.BackendURL = normalizeBaseURL(backendURLOverride)
@@ -313,7 +322,7 @@ func resolveProfile(profileName string) (profileConfig, error) {
 
 	appHostOverride := strings.TrimSpace(AppHostOverride)
 	if appHostOverride == "" {
-		appHostOverride = strings.TrimSpace(os.Getenv("TREECTL_APP_HOST"))
+		appHostOverride = firstEnv("TREECLI_APP_HOST", "TREECTL_APP_HOST")
 	}
 	if appHostOverride != "" {
 		profile.AppHost = normalizeAppHost(appHostOverride)
@@ -400,7 +409,7 @@ func requireAuthenticatedProfile() (profileConfig, error) {
 	}
 
 	if profile.AccessToken == "" || profile.Client == "" || profile.UID == "" {
-		return profileConfig{}, fmt.Errorf("missing credentials for profile %q; run treectl login --profile %s", profile.Name, profile.Name)
+		return profileConfig{}, fmt.Errorf("missing credentials for profile %q; run treecli login --profile %s", profile.Name, profile.Name)
 	}
 	if err := validateCredentialTransport(profile.BackendURL); err != nil {
 		return profileConfig{}, err
@@ -608,7 +617,7 @@ func configFilePath() (string, error) {
 		return configPath, nil
 	}
 
-	return xdg.ConfigFile("treectl/config.toml")
+	return xdg.ConfigFile("treecli/config.toml")
 }
 
 func normalizeBaseURL(rawURL string) string {
@@ -644,11 +653,11 @@ func validateCredentialTransport(backendURL string) error {
 	if parsedURL.Scheme == "http" && isLoopbackHost(parsedURL.Hostname()) {
 		return nil
 	}
-	if parsedURL.Scheme == "http" && strings.EqualFold(strings.TrimSpace(os.Getenv("TREECTL_ALLOW_INSECURE_HTTP")), "1") {
+	if parsedURL.Scheme == "http" && strings.EqualFold(firstEnv("TREECLI_ALLOW_INSECURE_HTTP", "TREECTL_ALLOW_INSECURE_HTTP"), "1") {
 		return nil
 	}
 	if parsedURL.Scheme == "http" {
-		return fmt.Errorf("refusing to send credentials to insecure backend_url %q; use https, localhost, or set TREECTL_ALLOW_INSECURE_HTTP=1", backendURL)
+		return fmt.Errorf("refusing to send credentials to insecure backend_url %q; use https, localhost, or set TREECLI_ALLOW_INSECURE_HTTP=1", backendURL)
 	}
 
 	return fmt.Errorf("refusing to send credentials to unsupported backend_url scheme %q", parsedURL.Scheme)

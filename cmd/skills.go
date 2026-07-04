@@ -6,18 +6,18 @@ import (
 	"path/filepath"
 	"strings"
 
-	treectlcontent "github.com/Knovigator/treectl/content"
+	treeclicontent "github.com/Knovigator/treecli/content"
 	"github.com/spf13/cobra"
 )
 
 var SkillsCmd = &cobra.Command{
 	Use:   "skills",
-	Short: "List, emit, and install packaged treectl skills",
+	Short: "List, emit, and install packaged treecli skills",
 }
 
 var skillsListCmd = &cobra.Command{
 	Use:   "list",
-	Short: "List packaged skills embedded in treectl",
+	Short: "List packaged skills embedded in treecli",
 	RunE:  runSkillsList,
 }
 
@@ -54,7 +54,7 @@ func init() {
 }
 
 func runSkillsList(cmd *cobra.Command, args []string) error {
-	skills, err := treectlcontent.ListPackagedSkills()
+	skills, err := treeclicontent.ListPackagedSkills()
 	if err != nil {
 		return err
 	}
@@ -83,7 +83,7 @@ func runSkillsEmit(cmd *cobra.Command, args []string) error {
 	}
 
 	for index, skillKey := range skillNames {
-		skill, err := treectlcontent.GetPackagedSkill(skillKey)
+		skill, err := treeclicontent.GetPackagedSkill(skillKey)
 		if err != nil {
 			return err
 		}
@@ -133,7 +133,7 @@ func runSkillsInstall(cmd *cobra.Command, args []string) error {
 	for _, root := range installRoots {
 		fmt.Printf("Installing to %s\n", root)
 		for _, key := range skillKeys {
-			skill, err := treectlcontent.GetPackagedSkill(key)
+			skill, err := treeclicontent.GetPackagedSkill(key)
 			if err != nil {
 				return err
 			}
@@ -141,7 +141,7 @@ func runSkillsInstall(cmd *cobra.Command, args []string) error {
 				return fmt.Errorf("unknown skill %q", key)
 			}
 
-			installedDir, err := treectlcontent.InstallPackagedSkill(*skill, root)
+			installedDir, err := treeclicontent.InstallPackagedSkill(*skill, root)
 			if err != nil {
 				return err
 			}
@@ -152,7 +152,7 @@ func runSkillsInstall(cmd *cobra.Command, args []string) error {
 }
 
 func resolvePackagedSkillKeys(requested string) ([]string, error) {
-	skills, err := treectlcontent.ListPackagedSkills()
+	skills, err := treeclicontent.ListPackagedSkills()
 	if err != nil {
 		return nil, err
 	}

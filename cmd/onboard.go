@@ -4,14 +4,14 @@ import (
 	"fmt"
 	"os"
 
-	treectlcontent "github.com/Knovigator/treectl/content"
+	treeclicontent "github.com/Knovigator/treecli/content"
 	"github.com/spf13/cobra"
 )
 
 var OnboardCmd = &cobra.Command{
 	Use:   "onboard",
-	Short: "Output agent instructions for treectl",
-	Long:  "Output agent-facing onboarding guidance and packaged-skill installation instructions for treectl.",
+	Short: "Output agent instructions for treecli",
+	Long:  "Output agent-facing onboarding guidance and packaged-skill installation instructions for treecli.",
 	RunE:  runOnboard,
 }
 
@@ -37,16 +37,16 @@ func runOnboard(cmd *cobra.Command, args []string) error {
 		mode = "short"
 	}
 
-	content, err := treectlcontent.BuildOnboardContent(mode)
+	content, err := treeclicontent.BuildOnboardContent(mode)
 	if err != nil {
 		return err
 	}
 
 	if onboardAgentsMD {
 		if mode == "short" {
-			content, err = treectlcontent.OnboardShort()
+			content, err = treeclicontent.OnboardShort()
 		} else {
-			content, err = treectlcontent.OnboardLong()
+			content, err = treeclicontent.OnboardLong()
 		}
 		if err != nil {
 			return err

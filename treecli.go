@@ -5,20 +5,25 @@ import (
 	"io"
 	"os"
 
-	"github.com/Knovigator/treectl/cmd"
+	"github.com/Knovigator/treecli/cmd"
 	"github.com/adrg/xdg"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
 var rootCmd = &cobra.Command{
-	Use:           "treectl",
-	Short:         "treectl controls Treechat",
+	Use:           "treecli",
+	Short:         "treecli controls Treechat",
 	Long:          `A CLI application for interacting with Treechat.`,
 	Version:       cmd.CurrentVersion,
 	SilenceErrors: true,
 	SilenceUsage:  true,
 }
+
+const (
+	configPath       = "treecli/config.toml"
+	legacyConfigPath = "treectl/config.toml"
+)
 
 const bashCompletionPrelude = `
 if [[ $(type -t _get_comp_words_by_ref 2>/dev/null) != function ]]; then
@@ -85,7 +90,7 @@ func init() {
 }
 
 func initConfig() {
-	configPath, err := xdg.ConfigFile("treectl/config.toml")
+	configPath, err := resolveConfigPath()
 	if err != nil {
 		fmt.Println("Error getting config file path:", err)
 		return
@@ -93,8 +98,9 @@ func initConfig() {
 
 	viper.SetConfigFile(configPath)
 	viper.SetConfigType("toml")
-	viper.SetEnvPrefix("TREECTL")
+	viper.SetEnvPrefix("TREECLI")
 	viper.AutomaticEnv()
+	_ = viper.BindEnv("active_profile", "TREECLI_ACTIVE_PROFILE", "TREECTL_ACTIVE_PROFILE")
 
 	if err := viper.ReadInConfig(); err != nil {
 		_, isConfigMissing := err.(viper.ConfigFileNotFoundError)
@@ -102,6 +108,30 @@ func initConfig() {
 			fmt.Println("Error reading config file:", err)
 		}
 	}
+}
+
+func resolveConfigPath() (string, error) {
+	nextPath, err := xdg.ConfigFile(configPath)
+	if err != nil {
+		return "", err
+	}
+	if _, err := os.Stat(nextPath); err == nil {
+		return nextPath, nil
+	} else if !os.IsNotExist(err) {
+		return "", err
+	}
+
+	oldPath, err := xdg.ConfigFile(legacyConfigPath)
+	if err != nil {
+		return "", err
+	}
+	if _, err := os.Stat(oldPath); err == nil {
+		return oldPath, nil
+	} else if !os.IsNotExist(err) {
+		return "", err
+	}
+
+	return nextPath, nil
 }
 
 func main() {
@@ -121,14 +151,14 @@ func configureCompletionHelp() {
 
 You can turn completions on immediately in your current shell with:
 
-	if [ -n "${ZSH_VERSION:-}" ]; then autoload -U compinit && compinit; source <(treectl completion zsh); elif command -v complete >/dev/null 2>&1; then source <(treectl completion bash); else echo "Current shell does not support bash completion; use zsh or a bash with progcomp."; fi
+	if [ -n "${ZSH_VERSION:-}" ]; then autoload -U compinit && compinit; source <(treecli completion zsh); elif command -v complete >/dev/null 2>&1; then source <(treecli completion bash); else echo "Current shell does not support bash completion; use zsh or a bash with progcomp."; fi
 
 Some bash builds, including the one shipped on this machine, do not include programmable completion support. If command -v complete fails, use zsh or a different bash build.
 
 If you want persistent completions, see each shell subcommand's help for install details.`
-	completionCmd.Example = "  if [ -n \"${ZSH_VERSION:-}\" ]; then autoload -U compinit && compinit; source <(treectl completion zsh); elif command -v complete >/dev/null 2>&1; then source <(treectl completion bash); else echo \"Current shell does not support bash completion; use zsh or a bash with progcomp.\"; fi\n" +
-		"  treectl completion bash\n" +
-		"  treectl completion zsh"
+	completionCmd.Example = "  if [ -n \"${ZSH_VERSION:-}\" ]; then autoload -U compinit && compinit; source <(treecli completion zsh); elif command -v complete >/dev/null 2>&1; then source <(treecli completion bash); else echo \"Current shell does not support bash completion; use zsh or a bash with progcomp.\"; fi\n" +
+		"  treecli completion bash\n" +
+		"  treecli completion zsh"
 
 	for _, completionChild := range completionCmd.Commands() {
 		switch completionChild.Name() {
@@ -136,25 +166,25 @@ If you want persistent completions, see each shell subcommand's help for install
 			if completionChild.Name() == "bash" {
 				completionChild.Long = `Generate the autocompletion script for the bash shell.
 
-treectl's bash completion script is self-contained and does not require the external bash-completion helper library.
+treecli's bash completion script is self-contained and does not require the external bash-completion helper library.
 It still requires a bash build with programmable completion support. If command -v complete fails, this shell cannot load bash completions.
 
 To load completions in your current shell session:
 
-	if command -v complete >/dev/null 2>&1; then source <(treectl completion bash); else echo "This bash build does not support programmable completion."; fi
+	if command -v complete >/dev/null 2>&1; then source <(treecli completion bash); else echo "This bash build does not support programmable completion."; fi
 
 To load completions for every new session, execute once:
 
 #### Linux:
 
-	treectl completion bash > /etc/bash_completion.d/treectl
+	treecli completion bash > /etc/bash_completion.d/treecli
 
 #### macOS:
 
-	treectl completion bash > $(brew --prefix)/etc/bash_completion.d/treectl
+	treecli completion bash > $(brew --prefix)/etc/bash_completion.d/treecli
 
 You will need to start a new shell for this setup to take effect.`
-				completionChild.Example = "  if command -v complete >/dev/null 2>&1; then source <(treectl completion bash); else echo \"This bash build does not support programmable completion.\"; fi"
+				completionChild.Example = "  if command -v complete >/dev/null 2>&1; then source <(treecli completion bash); else echo \"This bash build does not support programmable completion.\"; fi"
 				originalRunE := completionChild.RunE
 				completionChild.RunE = func(cmd *cobra.Command, args []string) error {
 					_, err := io.WriteString(cmd.OutOrStdout(), bashCompletionPrelude)
@@ -169,7 +199,7 @@ You will need to start a new shell for this setup to take effect.`
 					return originalRunE(cmd, args)
 				}
 			} else {
-				completionChild.Example = fmt.Sprintf("  source <(treectl completion %s)", completionChild.Name())
+				completionChild.Example = fmt.Sprintf("  source <(treecli completion %s)", completionChild.Name())
 			}
 		}
 	}
