@@ -86,6 +86,7 @@ var actionTeamID string
 var actionPublic bool
 var actionPrivate bool
 var actionAllowUnknownTag bool
+var actionPaymentMode string
 var actionOutputFormat string
 var actionJSONOutput bool
 var actionPollInterval time.Duration
@@ -168,6 +169,7 @@ func init() {
 	ActionCmd.Flags().BoolVar(&actionPrivate, "private", false, "Mark the new thread as private")
 	ActionCmd.Flags().BoolVar(&actionAllowUnknownTag, "allow-unknown-action", false, "Submit the action even if it is not present in the current model-backed AI action list")
 	ActionCmd.Flags().BoolVar(&actionAllowUnknownTag, "allow-unknown-tag", false, "Compatibility alias for --allow-unknown-action")
+	ActionCmd.Flags().StringVar(&actionPaymentMode, "payment", "", "Payment rail for this action: usd or bsv/bitcoinsv (default: account setting)")
 	ActionCmd.Flags().StringVarP(&actionOutputFormat, "output", "o", "ascii", "Output format: ascii or json")
 	ActionCmd.Flags().BoolVar(&actionJSONOutput, "json", false, "Output JSON instead of human-readable text")
 	ActionCmd.Flags().DurationVar(&actionPollInterval, "poll-interval", 3*time.Second, "Polling interval while waiting for generated media")
@@ -278,6 +280,10 @@ func runAction(cmd *cobra.Command, args []string) error {
 	if actionDuration < 0 {
 		return fmt.Errorf("--duration must be zero or greater")
 	}
+	paymentMode, err := normalizePaymentMode(actionPaymentMode)
+	if err != nil {
+		return err
+	}
 	resolvedOutputFormat := resolveOutputFormat(actionOutputFormat, actionJSONOutput)
 
 	profile, err := requireAuthenticatedProfile()
@@ -311,6 +317,7 @@ func runAction(cmd *cobra.Command, args []string) error {
 		publicValue,
 		privateValue,
 		resolvedOutputFormat,
+		paymentMode,
 	)
 	if err != nil {
 		return err
@@ -805,8 +812,9 @@ func createAndMaybePollAction(
 	publicValue *bool,
 	privateValue *bool,
 	outputFormat string,
+	paymentMode string,
 ) (actionResult, error) {
-	submission, err := createActionSubmission(cmd, profile, invocation, publicValue, privateValue)
+	submission, err := createActionSubmission(cmd, profile, invocation, publicValue, privateValue, paymentMode)
 	if err != nil {
 		return actionResult{}, err
 	}
@@ -831,12 +839,13 @@ func createActionSubmission(
 	invocation actionInvocation,
 	publicValue *bool,
 	privateValue *bool,
+	paymentMode string,
 ) (actionSubmission, error) {
 	actionDeltaJSON, err := actionTextToDeltaJSONString(invocation.NormalizedContent)
 	if err != nil {
 		return actionSubmission{}, fmt.Errorf("building action delta_json: %w", err)
 	}
-	actionRequestsJSON, err := actionRequestsJSONString(invocation, actionDuration)
+	actionRequestsJSON, err := actionRequestsJSONString(invocation, actionDuration, paymentMode)
 	if err != nil {
 		return actionSubmission{}, fmt.Errorf("building action_requests: %w", err)
 	}
@@ -909,7 +918,7 @@ func createActionSubmission(
 	}, nil
 }
 
-func actionRequestsJSONString(invocation actionInvocation, durationSeconds int) (string, error) {
+func actionRequestsJSONString(invocation actionInvocation, durationSeconds int, paymentMode string) (string, error) {
 	actionID, err := newUUID()
 	if err != nil {
 		return "", fmt.Errorf("error generating action request id: %w", err)
@@ -928,6 +937,9 @@ func actionRequestsJSONString(invocation actionInvocation, durationSeconds int) 
 		request["settings"] = map[string]interface{}{
 			"duration_seconds": durationSeconds,
 		}
+	}
+	if strings.TrimSpace(paymentMode) != "" {
+		request["payment_mode"] = paymentMode
 	}
 
 	payload := []map[string]interface{}{request}

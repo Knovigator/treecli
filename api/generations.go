@@ -21,6 +21,7 @@ type GenerationResponse struct {
 	Action       string                 `json:"action,omitempty"`
 	Source       string                 `json:"source"`
 	Provider     string                 `json:"provider,omitempty"`
+	PaymentMode  string                 `json:"payment_mode,omitempty"`
 	MediaURLs    []string               `json:"media_urls"`
 	MediaOutputs []GenerationMedia      `json:"media_outputs,omitempty"`
 	AmountSats   int64                  `json:"amount_sats,omitempty"`
@@ -40,11 +41,12 @@ type GenerationMedia struct {
 
 // GenerationQuote is the price for a generation, returned when quote=true (no media is produced).
 type GenerationQuote struct {
-	AmountSats int64   `json:"amount_sats"`
-	AmountUSD  float64 `json:"amount_usd"`
-	Action     string  `json:"action,omitempty"`
-	Tag        string  `json:"tag"`
-	Provider   string  `json:"provider,omitempty"`
+	AmountSats  int64   `json:"amount_sats"`
+	AmountUSD   float64 `json:"amount_usd"`
+	Action      string  `json:"action,omitempty"`
+	Tag         string  `json:"tag"`
+	Provider    string  `json:"provider,omitempty"`
+	PaymentMode string  `json:"payment_mode,omitempty"`
 }
 
 // GenerationActionInfo describes one AI action available to the direct generation endpoint and what it accepts.
@@ -86,6 +88,7 @@ func CreateGeneration(
 	action string,
 	prompt string,
 	settings map[string]interface{},
+	paymentMode string,
 	quote bool,
 	timeout time.Duration,
 ) (GenerationResponse, error) {
@@ -103,6 +106,10 @@ func CreateGeneration(
 	if len(settings) > 0 {
 		body["settings"] = settings
 		actionRequest["settings"] = settings
+	}
+	if strings.TrimSpace(paymentMode) != "" {
+		body["payment_mode"] = paymentMode
+		actionRequest["payment_mode"] = paymentMode
 	}
 	if quote {
 		body["quote"] = true

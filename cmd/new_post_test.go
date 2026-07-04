@@ -10,7 +10,7 @@ func TestActionRequestsJSONStringBuildsStructuredModelRequest(t *testing.T) {
 	payloadJSON, err := actionRequestsJSONString(actionInvocation{
 		Tag:    "fluxfast",
 		Prompt: "wide cover image",
-	}, 0)
+	}, 0, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -52,7 +52,7 @@ func TestActionRequestsJSONStringIncludesDurationSetting(t *testing.T) {
 	payloadJSON, err := actionRequestsJSONString(actionInvocation{
 		Tag:    "stableaudio",
 		Prompt: "ambient build, 120 BPM",
-	}, 90)
+	}, 90, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -68,6 +68,25 @@ func TestActionRequestsJSONStringIncludesDurationSetting(t *testing.T) {
 	}
 	if settings["duration_seconds"] != float64(90) {
 		t.Fatalf("expected duration_seconds 90, got %v", settings["duration_seconds"])
+	}
+}
+
+func TestActionRequestsJSONStringIncludesPaymentMode(t *testing.T) {
+	payloadJSON, err := actionRequestsJSONString(actionInvocation{
+		Tag:    "fluxfast",
+		Prompt: "wide cover image",
+	}, 0, "stripe_metered")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var payload []map[string]interface{}
+	if err := json.Unmarshal([]byte(payloadJSON), &payload); err != nil {
+		t.Fatalf("invalid JSON payload: %v", err)
+	}
+
+	if payload[0]["payment_mode"] != "stripe_metered" {
+		t.Fatalf("expected payment_mode stripe_metered, got %v", payload[0]["payment_mode"])
 	}
 }
 

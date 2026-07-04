@@ -78,6 +78,7 @@ func TestCreateGenerationUsesCallerTimeout(t *testing.T) {
 		"flux",
 		"wide hero",
 		nil,
+		"",
 		false,
 		20*time.Millisecond,
 	)
@@ -111,6 +112,7 @@ func TestCreateGenerationSendsActionRequestPayload(t *testing.T) {
 		"kling3",
 		"animate this",
 		map[string]interface{}{"reference_url": "https://cdn.example.test/frame.png"},
+		"stripe_metered",
 		false,
 		time.Second,
 	)
@@ -128,12 +130,18 @@ func TestCreateGenerationSendsActionRequestPayload(t *testing.T) {
 	if _, ok := actionRequest["tag"]; ok {
 		t.Fatalf("expected action_request to use action instead of legacy tag, got %#v", actionRequest)
 	}
+	if actionRequest["payment_mode"] != "stripe_metered" {
+		t.Fatalf("expected action_request payment_mode, got %#v", actionRequest["payment_mode"])
+	}
 	settings, ok := actionRequest["settings"].(map[string]interface{})
 	if !ok || settings["reference_url"] != "https://cdn.example.test/frame.png" {
 		t.Fatalf("expected action_request settings, got %#v", actionRequest["settings"])
 	}
 	if received["action_key"] != "kling3" {
 		t.Fatalf("expected top-level action_key field, got %#v", received["action_key"])
+	}
+	if received["payment_mode"] != "stripe_metered" {
+		t.Fatalf("expected top-level payment_mode field, got %#v", received["payment_mode"])
 	}
 	if _, ok := received["action"]; ok {
 		t.Fatalf("expected no top-level action field because Rails reserves params[:action], got %#v", received["action"])

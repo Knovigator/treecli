@@ -28,6 +28,7 @@ Use this skill when you need to submit or inspect Treechat AI action work throug
 - Existing-image edit: `treecli action --reply-to <quest-id> edit_flux "make this warmer and more cinematic"`.
 - Root actions default to private placement unless you pass a root-only stream flag like `--stream public`.
 - Use `--duration` only when the target model supports duration, such as audio or video generation; the backend clamps the value to the model's allowed range.
+- Use `--payment usd` for Stripe metered AI billing or `--payment bsv` / `--payment bitcoinsv` for Bitcoin SV. Omit `--payment` to use the account default.
 
 ## Async Workflows
 
@@ -43,7 +44,7 @@ Use this skill when you need to submit or inspect Treechat AI action work throug
 - Use `treecli generate actions --verbose` for a full human/agent-readable catalog with model descriptions, inputs, settings, reference behavior, examples, and notes.
 - Use `treecli generate describe <action>` before generating when you need focused help for one model.
 - Run direct generation with `treecli generate <action> "prompt" --out <file>`.
-- Pass settings with `--input key=value` for individual values, `--settings '{...}'` for a JSON settings object, `--duration` for duration-aware actions, `--instrumental` for music actions, and `--reference run:<id>|https://...|@path` for reference-aware actions.
+- Pass settings with `--input key=value` for individual values, `--settings '{...}'` for a JSON settings object, `--duration` for duration-aware actions, `--instrumental` for music actions, `--reference run:<id>|https://...|@path` for reference-aware actions, and `--payment usd|bsv` for per-run billing rail selection.
 
 ## Output Rules
 

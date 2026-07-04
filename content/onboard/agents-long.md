@@ -34,10 +34,11 @@ Use `treecli` as the CLI surface for Treechat automation in this repo.
 - Use `edit_*` AI actions to edit an existing image from the thread or attachment context.
 - If the user wants to animate or edit a previous image, do not substitute a plain generation action.
 - Actions default to private root-thread placement unless you pass a root-only stream flag.
+- Use `--payment usd` for Stripe metered AI billing or `--payment bsv` / `--payment bitcoinsv` for Bitcoin SV; omit it to use the account default.
 - `treecli action` waits by default and shows a spinner in interactive terminals.
 - For post-less local media generation, inspect support with `treecli generate actions --direct-only`.
 - Use `treecli generate actions --verbose` or `treecli generate describe <action>` to get model descriptions, accepted inputs, settings, reference behavior, and examples before generating.
-- Generate local media with `treecli generate <action> "prompt" --out <file>` and pass settings with `--input key=value`, `--settings '{...}'`, `--duration`, `--instrumental`, or `--reference` as described by the action.
+- Generate local media with `treecli generate <action> "prompt" --out <file>` and pass settings with `--input key=value`, `--settings '{...}'`, `--duration`, `--instrumental`, `--reference`, or `--payment` as described by the action and billing intent.
 
 ### Async Action Workflows
 
