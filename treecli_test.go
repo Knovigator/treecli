@@ -25,3 +25,18 @@ func TestRootExecuteReturnsCommandErrors(t *testing.T) {
 		t.Fatalf("expected missing credentials error, got %v", err)
 	}
 }
+
+func TestRootExecuteReturnsBillingCommandErrors(t *testing.T) {
+	rootCmd.SetArgs([]string{"billing", "mode", "credits"})
+	t.Cleanup(func() {
+		rootCmd.SetArgs(nil)
+	})
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected billing command failure to return an error")
+	}
+	if !strings.Contains(err.Error(), "invalid --payment") {
+		t.Fatalf("expected invalid payment error, got %v", err)
+	}
+}
