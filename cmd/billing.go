@@ -40,14 +40,14 @@ var billingCheckoutCmd = &cobra.Command{
 	Short:   "Open Stripe Checkout for USD AI billing (requires login)",
 	Long:    `Create a Stripe Checkout session for metered USD AI billing and open it in your browser.`,
 	Example: "  treecli billing checkout\n  treecli billing setup\n  treecli billing checkout --open=false",
-	Run:     runBillingCheckout,
+	RunE:    runBillingCheckout,
 }
 
 var billingStatusCmd = &cobra.Command{
 	Use:     "status",
 	Short:   "Show AI billing status and recent usage (requires login)",
 	Example: "  treecli billing status\n  treecli billing status --refresh\n  treecli billing status --json",
-	Run:     runBillingStatus,
+	RunE:    runBillingStatus,
 }
 
 var billingModeCmd = &cobra.Command{
@@ -55,7 +55,7 @@ var billingModeCmd = &cobra.Command{
 	Short:   "Set the default AI payment mode (requires login)",
 	Example: "  treecli billing mode usd\n  treecli billing mode bsv",
 	Args:    cobra.ExactArgs(1),
-	Run:     runBillingMode,
+	RunE:    runBillingMode,
 }
 
 var billingSyncCmd = &cobra.Command{
@@ -63,7 +63,7 @@ var billingSyncCmd = &cobra.Command{
 	Short:   "Sync billing after returning from Stripe Checkout (requires login)",
 	Example: "  treecli billing sync cs_test_...",
 	Args:    cobra.ExactArgs(1),
-	Run:     runBillingSync,
+	RunE:    runBillingSync,
 }
 
 func init() {
@@ -81,11 +81,10 @@ func init() {
 	BillingCmd.AddCommand(billingWalletCmd)
 }
 
-func runBillingCheckout(cmd *cobra.Command, args []string) {
+func runBillingCheckout(cmd *cobra.Command, args []string) error {
 	profile, err := requireAuthenticatedProfile()
 	if err != nil {
-		fmt.Println("Error:", err)
-		return
+		return err
 	}
 
 	checkout, err := api.CreateStripeAiBillingCheckoutSession(
@@ -95,18 +94,16 @@ func runBillingCheckout(cmd *cobra.Command, args []string) {
 		profile.UID,
 	)
 	if err != nil {
-		fmt.Println("Error creating checkout session:", err)
-		return
+		return fmt.Errorf("creating checkout session: %w", err)
 	}
 
 	if billingCheckoutJSON {
 		printRawOrJSON(checkout.Raw, checkout)
-		return
+		return nil
 	}
 
 	if strings.TrimSpace(checkout.URL) == "" {
-		fmt.Println("Error: checkout response did not include a URL")
-		return
+		return fmt.Errorf("checkout response did not include a URL")
 	}
 
 	fmt.Printf("Checkout URL: %s\n", checkout.URL)
@@ -120,13 +117,13 @@ func runBillingCheckout(cmd *cobra.Command, args []string) {
 	}
 	fmt.Println("After checkout, Treechat should sync automatically when the web app returns.")
 	fmt.Println("Run `treecli billing status --refresh` to verify.")
+	return nil
 }
 
-func runBillingStatus(cmd *cobra.Command, args []string) {
+func runBillingStatus(cmd *cobra.Command, args []string) error {
 	profile, err := requireAuthenticatedProfile()
 	if err != nil {
-		fmt.Println("Error:", err)
-		return
+		return err
 	}
 
 	status, err := api.GetStripeAiBillingStatus(
@@ -137,33 +134,30 @@ func runBillingStatus(cmd *cobra.Command, args []string) {
 		billingStatusRefresh,
 	)
 	if err != nil {
-		fmt.Println("Error loading billing status:", err)
-		return
+		return fmt.Errorf("loading billing status: %w", err)
 	}
 
 	if billingStatusJSON {
 		printRawOrJSON(status.Raw, status)
-		return
+		return nil
 	}
 
 	printBillingStatus(status)
+	return nil
 }
 
-func runBillingMode(cmd *cobra.Command, args []string) {
+func runBillingMode(cmd *cobra.Command, args []string) error {
 	mode, err := normalizePaymentMode(args[0])
 	if err != nil {
-		fmt.Println("Error:", err)
-		return
+		return err
 	}
 	if mode == "" {
-		fmt.Println("Error: specify a payment mode: usd or bsv")
-		return
+		return fmt.Errorf("specify a payment mode: usd or bsv")
 	}
 
 	profile, err := requireAuthenticatedProfile()
 	if err != nil {
-		fmt.Println("Error:", err)
-		return
+		return err
 	}
 
 	result, err := api.SetStripeAiPaymentMode(
@@ -174,29 +168,27 @@ func runBillingMode(cmd *cobra.Command, args []string) {
 		mode,
 	)
 	if err != nil {
-		fmt.Println("Error setting billing mode:", err)
-		return
+		return fmt.Errorf("setting billing mode: %w", err)
 	}
 
 	if billingModeJSON {
 		printRawOrJSON(result.Raw, result)
-		return
+		return nil
 	}
 
 	fmt.Printf("AI payment mode: %s\n", paymentModeDisplay(result.AIPaymentMode))
+	return nil
 }
 
-func runBillingSync(cmd *cobra.Command, args []string) {
+func runBillingSync(cmd *cobra.Command, args []string) error {
 	sessionID := strings.TrimSpace(args[0])
 	if sessionID == "" {
-		fmt.Println("Error: checkout session id is required.")
-		return
+		return fmt.Errorf("checkout session id is required")
 	}
 
 	profile, err := requireAuthenticatedProfile()
 	if err != nil {
-		fmt.Println("Error:", err)
-		return
+		return err
 	}
 
 	result, err := api.SyncStripeAiBillingCheckoutSession(
@@ -207,22 +199,21 @@ func runBillingSync(cmd *cobra.Command, args []string) {
 		sessionID,
 	)
 	if err != nil {
-		fmt.Println("Error syncing checkout session:", err)
-		return
+		return fmt.Errorf("syncing checkout session: %w", err)
 	}
 
 	if billingSyncJSON {
 		printRawOrJSON(result.Raw, result)
-		return
+		return nil
 	}
 
 	if result.OK {
 		fmt.Println("Billing synced.")
 		fmt.Println("Run `treecli billing status` to verify the active payment mode.")
-		return
+		return nil
 	}
 
-	fmt.Println("Billing sync completed without an ok response.")
+	return fmt.Errorf("billing sync completed without an ok response")
 }
 
 func printBillingStatus(status api.StripeAiBillingStatusResponse) {

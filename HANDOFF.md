@@ -28,14 +28,14 @@ backend; the CLI calls them via `profile.BackendURL`):
 - `treecli billing sync <session-id>` → `GET /api/v1/stripe_ai_billing/sync?session_id=`
 
 BSV lane — local, no login (`wallet` package + `cmd/billing_wallet.go`):
-- `treecli billing wallet new [label] [--show-secret]` — generate a WIF keypair, store keyfile (0600)
-- `treecli billing wallet import <file> [--label]` — tolerant parse of `treechat_shuallet.json` / any `{wif|payPk|...}` JSON, re-derives + cross-checks the address
+- `treecli billing wallet new [label] [--show-secret]` — generate a Shuallet-style keyfile (`payPk` + `ordPk`), store keyfile (0600)
+- `treecli billing wallet import <file> [--label]` — tolerant parse of `treechat_shuallet.json` / any `{payPk|wif|...}` JSON, re-derives + cross-checks payment/ordinals addresses
 - `treecli billing wallet address [name]` / `list` — deposit address / inventory
-- Keyfiles live in `<xdg config>/treecli/wallets/*.json`, format-compatible with the web wallet (WIF + address)
+- Keyfiles live in `<xdg config>/treecli/wallets/*.json`, using Treechat's Shuallet fields (`payPk` for payments, `ordPk` for ordinals)
 
 Keygen/import/address are native Go via `github.com/bsv-blockchain/go-sdk` — WIF
-and P2PKH are standard, so a wallet made here is interoperable with the web
-app's `@bsv/sdk` wallets (same WIF ⇒ same address).
+and P2PKH are standard, so imported Treechat/Shuallet payment keys derive the
+same payment address in the CLI and the web app.
 
 ## What's left for Codex
 
@@ -58,10 +58,7 @@ CLI signs charges without prompting, capped by balance. Decide the unattended
 model: sign-on-next-invocation vs a persistent signer vs a pre-signed mandate.
 
 ## Review decisions / risks (please confirm)
-1. **Shuallet import schema** — `wallet.ParseImport` probes `wif|payPk|privateKey|
-   private_key|paymentKey|payWif`. Confirm the exact `BsvWallet#as_json` field names
-   (backend `download_wallet` → `treechat_shuallet.json`) so real exports import cleanly.
-2. **Encryption at rest** — keyfiles are 0600 plaintext (same as the web
+1. **Encryption at rest** — keyfiles are 0600 plaintext (same as the web
    `treechat_shuallet.json` download). Consider passphrase / OS-keychain encryption
    for the CLI keystore.
 

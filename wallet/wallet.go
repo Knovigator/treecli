@@ -1,10 +1,8 @@
 // Package wallet manages local treechat-style BSV wallets for the CLI.
 //
-// A wallet is a single-key P2PKH keypair whose private key is stored as WIF,
-// exactly the format the treechat web app produces (generateRandomKey =>
-// {wif, publicKey, address}) and downloads (treechat_shuallet.json). Because
-// WIF and P2PKH addresses are standard, a wallet created here is interoperable
-// with the web wallet: the same WIF yields the same address in both.
+// A wallet is a Treechat/Shuallet-style keyfile with separate payment and
+// ordinals WIF keys (`payPk` and `ordPk`). The payment key derives the address
+// used by the CLI's BSV billing lane.
 //
 // This package deliberately does NOT sign or broadcast transactions. Keygen,
 // import, and address derivation are local and safe; spending is left to the
@@ -29,61 +27,95 @@ import (
 // mainnet selects BSV mainnet address encoding.
 const mainnet = true
 
-// File is the on-disk keyfile. `wif` and `address` are load-bearing; the rest
-// is convenience metadata. It is a superset of the treechat/Shuallet export,
-// so a treechat wallet JSON can be imported and a File can be read by tools
-// that only look for `wif`/`address`.
+// File is the on-disk Shuallet-compatible keyfile. `payPk` and `ordPk` are the
+// canonical Treechat wallet fields; address fields are derived convenience
+// metadata for CLI display.
 type File struct {
-	Label     string `json:"label,omitempty"`
-	WIF       string `json:"wif"`
-	PublicKey string `json:"publicKey,omitempty"`
-	Address   string `json:"address"`
-	CreatedAt string `json:"created_at,omitempty"`
+	Label      string `json:"label,omitempty"`
+	PayWIF     string `json:"payPk"`
+	OrdWIF     string `json:"ordPk"`
+	PublicKey  string `json:"publicKey,omitempty"`
+	Address    string `json:"address,omitempty"`
+	OrdAddress string `json:"ordinalsAddress,omitempty"`
+	CreatedAt  string `json:"created_at,omitempty"`
 }
 
 // Generate creates a brand-new random wallet.
 func Generate(label string) (*File, error) {
-	privateKey, err := ec.NewPrivateKey()
+	paymentKey, err := ec.NewPrivateKey()
 	if err != nil {
-		return nil, fmt.Errorf("generating key: %w", err)
+		return nil, fmt.Errorf("generating payment key: %w", err)
 	}
 
-	return fromPrivateKey(privateKey, label)
+	ordinalKey, err := ec.NewPrivateKey()
+	if err != nil {
+		return nil, fmt.Errorf("generating ordinals key: %w", err)
+	}
+
+	return fromPrivateKeys(paymentKey, ordinalKey, label)
 }
 
-// FromWIF builds a wallet from an existing WIF private key.
+// FromWIF builds a Shuallet-compatible wallet from an existing payment WIF.
+// Legacy single-key imports reuse the payment key as the ordinals key so the
+// resulting keyfile still has Treechat's required `payPk`/`ordPk` shape.
 func FromWIF(wif, label string) (*File, error) {
 	privateKey, err := ec.PrivateKeyFromWif(strings.TrimSpace(wif))
 	if err != nil {
 		return nil, fmt.Errorf("invalid WIF: %w", err)
 	}
 
-	return fromPrivateKey(privateKey, label)
+	return fromPrivateKeys(privateKey, privateKey, label)
 }
 
-func fromPrivateKey(privateKey *ec.PrivateKey, label string) (*File, error) {
-	publicKey := privateKey.PubKey()
-	address, err := script.NewAddressFromPublicKey(publicKey, mainnet)
+func fromWIFs(paymentWIF, ordinalWIF, label string) (*File, error) {
+	paymentKey, err := ec.PrivateKeyFromWif(strings.TrimSpace(paymentWIF))
 	if err != nil {
-		return nil, fmt.Errorf("deriving address: %w", err)
+		return nil, fmt.Errorf("invalid payment WIF: %w", err)
+	}
+
+	ordinalWIF = strings.TrimSpace(ordinalWIF)
+	if ordinalWIF == "" {
+		ordinalWIF = paymentWIF
+	}
+	ordinalKey, err := ec.PrivateKeyFromWif(ordinalWIF)
+	if err != nil {
+		return nil, fmt.Errorf("invalid ordinals WIF: %w", err)
+	}
+
+	return fromPrivateKeys(paymentKey, ordinalKey, label)
+}
+
+func fromPrivateKeys(paymentKey, ordinalKey *ec.PrivateKey, label string) (*File, error) {
+	paymentPublicKey := paymentKey.PubKey()
+	paymentAddress, err := script.NewAddressFromPublicKey(paymentPublicKey, mainnet)
+	if err != nil {
+		return nil, fmt.Errorf("deriving payment address: %w", err)
+	}
+
+	ordinalAddress, err := script.NewAddressFromPublicKey(ordinalKey.PubKey(), mainnet)
+	if err != nil {
+		return nil, fmt.Errorf("deriving ordinals address: %w", err)
 	}
 
 	return &File{
-		Label:     strings.TrimSpace(label),
-		WIF:       privateKey.Wif(),
-		PublicKey: publicKey.ToDERHex(),
-		Address:   address.AddressString,
-		CreatedAt: time.Now().UTC().Format(time.RFC3339),
+		Label:      strings.TrimSpace(label),
+		PayWIF:     paymentKey.Wif(),
+		OrdWIF:     ordinalKey.Wif(),
+		PublicKey:  paymentPublicKey.ToDERHex(),
+		Address:    paymentAddress.AddressString,
+		OrdAddress: ordinalAddress.AddressString,
+		CreatedAt:  time.Now().UTC().Format(time.RFC3339),
 	}, nil
 }
 
-// wifFieldCandidates are the JSON keys, in priority order, that hold a payment
-// private key across treechat / Shuallet exports and our own keyfiles.
-// NOTE: confirm this list against BsvWallet#as_json before relying on import
-// for real treechat wallets (see HANDOFF).
-var wifFieldCandidates = []string{"wif", "payPk", "paypk", "privateKey", "private_key", "paymentKey", "payWif"}
+// paymentKeyFieldCandidates are the JSON keys, in priority order, that hold a
+// payment private key across Treechat/Shuallet exports and legacy CLI keyfiles.
+var paymentKeyFieldCandidates = []string{"payPk", "paypk", "payWif", "paymentKey", "privateKey", "private_key", "wif"}
 
-var addressFieldCandidates = []string{"address", "payAddr", "payaddr", "paymentAddress"}
+var ordinalKeyFieldCandidates = []string{"ordPk", "ordpk", "ordWif", "ordinalKey", "ownerKey", "ownerWif"}
+
+var paymentAddressFieldCandidates = []string{"address", "payAddr", "payaddr", "paymentAddress", "payment_address"}
+var ordinalAddressFieldCandidates = []string{"ordAddress", "ordaddress", "ordAddr", "ordaddr", "ordinalAddress", "ordinalsAddress"}
 
 // ParseImport tolerantly reads a treechat-style wallet export and extracts the
 // payment key. The address is re-derived from the WIF and cross-checked against
@@ -99,19 +131,34 @@ func ParseImport(data []byte, label string) (*File, error) {
 		lower[strings.ToLower(key)] = value
 	}
 
-	wif := firstString(lower, wifFieldCandidates)
-	if wif == "" {
-		return nil, fmt.Errorf("no payment key found in wallet JSON (looked for: %s)", strings.Join(wifFieldCandidates, ", "))
+	resolvedLabel := strings.TrimSpace(label)
+	if resolvedLabel == "" {
+		resolvedLabel = firstString(lower, []string{"label", "name"})
 	}
 
-	file, err := FromWIF(wif, label)
+	paymentWIF := firstString(lower, paymentKeyFieldCandidates)
+	if paymentWIF == "" {
+		return nil, fmt.Errorf("no payment key found in wallet JSON (looked for: %s)", strings.Join(paymentKeyFieldCandidates, ", "))
+	}
+
+	ordinalWIF := firstString(lower, ordinalKeyFieldCandidates)
+	file, err := fromWIFs(paymentWIF, ordinalWIF, resolvedLabel)
 	if err != nil {
 		return nil, err
 	}
 
-	declared := firstString(lower, addressFieldCandidates)
+	if createdAt := firstString(lower, []string{"created_at", "createdAt"}); createdAt != "" {
+		file.CreatedAt = createdAt
+	}
+
+	declared := firstString(lower, paymentAddressFieldCandidates)
 	if declared != "" && !strings.EqualFold(declared, file.Address) {
-		return nil, fmt.Errorf("declared address %q does not match the key (derives %q)", declared, file.Address)
+		return nil, fmt.Errorf("declared payment address %q does not match the key (derives %q)", declared, file.Address)
+	}
+
+	declaredOrdinal := firstString(lower, ordinalAddressFieldCandidates)
+	if declaredOrdinal != "" && !strings.EqualFold(declaredOrdinal, file.OrdAddress) {
+		return nil, fmt.Errorf("declared ordinals address %q does not match the key (derives %q)", declaredOrdinal, file.OrdAddress)
 	}
 
 	return file, nil
@@ -151,25 +198,40 @@ func Save(file *File) (string, error) {
 		return "", err
 	}
 
-	name := sanitizeName(file.Label)
+	normalized, err := fromWIFs(file.PayWIF, file.OrdWIF, file.Label)
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(file.CreatedAt) != "" {
+		normalized.CreatedAt = file.CreatedAt
+	}
+
+	name := sanitizeName(normalized.Label)
 	if name == "" {
-		name = sanitizeName(file.Address)
+		name = sanitizeName(normalized.Address)
 	}
 	if name == "" {
 		return "", fmt.Errorf("wallet has neither label nor address")
 	}
 
 	path := filepath.Join(dir, name+".json")
-	if _, err := os.Stat(path); err == nil {
-		return "", fmt.Errorf("a wallet named %q already exists at %s", name, path)
-	}
-
-	encoded, err := json.MarshalIndent(file, "", "  ")
+	encoded, err := json.MarshalIndent(normalized, "", "  ")
 	if err != nil {
 		return "", err
 	}
 
-	if err := os.WriteFile(path, encoded, 0o600); err != nil {
+	writer, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		if os.IsExist(err) {
+			return "", fmt.Errorf("a wallet named %q already exists at %s", name, path)
+		}
+		return "", err
+	}
+	if _, err := writer.Write(encoded); err != nil {
+		_ = writer.Close()
+		return "", err
+	}
+	if err := writer.Close(); err != nil {
 		return "", err
 	}
 
@@ -189,12 +251,12 @@ func Load(name string) (*File, error) {
 		return nil, err
 	}
 
-	var file File
-	if err := json.Unmarshal(data, &file); err != nil {
+	file, err := ParseImport(data, "")
+	if err != nil {
 		return nil, fmt.Errorf("wallet %q is corrupt: %w", name, err)
 	}
 
-	return &file, nil
+	return file, nil
 }
 
 // List returns the saved wallets sorted by name.
@@ -262,7 +324,7 @@ func (file *File) Name() string {
 
 // Redacted returns the WIF with the middle masked, for display.
 func (file *File) Redacted() string {
-	wif := file.WIF
+	wif := file.PayWIF
 	if len(wif) <= 8 {
 		return "********"
 	}

@@ -66,7 +66,7 @@ func CreateStripeAiBillingCheckoutSession(backendURL, accessToken, client, uid s
 	}
 
 	if resp.StatusCode() != http.StatusOK {
-		return StripeAiBillingCheckoutResponse{}, fmt.Errorf("received status code %d: %s", resp.StatusCode(), resp.Body())
+		return StripeAiBillingCheckoutResponse{}, fmt.Errorf("received status code %d: %s", resp.StatusCode(), SafeResponseBody(resp.Body()))
 	}
 
 	var checkout StripeAiBillingCheckoutResponse
@@ -91,7 +91,7 @@ func GetStripeAiBillingStatus(backendURL, accessToken, client, uid string, refre
 	}
 
 	if resp.StatusCode() != http.StatusOK {
-		return StripeAiBillingStatusResponse{}, fmt.Errorf("received status code %d: %s", resp.StatusCode(), resp.Body())
+		return StripeAiBillingStatusResponse{}, fmt.Errorf("received status code %d: %s", resp.StatusCode(), SafeResponseBody(resp.Body()))
 	}
 
 	var status StripeAiBillingStatusResponse
@@ -113,7 +113,7 @@ func SetStripeAiPaymentMode(backendURL, accessToken, client, uid, mode string) (
 	}
 
 	if resp.StatusCode() != http.StatusOK {
-		return StripeAiPaymentModeResponse{}, fmt.Errorf("received status code %d: %s", resp.StatusCode(), resp.Body())
+		return StripeAiPaymentModeResponse{}, fmt.Errorf("received status code %d: %s", resp.StatusCode(), SafeResponseBody(resp.Body()))
 	}
 
 	var result StripeAiPaymentModeResponse
@@ -135,7 +135,7 @@ func SyncStripeAiBillingCheckoutSession(backendURL, accessToken, client, uid, se
 	}
 
 	if resp.StatusCode() != http.StatusOK {
-		return StripeAiBillingSyncResponse{}, fmt.Errorf("received status code %d: %s", resp.StatusCode(), resp.Body())
+		return StripeAiBillingSyncResponse{}, fmt.Errorf("received status code %d: %s", resp.StatusCode(), SafeResponseBody(resp.Body()))
 	}
 
 	var result StripeAiBillingSyncResponse
