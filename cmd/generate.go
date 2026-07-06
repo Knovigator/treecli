@@ -45,8 +45,8 @@ var GenerateCmd = &cobra.Command{
 		"to see available AI actions, descriptions, settings, and examples.",
 	Example: "  treecli generate flux \"soft-gradient app icon, violet to indigo\" --out icon.png\n" +
 		"  treecli generate flux2 \"wide hero banner\" --out banner.webp --input aspect_ratio=3:1\n" +
-		"  treecli generate animate_kling \"slow handheld push-in\" --reference @image.png --out animated.mp4\n" +
-		"  treecli generate edit_qwen \"replace the sky with stars\" --reference @image.png --out edited.png\n" +
+		"  treecli generate kling2 \"slow handheld push-in\" --reference @image.png --out animated.mp4\n" +
+		"  treecli generate qwen \"replace the sky with stars\" --reference @image.png --out edited.png\n" +
 		"  treecli generate tts \"Abigail read this in a crisp narration voice\" --out chatterbox.mp3\n" +
 		"  treecli generate clone \"read this in the sampled voice\" --reference @voice.mp3 --out clone.mp3\n" +
 		"  treecli generate eleven_tts \"read this in a crisp narration voice\" --out narration.mp3\n" +
@@ -95,6 +95,9 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 	}
 	if generateTimeout <= 0 {
 		return fmt.Errorf("--timeout must be greater than zero")
+	}
+	if err := legacyReferenceActionError(action); err != nil {
+		return err
 	}
 	paymentMode, err := normalizePaymentMode(generatePaymentMode)
 	if err != nil {

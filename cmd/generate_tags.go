@@ -200,7 +200,7 @@ func generationActionRows(models []api.AIModelRef, directActions []api.Generatio
 	rows := []generationActionRow{}
 	seen := map[string]bool{}
 	for _, model := range models {
-		if shouldHideActionModel(model) {
+		if shouldHideGenerateActionModel(model) {
 			continue
 		}
 
@@ -268,7 +268,7 @@ func completeGenerationActionNames(toComplete string, directOnly bool) ([]string
 func actionRowsFromModels(models []api.AIModelRef) []generationActionRow {
 	rows := make([]generationActionRow, 0, len(models))
 	for _, model := range models {
-		if shouldHideActionModel(model) {
+		if shouldHideGenerateActionModel(model) {
 			continue
 		}
 		action := strings.TrimSpace(model.ActionTagName)
@@ -378,7 +378,15 @@ func shouldHideDirectGenerationAction(directTag api.GenerationActionInfo) bool {
 	if strings.EqualFold(strings.TrimSpace(directTag.Provider), "openclaw") {
 		return true
 	}
-	return strings.HasPrefix(canonicalAIActionName(generationActionInfoName(directTag)), "openclaw")
+	action := canonicalAIActionName(generationActionInfoName(directTag))
+	return strings.HasPrefix(action, "openclaw") || isLegacyReferenceActionName(action)
+}
+
+func shouldHideGenerateActionModel(model api.AIModelRef) bool {
+	if shouldHideActionModel(model) {
+		return true
+	}
+	return isLegacyReferenceActionName(model.ActionTagName)
 }
 
 func generationActionInfoName(info api.GenerationActionInfo) string {
@@ -767,7 +775,7 @@ func actionRequiresReference(row generationActionRow) bool {
 	if action == "clone" || action == "video_sfx" || action == "grokvideo1.5" || action == "kling3_omni" {
 		return true
 	}
-	return strings.HasPrefix(action, "edit") || strings.HasPrefix(action, "animate")
+	return false
 }
 
 func referenceKindsFor(row generationActionRow) []string {
@@ -790,7 +798,7 @@ func referenceKindsFor(row generationActionRow) []string {
 		return []string{"video"}
 	case action == "kling3_omni":
 		return []string{"image", "video"}
-	case action == "grokvideo1.5", strings.HasPrefix(action, "edit"), strings.HasPrefix(action, "animate"):
+	case action == "grokvideo1.5":
 		return []string{"image"}
 	default:
 		return nil

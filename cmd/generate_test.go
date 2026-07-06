@@ -71,6 +71,23 @@ func TestRunGenerateRejectsNonPositiveTimeoutBeforeAuth(t *testing.T) {
 	}
 }
 
+func TestRunGenerateRejectsLegacyReferenceActionsBeforeAuth(t *testing.T) {
+	withGenerateGlobals(t)
+	generateOut = "video.mp4"
+	generatePollInterval = time.Second
+	generateTimeout = time.Minute
+
+	err := runGenerate(nil, []string{"animate_kling", "slow", "push-in"})
+	if err == nil {
+		t.Fatal("expected legacy action error")
+	}
+	for _, want := range []string{"animate_kling", "legacy image-to-video action", "treecli generate kling2", "--reference @image.png"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("expected error to contain %q, got %v", want, err)
+		}
+	}
+}
+
 func TestParseGenerateInvocationCanonicalizesReplicateIntegrationAliases(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -144,6 +161,12 @@ func TestGenerationActionRowsIncludesFullCatalogAndMarksDirectSupport(t *testing
 				ModelType:     "text",
 				ActionTagName: "openclaw",
 			},
+			{
+				Name:          "qwen-image-edit",
+				Provider:      "replicate",
+				ModelType:     "image",
+				ActionTagName: "edit_qwen",
+			},
 		},
 		[]api.GenerationActionInfo{
 			{
@@ -169,6 +192,11 @@ func TestGenerationActionRowsIncludesFullCatalogAndMarksDirectSupport(t *testing
 				Provider: "openclaw",
 				Kind:     "text",
 			},
+			{
+				Action:   "animate_kling",
+				Provider: "replicate",
+				Kind:     "video",
+			},
 		},
 		false,
 	)
@@ -180,6 +208,12 @@ func TestGenerationActionRowsIncludesFullCatalogAndMarksDirectSupport(t *testing
 
 	if _, ok := byAction["openclaw"]; ok {
 		t.Fatal("expected hidden OpenClaw action to be omitted")
+	}
+	if _, ok := byAction["edit_qwen"]; ok {
+		t.Fatal("expected legacy edit action to be omitted from generate rows")
+	}
+	if _, ok := byAction["animate_kling"]; ok {
+		t.Fatal("expected legacy animate action to be omitted from generate rows")
 	}
 	if got := byAction["flux2"]; !got.DirectGeneration || got.Name != "Flux 2 Pro" || !got.AcceptsReference {
 		t.Fatalf("expected flux2 direct support with catalog metadata, got %#v", got)
@@ -307,36 +341,33 @@ func TestChatterboxCloneDirectGenerationHelpRequiresAudioReference(t *testing.T)
 	}
 }
 
-func TestRequiredImageReferenceDirectGenerationHelpUsesImageExamples(t *testing.T) {
+func TestOptionalImageReferenceDirectGenerationHelpUsesBaseActionExamples(t *testing.T) {
 	row := enrichGenerationActionRow(generationActionRow{
-		Action:            "edit_qwen",
-		Provider:          "replicate",
-		Kind:              "image",
-		DirectGeneration:  true,
-		AcceptsReference:  true,
-		RequiresReference: true,
-		ReferenceKinds:    []string{"image"},
+		Action:           "qwen",
+		Provider:         "replicate",
+		Kind:             "image",
+		DirectGeneration: true,
+		AcceptsReference: true,
+		ReferenceKinds:   []string{"image"},
 	})
 
-	if len(row.Examples) == 0 {
-		t.Fatal("expected edit_qwen examples")
+	if len(row.Examples) < 2 {
+		t.Fatalf("expected qwen prompt-only and image reference examples, got %#v", row.Examples)
 	}
-	if !strings.Contains(row.Examples[0], "--reference @image.png") {
-		t.Fatalf("expected first edit_qwen example to use an image reference, got %#v", row.Examples)
+	if !strings.Contains(row.Examples[0], "treecli generate qwen \"prompt\" --out output.png") {
+		t.Fatalf("expected first qwen example to allow prompt-only generation, got %#v", row.Examples)
 	}
-	for _, example := range row.Examples {
-		if strings.Contains(example, "treecli generate edit_qwen \"prompt\" --out output.png") {
-			t.Fatalf("edit_qwen should not advertise prompt-only generation, got examples %#v", row.Examples)
-		}
+	if !strings.Contains(row.Examples[1], "--reference @image.png") {
+		t.Fatalf("expected second qwen example to use an image reference, got %#v", row.Examples)
 	}
 	if !hasSetting(row.Settings, "reference_url") {
-		t.Fatalf("expected edit_qwen reference setting help, got %#v", row.Settings)
+		t.Fatalf("expected qwen reference setting help, got %#v", row.Settings)
 	}
-	if got := referenceSummary(row); got != "required:image" {
-		t.Fatalf("expected required image reference summary, got %q", got)
+	if got := referenceSummary(row); got != "yes:image" {
+		t.Fatalf("expected optional image reference summary, got %q", got)
 	}
-	if len(row.Notes) == 0 || !strings.Contains(strings.Join(row.Notes, "\n"), "requires --reference with image media") {
-		t.Fatalf("expected edit_qwen image reference note, got %#v", row.Notes)
+	if strings.Contains(strings.Join(row.Notes, "\n"), "requires --reference with image media") {
+		t.Fatalf("did not expect required-reference note for qwen, got %#v", row.Notes)
 	}
 }
 

@@ -156,7 +156,7 @@ func TestListGenerationActionsPrefersActionsEndpoint(t *testing.T) {
 			t.Fatalf("unexpected path %s", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"actions":[{"action":"edit_qwen","provider":"replicate","kind":"image","accepts_reference":true,"requires_reference":true,"reference_kinds":["image"]}]}`))
+		_, _ = w.Write([]byte(`{"actions":[{"action":"qwen","provider":"replicate","kind":"image","accepts_reference":true,"reference_kinds":["image"]}]}`))
 	}))
 	defer server.Close()
 
@@ -164,11 +164,11 @@ func TestListGenerationActionsPrefersActionsEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListGenerationActions returned error: %v", err)
 	}
-	if len(actions) != 1 || actions[0].Action != "edit_qwen" || actions[0].Tag != "edit_qwen" {
+	if len(actions) != 1 || actions[0].Action != "qwen" || actions[0].Tag != "qwen" {
 		t.Fatalf("unexpected actions: %#v", actions)
 	}
-	if !actions[0].AcceptsReference || !actions[0].RequiresReference || len(actions[0].ReferenceKinds) != 1 || actions[0].ReferenceKinds[0] != "image" {
-		t.Fatalf("expected reference requirement metadata, got %#v", actions[0])
+	if !actions[0].AcceptsReference || actions[0].RequiresReference || len(actions[0].ReferenceKinds) != 1 || actions[0].ReferenceKinds[0] != "image" {
+		t.Fatalf("expected optional image reference metadata, got %#v", actions[0])
 	}
 	if len(seenPaths) != 1 {
 		t.Fatalf("expected one request to the actions endpoint, got %#v", seenPaths)
