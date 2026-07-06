@@ -402,7 +402,7 @@ func generationSettingsFor(row generationActionRow) []settingHelp {
 			Type:        "string",
 			How:         "positional argument",
 			Description: "Primary generation prompt. Pass it after the action name.",
-			Example:     fmt.Sprintf("treecli generate %s \"a cinematic mountain sunrise\" --out output.%s", row.Action, defaultOutputExtension(row.Kind)),
+			Example:     promptSettingExampleFor(row),
 		},
 	}
 
@@ -462,6 +462,14 @@ func generationSettingsFor(row generationActionRow) []settingHelp {
 		})
 	}
 	return filtered
+}
+
+func promptSettingExampleFor(row generationActionRow) string {
+	ext := defaultOutputExtension(row.Kind)
+	if canonicalAIActionName(row.Action) == "video_sfx" {
+		return fmt.Sprintf("treecli generate %s \"rain, tires on wet asphalt\" --reference @clip.mp4 --out sfx.%s", row.Action, ext)
+	}
+	return fmt.Sprintf("treecli generate %s \"a cinematic mountain sunrise\" --out output.%s", row.Action, ext)
 }
 
 func backendSettingsFor(row generationActionRow) []settingHelp {
@@ -549,6 +557,54 @@ func knownSettingsFor(row generationActionRow) []settingHelp {
 				Example:     "--input prompt_upsampling=false",
 			},
 		}
+	case "eleven_tts":
+		return []settingHelp{
+			{
+				Name:        "voice",
+				Type:        "string",
+				How:         "--input voice=<name> or start the prompt with a supported voice name",
+				Description: "ElevenLabs v3 voice name. The backend default is Rachel.",
+				Example:     "--input voice=Drew",
+			},
+			{
+				Name:        "similarity_boost",
+				Type:        "number",
+				How:         "--input similarity_boost=<0-1>",
+				Description: "Voice similarity control passed to ElevenLabs.",
+				Example:     "--input similarity_boost=0.8",
+			},
+			{
+				Name:        "speed",
+				Type:        "number",
+				How:         "--input speed=<multiplier>",
+				Description: "Speech speed multiplier passed to ElevenLabs.",
+				Example:     "--input speed=1.1",
+			},
+		}
+	case "video_sfx":
+		return []settingHelp{
+			{
+				Name:        "negative_prompt",
+				Type:        "string",
+				How:         "--input negative_prompt=<text>",
+				Description: "Content the sound-effects model should avoid. The backend default is music.",
+				Example:     "--input negative_prompt=music",
+			},
+			{
+				Name:        "num_steps",
+				Type:        "integer",
+				How:         "--input num_steps=<count>",
+				Description: "MMAudio inference step count. The backend default is 25.",
+				Example:     "--input num_steps=25",
+			},
+			{
+				Name:        "cfg_strength",
+				Type:        "number",
+				How:         "--input cfg_strength=<number>",
+				Description: "MMAudio guidance strength. The backend default is 4.5.",
+				Example:     "--input cfg_strength=4.5",
+			},
+		}
 	case "suno":
 		return []settingHelp{
 			{
@@ -591,17 +647,22 @@ func knownSettingsFor(row generationActionRow) []settingHelp {
 
 func generationExamplesFor(row generationActionRow) []string {
 	ext := defaultOutputExtension(row.Kind)
-	examples := []string{fmt.Sprintf("treecli generate %s \"prompt\" --out output.%s", row.Action, ext)}
+	examples := []string{}
 
 	switch canonicalAIActionName(row.Action) {
 	case "flux2":
+		examples = append(examples, fmt.Sprintf("treecli generate %s \"prompt\" --out output.%s", row.Action, ext))
 		examples = append(examples, fmt.Sprintf("treecli generate %s \"wide hero banner\" --out banner.webp --input aspect_ratio=3:1", row.Action))
+	case "video_sfx":
+		examples = append(examples, fmt.Sprintf("treecli generate %s \"rain, tires on wet asphalt, distant thunder\" --reference @clip.mp4 --out sfx.%s", row.Action, ext))
 	case "suno":
+		examples = append(examples, fmt.Sprintf("treecli generate %s \"prompt\" --out output.%s", row.Action, ext))
 		examples = append(examples,
 			fmt.Sprintf("treecli generate %s \"warm ambient build, 122 BPM\" --duration 22 --out sketch.mp3", row.Action),
 			fmt.Sprintf("treecli generate %s \"cinematic electronic\" --instrumental --reference run:abc123 --out track.mp3", row.Action),
 		)
 	default:
+		examples = append(examples, fmt.Sprintf("treecli generate %s \"prompt\" --out output.%s", row.Action, ext))
 		if row.AcceptsReference {
 			examples = append(examples, fmt.Sprintf("treecli generate %s \"prompt\" --reference @reference.png --out output.%s", row.Action, ext))
 		}
@@ -619,6 +680,9 @@ func directGenerationNotesFor(row generationActionRow) []string {
 	}
 	if row.Async {
 		notes = append(notes, "This action can run asynchronously; treecli polls until completion using --poll-interval and --timeout.")
+	}
+	if canonicalAIActionName(row.Action) == "video_sfx" {
+		notes = append(notes, "Direct video_sfx requires --reference with video media; post-backed `treecli action sfx` can infer video from the thread.")
 	}
 	return notes
 }

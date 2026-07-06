@@ -49,7 +49,7 @@ Use this skill when you need to submit or inspect Treechat AI action work throug
 - Use `treecli generate describe <action>` before generating when you need focused help for one model.
 - Run direct generation with `treecli generate <action> "prompt" --out <file>`.
 - Text-to-speech direct generation: `treecli generate eleven_tts "read this in a crisp narration voice" --out narration.mp3`.
-- Video sound effects direct generation: `treecli generate sfx "rain, tires on wet asphalt, distant thunder" --out sfx.mp4`.
+- Video sound effects direct generation: `treecli generate sfx "rain, tires on wet asphalt, distant thunder" --reference @clip.mp4 --out sfx.mp3`.
 - Pass settings with `--input key=value` for individual values, `--settings '{...}'` for a JSON settings object, `--duration` for duration-aware actions, `--instrumental` for music actions, `--reference run:<id>|https://...|@path` for reference-aware actions, and `--payment usd|bsv` for per-run billing rail selection.
 
 ## Output Rules
