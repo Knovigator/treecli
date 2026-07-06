@@ -5,6 +5,7 @@ import "testing"
 func TestCanonicalAIActionNameMapsReplicateIntegrationAliases(t *testing.T) {
 	tests := map[string]string{
 		"11":         "eleven_tts",
+		"Chatterbox": "tts",
 		"!eleven":    "eleven_tts",
 		"ElevenLabs": "eleven_tts",
 		"sfx":        "video_sfx",
@@ -25,6 +26,10 @@ func TestAIActionCompletionCandidatesIncludesReplicateIntegrationAliases(t *test
 		action   string
 		expected []string
 	}{
+		{
+			action:   "tts",
+			expected: []string{"tts", "chatterbox"},
+		},
 		{
 			action:   "eleven_tts",
 			expected: []string{"eleven_tts", "11", "eleven", "elevenlabs"},

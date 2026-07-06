@@ -6,7 +6,7 @@
 - Root posts default to private; use `--stream` only on root posts and root actions.
 - Discover AI actions with `treecli action actions`.
 - Submit action work with `treecli action <action> "prompt"` or `treecli action --reply-to <quest-id> <action> "prompt"`.
-- Use `eleven_tts` for text-to-speech and `video_sfx` for video sound effects; CLI aliases include `eleven`, `elevenlabs`, `11`, `sfx`, `mmaudio`, and `foley`.
+- Use `tts`/`chatterbox` or `eleven_tts` for text-to-speech, `clone` for Chatterbox voice cloning with an audio reference, and `video_sfx` for video sound effects; CLI aliases include `chatterbox`, `eleven`, `elevenlabs`, `11`, `sfx`, `mmaudio`, and `foley`.
 - Use plain AI actions for new assets, `animate_*` to animate an existing image, and `edit_*` to edit an existing image.
 - If the goal is to animate or edit a previous image, do not use a plain generation action.
 - Use `--payment usd` for Stripe metered AI billing or `--payment bsv` / `--payment bitcoinsv` for Bitcoin SV; omit it to use the account default.

@@ -7,6 +7,7 @@ import (
 
 var canonicalAIActionAliases = map[string]string{
 	"11":         "eleven_tts",
+	"chatterbox": "tts",
 	"eleven":     "eleven_tts",
 	"elevenlabs": "eleven_tts",
 	"foley":      "video_sfx",

@@ -466,7 +466,12 @@ func generationSettingsFor(row generationActionRow) []settingHelp {
 
 func promptSettingExampleFor(row generationActionRow) string {
 	ext := defaultOutputExtension(row.Kind)
-	if canonicalAIActionName(row.Action) == "video_sfx" {
+	switch canonicalAIActionName(row.Action) {
+	case "tts":
+		return fmt.Sprintf("treecli generate %s \"Abigail read this in a crisp narration voice\" --out chatterbox.%s", row.Action, ext)
+	case "clone":
+		return fmt.Sprintf("treecli generate %s \"read this in the sampled voice\" --reference @voice.mp3 --out clone.%s", row.Action, ext)
+	case "video_sfx":
 		return fmt.Sprintf("treecli generate %s \"rain, tires on wet asphalt\" --reference @clip.mp4 --out sfx.%s", row.Action, ext)
 	}
 	return fmt.Sprintf("treecli generate %s \"a cinematic mountain sunrise\" --out output.%s", row.Action, ext)
@@ -581,6 +586,10 @@ func knownSettingsFor(row generationActionRow) []settingHelp {
 				Example:     "--input speed=1.1",
 			},
 		}
+	case "tts":
+		return chatterboxSettings(true)
+	case "clone":
+		return chatterboxSettings(false)
 	case "video_sfx":
 		return []settingHelp{
 			{
@@ -653,6 +662,10 @@ func generationExamplesFor(row generationActionRow) []string {
 	case "flux2":
 		examples = append(examples, fmt.Sprintf("treecli generate %s \"prompt\" --out output.%s", row.Action, ext))
 		examples = append(examples, fmt.Sprintf("treecli generate %s \"wide hero banner\" --out banner.webp --input aspect_ratio=3:1", row.Action))
+	case "tts":
+		examples = append(examples, fmt.Sprintf("treecli generate %s \"Abigail read this in a crisp narration voice\" --out chatterbox.%s", row.Action, ext))
+	case "clone":
+		examples = append(examples, fmt.Sprintf("treecli generate %s \"read this in the sampled voice\" --reference @voice.mp3 --out clone.%s", row.Action, ext))
 	case "video_sfx":
 		examples = append(examples, fmt.Sprintf("treecli generate %s \"rain, tires on wet asphalt, distant thunder\" --reference @clip.mp4 --out sfx.%s", row.Action, ext))
 	case "suno":
@@ -684,7 +697,48 @@ func directGenerationNotesFor(row generationActionRow) []string {
 	if canonicalAIActionName(row.Action) == "video_sfx" {
 		notes = append(notes, "Direct video_sfx requires --reference with video media; post-backed `treecli action sfx` can infer video from the thread.")
 	}
+	if canonicalAIActionName(row.Action) == "clone" {
+		notes = append(notes, "Direct clone requires --reference with audio media; post-backed `treecli action clone` can infer audio from the thread.")
+	}
 	return notes
+}
+
+func chatterboxSettings(includeVoice bool) []settingHelp {
+	settings := []settingHelp{}
+	if includeVoice {
+		settings = append(settings, settingHelp{
+			Name:        "voice",
+			Type:        "string",
+			How:         "--input voice=<name> or start the prompt with a supported voice name",
+			Description: "Chatterbox built-in voice name. The backend default is Abigail.",
+			Example:     "--input voice=Brian",
+		})
+	}
+
+	settings = append(settings,
+		settingHelp{
+			Name:        "exaggeration",
+			Type:        "number",
+			How:         "--input exaggeration=<number>",
+			Description: "Chatterbox expressiveness control. The backend default is 0.5.",
+			Example:     "--input exaggeration=0.7",
+		},
+		settingHelp{
+			Name:        "cfg_weight",
+			Type:        "number",
+			How:         "--input cfg_weight=<number>",
+			Description: "Chatterbox guidance weight. The backend default is 0.5.",
+			Example:     "--input cfg_weight=0.5",
+		},
+		settingHelp{
+			Name:        "temperature",
+			Type:        "number",
+			How:         "--input temperature=<number>",
+			Description: "Chatterbox sampling temperature. The backend default is 0.8.",
+			Example:     "--input temperature=0.8",
+		},
+	)
+	return settings
 }
 
 func defaultOutputExtension(kind string) string {

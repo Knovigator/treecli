@@ -45,6 +45,8 @@ var GenerateCmd = &cobra.Command{
 		"to see available AI actions, descriptions, settings, and examples.",
 	Example: "  treecli generate flux \"soft-gradient app icon, violet to indigo\" --out icon.png\n" +
 		"  treecli generate flux2 \"wide hero banner\" --out banner.webp --input aspect_ratio=3:1\n" +
+		"  treecli generate tts \"Abigail read this in a crisp narration voice\" --out chatterbox.mp3\n" +
+		"  treecli generate clone \"read this in the sampled voice\" --reference @voice.mp3 --out clone.mp3\n" +
 		"  treecli generate eleven_tts \"read this in a crisp narration voice\" --out narration.mp3\n" +
 		"  treecli generate sfx \"rain, tires on wet asphalt, distant thunder\" --reference @clip.mp4 --out sfx.mp3\n" +
 		"  treecli generate suno \"warm ambient build, 122 BPM\" --duration 20 --out sketch.mp3\n" +
