@@ -17,14 +17,18 @@ Use this skill when you need to submit or inspect Treechat AI action work throug
 - Use plain generation actions like `flux`, `veo3`, or `kling` when you want a brand-new asset from the prompt.
 - Use an `animate_*` action when the goal is to animate an existing image.
 - Use an `edit_*` action when the goal is to edit an existing image.
-- Use `eleven_tts` for text-to-speech audio. Accepted CLI aliases are `eleven`, `elevenlabs`, and `11`.
+- Use `tts`/`chatterbox` or `eleven_tts` for text-to-speech audio. Accepted ElevenLabs CLI aliases are `eleven`, `elevenlabs`, and `11`.
+- Use `clone` for Chatterbox voice cloning. Direct generation requires an explicit audio reference.
 - Use `video_sfx` for video sound effects or foley. Accepted CLI aliases are `sfx`, `mmaudio`, and `foley`.
 - If the user says "animate this image" or "edit the previous image", do not swap in a plain generation action or you will likely create a new asset instead of transforming the existing one.
+- Direct `treecli generate` image edits and image-to-video runs use the base image/video action with `--reference @image.png` because there is no thread context to infer media from. Do not use `edit_*` or `animate_*` with `generate`.
 
 ## Submit Action Work
 
 - Root action: `treecli action flux "a glass cathedral in the rain"`.
-- Text-to-speech action: `treecli action eleven_tts "read this in a crisp narration voice"`.
+- Chatterbox text-to-speech action: `treecli action tts "Abigail read this in a crisp narration voice"`.
+- Chatterbox voice clone action in a thread with audio: `treecli action --reply-to <quest-id> clone "read this in the uploaded voice"`.
+- ElevenLabs text-to-speech action: `treecli action eleven_tts "read this in a crisp narration voice"`.
 - Video sound effects action: `treecli action sfx "rain, tires on wet asphalt, distant thunder"`.
 - Root action with requested audio/video duration: `treecli action stableaudio "ambient build, 120 BPM" --duration 90`.
 - Reply action: `treecli action --reply-to <quest-id> animate_kling "animate this as a handheld push-in"`.
@@ -48,8 +52,12 @@ Use this skill when you need to submit or inspect Treechat AI action work throug
 - Use `treecli generate actions --verbose` for a full human/agent-readable catalog with model descriptions, inputs, settings, reference behavior, examples, and notes.
 - Use `treecli generate describe <action>` before generating when you need focused help for one model.
 - Run direct generation with `treecli generate <action> "prompt" --out <file>`.
-- Text-to-speech direct generation: `treecli generate eleven_tts "read this in a crisp narration voice" --out narration.mp3`.
+- Chatterbox text-to-speech direct generation: `treecli generate tts "Abigail read this in a crisp narration voice" --out chatterbox.mp3`.
+- Chatterbox voice clone direct generation: `treecli generate clone "read this in the sampled voice" --reference @voice.mp3 --out clone.mp3`.
+- ElevenLabs text-to-speech direct generation: `treecli generate eleven_tts "read this in a crisp narration voice" --out narration.mp3`.
 - Video sound effects direct generation: `treecli generate sfx "rain, tires on wet asphalt, distant thunder" --reference @clip.mp4 --out sfx.mp3`.
+- Existing-image animation direct generation: use the base video model with a reference, such as `treecli generate kling2 "slow handheld push-in" --reference @image.png --out animated.mp4`.
+- Existing-image edit direct generation: use the base image model with a reference, such as `treecli generate qwen "replace the sky with stars" --reference @image.png --out edited.png`.
 - Pass settings with `--input key=value` for individual values, `--settings '{...}'` for a JSON settings object, `--duration` for duration-aware actions, `--instrumental` for music actions, `--reference run:<id>|https://...|@path` for reference-aware actions, and `--payment usd|bsv` for per-run billing rail selection.
 
 ## Output Rules

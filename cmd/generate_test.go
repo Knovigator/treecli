@@ -71,6 +71,25 @@ func TestRunGenerateRejectsNonPositiveTimeoutBeforeAuth(t *testing.T) {
 	}
 }
 
+func TestRunGenerateRejectsLegacyReferenceActionsBeforeAuth(t *testing.T) {
+	withGenerateGlobals(t)
+	generatePollInterval = time.Second
+	generateTimeout = time.Minute
+
+	err := runGenerate(nil, []string{"animate_kling", "slow", "push-in"})
+	if err == nil {
+		t.Fatal("expected legacy action error")
+	}
+	for _, want := range []string{"animate_kling", "legacy image-to-video action", "treecli generate kling2", "--reference @image.png"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("expected error to contain %q, got %v", want, err)
+		}
+	}
+	if strings.Contains(err.Error(), "--out <path> is required") {
+		t.Fatalf("expected legacy action guidance before output validation, got %v", err)
+	}
+}
+
 func TestParseGenerateInvocationCanonicalizesReplicateIntegrationAliases(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -89,6 +108,12 @@ func TestParseGenerateInvocationCanonicalizesReplicateIntegrationAliases(t *test
 			args:           []string{"!11", "read", "this"},
 			expectedAction: "eleven_tts",
 			expectedPrompt: "read this",
+		},
+		{
+			name:           "chatterbox shorthand",
+			args:           []string{"chatterbox", "Brian", "read", "this"},
+			expectedAction: "tts",
+			expectedPrompt: "Brian read this",
 		},
 		{
 			name:           "canonical action",
@@ -138,6 +163,12 @@ func TestGenerationActionRowsIncludesFullCatalogAndMarksDirectSupport(t *testing
 				ModelType:     "text",
 				ActionTagName: "openclaw",
 			},
+			{
+				Name:          "qwen-image-edit",
+				Provider:      "replicate",
+				ModelType:     "image",
+				ActionTagName: "edit_qwen",
+			},
 		},
 		[]api.GenerationActionInfo{
 			{
@@ -145,6 +176,7 @@ func TestGenerationActionRowsIncludesFullCatalogAndMarksDirectSupport(t *testing
 				Provider:         "replicate",
 				Kind:             "image",
 				AcceptsReference: true,
+				ReferenceKinds:   []string{"image"},
 				Inputs:           []string{"aspect_ratio"},
 			},
 			{
@@ -162,6 +194,11 @@ func TestGenerationActionRowsIncludesFullCatalogAndMarksDirectSupport(t *testing
 				Provider: "openclaw",
 				Kind:     "text",
 			},
+			{
+				Action:   "animate_kling",
+				Provider: "replicate",
+				Kind:     "video",
+			},
 		},
 		false,
 	)
@@ -174,8 +211,17 @@ func TestGenerationActionRowsIncludesFullCatalogAndMarksDirectSupport(t *testing
 	if _, ok := byAction["openclaw"]; ok {
 		t.Fatal("expected hidden OpenClaw action to be omitted")
 	}
+	if _, ok := byAction["edit_qwen"]; ok {
+		t.Fatal("expected legacy edit action to be omitted from generate rows")
+	}
+	if _, ok := byAction["animate_kling"]; ok {
+		t.Fatal("expected legacy animate action to be omitted from generate rows")
+	}
 	if got := byAction["flux2"]; !got.DirectGeneration || got.Name != "Flux 2 Pro" || !got.AcceptsReference {
 		t.Fatalf("expected flux2 direct support with catalog metadata, got %#v", got)
+	}
+	if got := byAction["flux2"]; got.RequiresReference || len(got.ReferenceKinds) != 1 || got.ReferenceKinds[0] != "image" {
+		t.Fatalf("expected flux2 optional image reference metadata, got %#v", got)
 	}
 	if got := byAction["flux2"]; !hasSetting(got.Settings, "prompt") || !hasSetting(got.Settings, "aspect_ratio") {
 		t.Fatalf("expected flux2 prompt and aspect_ratio setting help, got %#v", got.Settings)
@@ -246,6 +292,87 @@ func TestVideoSFXDirectGenerationHelpRequiresVideoReference(t *testing.T) {
 	}
 }
 
+func TestChatterboxTTSDirectGenerationHelpIncludesProviderSettings(t *testing.T) {
+	row := enrichGenerationActionRow(generationActionRow{
+		Action:           "tts",
+		Provider:         "replicate",
+		Kind:             "audio",
+		DirectGeneration: true,
+		Async:            true,
+	})
+
+	if len(row.Examples) == 0 || !strings.Contains(row.Examples[0], "Abigail read this") {
+		t.Fatalf("expected Chatterbox TTS example, got %#v", row.Examples)
+	}
+	if !hasSetting(row.Settings, "voice") || !hasSetting(row.Settings, "exaggeration") || !hasSetting(row.Settings, "cfg_weight") || !hasSetting(row.Settings, "temperature") {
+		t.Fatalf("expected Chatterbox provider setting help, got %#v", row.Settings)
+	}
+}
+
+func TestChatterboxCloneDirectGenerationHelpRequiresAudioReference(t *testing.T) {
+	row := enrichGenerationActionRow(generationActionRow{
+		Action:           "clone",
+		Provider:         "replicate",
+		Kind:             "audio",
+		DirectGeneration: true,
+		Async:            true,
+		AcceptsReference: true,
+	})
+
+	if len(row.Examples) == 0 {
+		t.Fatal("expected clone examples")
+	}
+	if !strings.Contains(row.Examples[0], "--reference @voice.mp3") || !strings.Contains(row.Examples[0], "--out clone.mp3") {
+		t.Fatalf("expected first clone example to use an audio reference and audio output, got %#v", row.Examples)
+	}
+	for _, example := range row.Examples {
+		if strings.Contains(example, "@reference.png") {
+			t.Fatalf("clone should not advertise a generic image reference, got examples %#v", row.Examples)
+		}
+	}
+	if hasSetting(row.Settings, "voice") || !hasSetting(row.Settings, "reference_url") || !hasSetting(row.Settings, "cfg_weight") {
+		t.Fatalf("expected clone reference and provider setting help without voice, got %#v", row.Settings)
+	}
+	for _, setting := range row.Settings {
+		if setting.Name == "prompt" && !strings.Contains(setting.Example, "--reference @voice.mp3") {
+			t.Fatalf("expected clone prompt example to include an audio reference, got %#v", setting)
+		}
+	}
+	if len(row.Notes) == 0 || !strings.Contains(strings.Join(row.Notes, "\n"), "requires --reference with audio media") {
+		t.Fatalf("expected clone reference note, got %#v", row.Notes)
+	}
+}
+
+func TestOptionalImageReferenceDirectGenerationHelpUsesBaseActionExamples(t *testing.T) {
+	row := enrichGenerationActionRow(generationActionRow{
+		Action:           "qwen",
+		Provider:         "replicate",
+		Kind:             "image",
+		DirectGeneration: true,
+		AcceptsReference: true,
+		ReferenceKinds:   []string{"image"},
+	})
+
+	if len(row.Examples) < 2 {
+		t.Fatalf("expected qwen prompt-only and image reference examples, got %#v", row.Examples)
+	}
+	if !strings.Contains(row.Examples[0], "treecli generate qwen \"prompt\" --out output.png") {
+		t.Fatalf("expected first qwen example to allow prompt-only generation, got %#v", row.Examples)
+	}
+	if !strings.Contains(row.Examples[1], "--reference @image.png") {
+		t.Fatalf("expected second qwen example to use an image reference, got %#v", row.Examples)
+	}
+	if !hasSetting(row.Settings, "reference_url") {
+		t.Fatalf("expected qwen reference setting help, got %#v", row.Settings)
+	}
+	if got := referenceSummary(row); got != "yes:image" {
+		t.Fatalf("expected optional image reference summary, got %q", got)
+	}
+	if strings.Contains(strings.Join(row.Notes, "\n"), "requires --reference with image media") {
+		t.Fatalf("did not expect required-reference note for qwen, got %#v", row.Notes)
+	}
+}
+
 func TestGenerateActionsCommandKeepsHiddenTagsCompatibilityCommand(t *testing.T) {
 	if generateTagsCompatCmd.Use != "tags" {
 		t.Fatalf("expected hidden compatibility command to use tags, got %q", generateTagsCompatCmd.Use)
@@ -272,9 +399,11 @@ func TestFindGenerationActionRowCanonicalizesReplicateIntegrationAliases(t *test
 	}{
 		{query: "sfx", expected: "video_sfx"},
 		{query: "!11", expected: "eleven_tts"},
+		{query: "chatterbox", expected: "tts"},
 	}
 
 	rows := []generationActionRow{
+		{Action: "tts"},
 		{Action: "eleven_tts"},
 		{Action: "video_sfx"},
 	}
@@ -312,6 +441,7 @@ func TestCompleteGenerationActionRowNamesFiltersAndPreservesBangPrefix(t *testin
 
 func TestCompleteGenerationActionRowNamesIncludesReplicateIntegrationAliases(t *testing.T) {
 	rows := []generationActionRow{
+		{Action: "tts"},
 		{Action: "eleven_tts"},
 		{Action: "video_sfx"},
 	}
@@ -320,6 +450,11 @@ func TestCompleteGenerationActionRowNamesIncludesReplicateIntegrationAliases(t *
 
 	if len(got) != 1 || got[0] != "sfx" {
 		t.Fatalf("expected sfx completion, got %#v", got)
+	}
+
+	got = completeGenerationActionRowNames(rows, "chat")
+	if len(got) != 1 || got[0] != "chatterbox" {
+		t.Fatalf("expected chatterbox completion, got %#v", got)
 	}
 
 	got = completeGenerationActionRowNames(rows, "video")

@@ -69,6 +69,7 @@ Use action requests for Treechat-posted AI work:
 treecli action actions
 treecli action flux "a glass cathedral in the rain"
 treecli action flux "a glass cathedral in the rain" --payment usd
+treecli action tts "Abigail read this in a crisp narration voice"
 treecli action eleven_tts "read this in a crisp narration voice"
 treecli action sfx "rain, tires on wet asphalt, distant thunder"
 treecli action --reply-to <quest-id> animate_kling "animate this still"
@@ -83,6 +84,10 @@ treecli generate actions --verbose
 treecli generate describe flux2
 treecli generate flux2 "wide cinematic hero banner" --out banner.webp --input aspect_ratio=3:1
 treecli generate flux2 "wide cinematic hero banner" --out banner.webp --payment bsv
+treecli generate kling2 "slow handheld push-in" --reference @image.png --out animated.mp4
+treecli generate qwen "replace the sky with stars" --reference @image.png --out edited.png
+treecli generate tts "Abigail read this in a crisp narration voice" --out chatterbox.mp3
+treecli generate clone "read this in the sampled voice" --reference @voice.mp3 --out clone.mp3
 treecli generate eleven_tts "read this in a crisp narration voice" --out narration.mp3
 treecli generate sfx "rain, tires on wet asphalt, distant thunder" --reference @clip.mp4 --out sfx.mp3
 treecli generate suno "warm ambient build, 122 BPM" --duration 20 --out sketch.mp3
@@ -90,9 +95,9 @@ treecli generate suno "warm ambient build, 122 BPM" --duration 20 --out sketch.m
 
 `treecli action` and `treecli generate` accept `--payment usd` for Stripe metered AI billing or `--payment bsv` / `--payment bitcoinsv` for Bitcoin SV. Omit `--payment` to use the account default.
 
-`eleven_tts` accepts CLI aliases `eleven`, `elevenlabs`, and `11`. `video_sfx` accepts CLI aliases `sfx`, `mmaudio`, and `foley`.
+`tts` accepts the CLI alias `chatterbox`. `eleven_tts` accepts CLI aliases `eleven`, `elevenlabs`, and `11`. `video_sfx` accepts CLI aliases `sfx`, `mmaudio`, and `foley`.
 
-`treecli generate` supports repeatable `--input key=value`, JSON `--settings`, `--duration`, `--instrumental`, and `--reference run:<id>|https://...|@path`. Use `treecli generate describe <action>` before generating when an agent needs model descriptions, accepted inputs, settings, examples, and reference behavior.
+`treecli generate` supports repeatable `--input key=value`, JSON `--settings`, `--duration`, `--instrumental`, and `--reference run:<id>|https://...|@path`. For direct edits or image-to-video runs, use the base image/video action with explicit `--reference` media because direct generation has no thread context to infer it from. Clone and video sound-effect actions also require explicit reference media. Use `treecli generate describe <action>` before generating when an agent needs model descriptions, accepted inputs, settings, examples, and reference behavior.
 
 ## Development
 
