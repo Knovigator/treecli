@@ -212,6 +212,40 @@ func TestGenerationActionRowsCanFilterToDirectOnly(t *testing.T) {
 	}
 }
 
+func TestVideoSFXDirectGenerationHelpRequiresVideoReference(t *testing.T) {
+	row := enrichGenerationActionRow(generationActionRow{
+		Action:           "video_sfx",
+		Provider:         "replicate",
+		Kind:             "audio",
+		DirectGeneration: true,
+		Async:            true,
+		AcceptsReference: true,
+	})
+
+	if len(row.Examples) == 0 {
+		t.Fatal("expected video_sfx examples")
+	}
+	for _, example := range row.Examples {
+		if strings.Contains(example, "treecli generate video_sfx \"prompt\" --out output.mp3") {
+			t.Fatalf("video_sfx should not advertise prompt-only generation, got examples %#v", row.Examples)
+		}
+	}
+	if !strings.Contains(row.Examples[0], "--reference @clip.mp4") || !strings.Contains(row.Examples[0], "--out sfx.mp3") {
+		t.Fatalf("expected first video_sfx example to use a video reference and audio output, got %#v", row.Examples)
+	}
+	if !hasSetting(row.Settings, "negative_prompt") || !hasSetting(row.Settings, "cfg_strength") {
+		t.Fatalf("expected video_sfx provider setting help, got %#v", row.Settings)
+	}
+	for _, setting := range row.Settings {
+		if setting.Name == "prompt" && !strings.Contains(setting.Example, "--reference @clip.mp4") {
+			t.Fatalf("expected video_sfx prompt example to include a video reference, got %#v", setting)
+		}
+	}
+	if len(row.Notes) == 0 || !strings.Contains(strings.Join(row.Notes, "\n"), "requires --reference with video media") {
+		t.Fatalf("expected video_sfx reference note, got %#v", row.Notes)
+	}
+}
+
 func TestGenerateActionsCommandKeepsHiddenTagsCompatibilityCommand(t *testing.T) {
 	if generateTagsCompatCmd.Use != "tags" {
 		t.Fatalf("expected hidden compatibility command to use tags, got %q", generateTagsCompatCmd.Use)

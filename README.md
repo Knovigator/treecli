@@ -84,7 +84,7 @@ treecli generate describe flux2
 treecli generate flux2 "wide cinematic hero banner" --out banner.webp --input aspect_ratio=3:1
 treecli generate flux2 "wide cinematic hero banner" --out banner.webp --payment bsv
 treecli generate eleven_tts "read this in a crisp narration voice" --out narration.mp3
-treecli generate sfx "rain, tires on wet asphalt, distant thunder" --out sfx.mp4
+treecli generate sfx "rain, tires on wet asphalt, distant thunder" --reference @clip.mp4 --out sfx.mp3
 treecli generate suno "warm ambient build, 122 BPM" --duration 20 --out sketch.mp3
 ```
 
