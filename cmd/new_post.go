@@ -31,6 +31,8 @@ var ActionCmd = &cobra.Command{
 	Example: "  treecli action flux \"a red kite over Bangkok\"\n" +
 		"  treecli action !kling \"camera orbit around a bonsai tree\"\n" +
 		"  treecli action \"!veo3 slow dolly through a neon alley\"\n" +
+		"  treecli action eleven_tts \"read this in a crisp narration voice\"\n" +
+		"  treecli action sfx \"rain, tires on wet asphalt, distant thunder\"\n" +
 		"  treecli action !stableaudio \"ambient build, 120 BPM\" --duration 90\n" +
 		"  treecli action --reply-to 7a5e85c9-9dca-4140-ba9a-f5db0030afca flux \"make this warmer\"\n" +
 		"  treecli action --reply-to http://localhost:5173/quest/7a5e85c9-9dca-4140-ba9a-f5db0030afca flux \"make this warmer\"",
@@ -643,6 +645,10 @@ func runActionActions(cmd *cobra.Command, args []string) error {
 				fmt.Printf("  [%s]", model.Provider)
 			}
 			fmt.Println()
+			aliases := aiActionAliasesForCanonicalAction(model.ActionTagName)
+			if len(aliases) > 0 {
+				fmt.Printf("    aliases: %s\n", strings.Join(prefixAIActionNames(aliases, true), ", "))
+			}
 			if description != "" {
 				fmt.Printf("    %s\n", description)
 			}
@@ -694,6 +700,7 @@ func parseActionInvocation(args []string) (actionInvocation, error) {
 	if normalizedTag == "" {
 		return actionInvocation{}, fmt.Errorf("an AI action is required")
 	}
+	normalizedTag = canonicalAIActionName(normalizedTag)
 
 	promptFields := fields[1:]
 	normalizedContent := "!" + normalizedTag
@@ -785,20 +792,22 @@ func completeAIActionNames(toComplete string) ([]string, cobra.ShellCompDirectiv
 			continue
 		}
 
-		normalizedTag := strings.ToLower(tagName)
-		if normalizedPrefix != "" && !strings.HasPrefix(normalizedTag, normalizedPrefix) {
-			continue
-		}
-		if seenTags[normalizedTag] {
-			continue
-		}
-		seenTags[normalizedTag] = true
+		for _, candidate := range aiActionCompletionCandidates(tagName) {
+			normalizedTag := strings.ToLower(candidate)
+			if normalizedPrefix != "" && !strings.HasPrefix(normalizedTag, normalizedPrefix) {
+				continue
+			}
+			if seenTags[normalizedTag] {
+				continue
+			}
+			seenTags[normalizedTag] = true
 
-		completionTag := tagName
-		if wantBangPrefix {
-			completionTag = "!" + tagName
+			completionTag := candidate
+			if wantBangPrefix {
+				completionTag = "!" + candidate
+			}
+			completions = append(completions, completionTag)
 		}
-		completions = append(completions, completionTag)
 	}
 
 	sort.Strings(completions)

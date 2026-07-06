@@ -45,6 +45,8 @@ var GenerateCmd = &cobra.Command{
 		"to see available AI actions, descriptions, settings, and examples.",
 	Example: "  treecli generate flux \"soft-gradient app icon, violet to indigo\" --out icon.png\n" +
 		"  treecli generate flux2 \"wide hero banner\" --out banner.webp --input aspect_ratio=3:1\n" +
+		"  treecli generate eleven_tts \"read this in a crisp narration voice\" --out narration.mp3\n" +
+		"  treecli generate sfx \"rain, tires on wet asphalt, distant thunder\" --out sfx.mp4\n" +
 		"  treecli generate suno \"warm ambient build, 122 BPM\" --duration 20 --out sketch.mp3\n" +
 		"  treecli generate suno \"cinematic electronic, builds to a drop\" --instrumental --duration 22 \\\n" +
 		"      --reference run:abc123 --out track.mp3\n" +
@@ -74,13 +76,9 @@ func init() {
 }
 
 func runGenerate(cmd *cobra.Command, args []string) error {
-	action := strings.TrimPrefix(strings.TrimSpace(args[0]), "!")
-	prompt := strings.TrimSpace(strings.Join(args[1:], " "))
-	if action == "" {
-		return fmt.Errorf("an AI action is required")
-	}
-	if prompt == "" {
-		return fmt.Errorf("a prompt is required")
+	action, prompt, err := parseGenerateInvocation(args)
+	if err != nil {
+		return err
 	}
 	if !generateQuote && strings.TrimSpace(generateOut) == "" {
 		return fmt.Errorf("--out <path> is required (or use --quote to just see the price)")
@@ -217,6 +215,23 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 		fmt.Printf("Saved %d bytes to %s (run %s)%s\n", totalBytes, strings.Join(written, ", "), result.ID, suffix)
 	}
 	return nil
+}
+
+func parseGenerateInvocation(args []string) (string, string, error) {
+	if len(args) == 0 {
+		return "", "", fmt.Errorf("an AI action is required")
+	}
+
+	action := canonicalAIActionName(args[0])
+	prompt := strings.TrimSpace(strings.Join(args[1:], " "))
+	if action == "" {
+		return "", "", fmt.Errorf("an AI action is required")
+	}
+	if prompt == "" {
+		return "", "", fmt.Errorf("a prompt is required")
+	}
+
+	return action, prompt, nil
 }
 
 func completeGenerateArgs(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
