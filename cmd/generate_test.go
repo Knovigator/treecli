@@ -73,7 +73,6 @@ func TestRunGenerateRejectsNonPositiveTimeoutBeforeAuth(t *testing.T) {
 
 func TestRunGenerateRejectsLegacyReferenceActionsBeforeAuth(t *testing.T) {
 	withGenerateGlobals(t)
-	generateOut = "video.mp4"
 	generatePollInterval = time.Second
 	generateTimeout = time.Minute
 
@@ -85,6 +84,9 @@ func TestRunGenerateRejectsLegacyReferenceActionsBeforeAuth(t *testing.T) {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("expected error to contain %q, got %v", want, err)
 		}
+	}
+	if strings.Contains(err.Error(), "--out <path> is required") {
+		t.Fatalf("expected legacy action guidance before output validation, got %v", err)
 	}
 }
 

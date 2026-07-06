@@ -84,6 +84,9 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	if err := legacyReferenceActionError(action); err != nil {
+		return err
+	}
 	if !generateQuote && strings.TrimSpace(generateOut) == "" {
 		return fmt.Errorf("--out <path> is required (or use --quote to just see the price)")
 	}
@@ -95,9 +98,6 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 	}
 	if generateTimeout <= 0 {
 		return fmt.Errorf("--timeout must be greater than zero")
-	}
-	if err := legacyReferenceActionError(action); err != nil {
-		return err
 	}
 	paymentMode, err := normalizePaymentMode(generatePaymentMode)
 	if err != nil {
