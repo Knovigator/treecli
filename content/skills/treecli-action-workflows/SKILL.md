@@ -21,6 +21,7 @@ Use this skill when you need to submit or inspect Treechat AI action work throug
 - Use `clone` for Chatterbox voice cloning. Direct generation requires an explicit audio reference.
 - Use `video_sfx` for video sound effects or foley. Accepted CLI aliases are `sfx`, `mmaudio`, and `foley`.
 - If the user says "animate this image" or "edit the previous image", do not swap in a plain generation action or you will likely create a new asset instead of transforming the existing one.
+- Direct `treecli generate` edit/animate calls need `--reference @image.png` or another explicit image reference because there is no thread context to infer media from.
 
 ## Submit Action Work
 
@@ -55,6 +56,8 @@ Use this skill when you need to submit or inspect Treechat AI action work throug
 - Chatterbox voice clone direct generation: `treecli generate clone "read this in the sampled voice" --reference @voice.mp3 --out clone.mp3`.
 - ElevenLabs text-to-speech direct generation: `treecli generate eleven_tts "read this in a crisp narration voice" --out narration.mp3`.
 - Video sound effects direct generation: `treecli generate sfx "rain, tires on wet asphalt, distant thunder" --reference @clip.mp4 --out sfx.mp3`.
+- Existing-image animation direct generation: `treecli generate animate_kling "slow handheld push-in" --reference @image.png --out animated.mp4`.
+- Existing-image edit direct generation: `treecli generate edit_qwen "replace the sky with stars" --reference @image.png --out edited.png`.
 - Pass settings with `--input key=value` for individual values, `--settings '{...}'` for a JSON settings object, `--duration` for duration-aware actions, `--instrumental` for music actions, `--reference run:<id>|https://...|@path` for reference-aware actions, and `--payment usd|bsv` for per-run billing rail selection.
 
 ## Output Rules

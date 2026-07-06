@@ -151,6 +151,7 @@ func TestGenerationActionRowsIncludesFullCatalogAndMarksDirectSupport(t *testing
 				Provider:         "replicate",
 				Kind:             "image",
 				AcceptsReference: true,
+				ReferenceKinds:   []string{"image"},
 				Inputs:           []string{"aspect_ratio"},
 			},
 			{
@@ -182,6 +183,9 @@ func TestGenerationActionRowsIncludesFullCatalogAndMarksDirectSupport(t *testing
 	}
 	if got := byAction["flux2"]; !got.DirectGeneration || got.Name != "Flux 2 Pro" || !got.AcceptsReference {
 		t.Fatalf("expected flux2 direct support with catalog metadata, got %#v", got)
+	}
+	if got := byAction["flux2"]; got.RequiresReference || len(got.ReferenceKinds) != 1 || got.ReferenceKinds[0] != "image" {
+		t.Fatalf("expected flux2 optional image reference metadata, got %#v", got)
 	}
 	if got := byAction["flux2"]; !hasSetting(got.Settings, "prompt") || !hasSetting(got.Settings, "aspect_ratio") {
 		t.Fatalf("expected flux2 prompt and aspect_ratio setting help, got %#v", got.Settings)
@@ -300,6 +304,39 @@ func TestChatterboxCloneDirectGenerationHelpRequiresAudioReference(t *testing.T)
 	}
 	if len(row.Notes) == 0 || !strings.Contains(strings.Join(row.Notes, "\n"), "requires --reference with audio media") {
 		t.Fatalf("expected clone reference note, got %#v", row.Notes)
+	}
+}
+
+func TestRequiredImageReferenceDirectGenerationHelpUsesImageExamples(t *testing.T) {
+	row := enrichGenerationActionRow(generationActionRow{
+		Action:            "edit_qwen",
+		Provider:          "replicate",
+		Kind:              "image",
+		DirectGeneration:  true,
+		AcceptsReference:  true,
+		RequiresReference: true,
+		ReferenceKinds:    []string{"image"},
+	})
+
+	if len(row.Examples) == 0 {
+		t.Fatal("expected edit_qwen examples")
+	}
+	if !strings.Contains(row.Examples[0], "--reference @image.png") {
+		t.Fatalf("expected first edit_qwen example to use an image reference, got %#v", row.Examples)
+	}
+	for _, example := range row.Examples {
+		if strings.Contains(example, "treecli generate edit_qwen \"prompt\" --out output.png") {
+			t.Fatalf("edit_qwen should not advertise prompt-only generation, got examples %#v", row.Examples)
+		}
+	}
+	if !hasSetting(row.Settings, "reference_url") {
+		t.Fatalf("expected edit_qwen reference setting help, got %#v", row.Settings)
+	}
+	if got := referenceSummary(row); got != "required:image" {
+		t.Fatalf("expected required image reference summary, got %q", got)
+	}
+	if len(row.Notes) == 0 || !strings.Contains(strings.Join(row.Notes, "\n"), "requires --reference with image media") {
+		t.Fatalf("expected edit_qwen image reference note, got %#v", row.Notes)
 	}
 }
 

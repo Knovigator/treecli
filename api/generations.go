@@ -57,6 +57,8 @@ type GenerationActionInfo struct {
 	Kind                 string        `json:"kind"` // image | audio | video
 	Async                bool          `json:"async"`
 	AcceptsReference     bool          `json:"accepts_reference"`
+	RequiresReference    bool          `json:"requires_reference"`
+	ReferenceKinds       []string      `json:"reference_kinds,omitempty"`
 	SupportsInstrumental bool          `json:"supports_instrumental"`
 	Settings             []SettingInfo `json:"settings,omitempty"`
 	DurationMin          int           `json:"duration_min,omitempty"`

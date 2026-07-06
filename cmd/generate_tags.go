@@ -26,6 +26,8 @@ type generationActionRow struct {
 	DirectGeneration     bool              `json:"direct_generation"`
 	Async                bool              `json:"async"`
 	AcceptsReference     bool              `json:"accepts_reference"`
+	RequiresReference    bool              `json:"requires_reference"`
+	ReferenceKinds       []string          `json:"reference_kinds,omitempty"`
 	SupportsInstrumental bool              `json:"supports_instrumental"`
 	DurationMin          int               `json:"duration_min,omitempty"`
 	DurationMax          int               `json:"duration_max,omitempty"`
@@ -135,7 +137,7 @@ func runGenerateActions(cmd *cobra.Command, args []string) error {
 		}
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 			row.Action, dash(row.Name), dash(row.Provider), dash(row.Kind),
-			yesno(row.DirectGeneration), yesno(row.Async), yesno(row.AcceptsReference),
+			yesno(row.DirectGeneration), yesno(row.Async), referenceSummary(row),
 			yesno(row.SupportsInstrumental), duration, dash(strings.Join(row.Inputs, ",")))
 	}
 	return w.Flush()
@@ -343,6 +345,8 @@ func generationActionRowFromModel(model api.AIModelRef, directTag api.Generation
 	if direct {
 		row.Async = directTag.Async
 		row.AcceptsReference = directTag.AcceptsReference
+		row.RequiresReference = directTag.RequiresReference
+		row.ReferenceKinds = directTag.ReferenceKinds
 		row.SupportsInstrumental = directTag.SupportsInstrumental
 		row.DurationMin = directTag.DurationMin
 		row.DurationMax = directTag.DurationMax
@@ -360,6 +364,8 @@ func generationActionRowFromDirectAction(directTag api.GenerationActionInfo) gen
 		DirectGeneration:     true,
 		Async:                directTag.Async,
 		AcceptsReference:     directTag.AcceptsReference,
+		RequiresReference:    directTag.RequiresReference,
+		ReferenceKinds:       directTag.ReferenceKinds,
 		SupportsInstrumental: directTag.SupportsInstrumental,
 		DurationMin:          directTag.DurationMin,
 		DurationMax:          directTag.DurationMax,
@@ -426,13 +432,17 @@ func generationSettingsFor(row generationActionRow) []settingHelp {
 		})
 	}
 
-	if row.AcceptsReference {
+	if row.AcceptsReference || actionRequiresReference(row) {
+		requiredPrefix := "Reference media used to steer or chain a generation."
+		if actionRequiresReference(row) {
+			requiredPrefix = "Required reference media for this direct generation action."
+		}
 		settings = append(settings, settingHelp{
 			Name:        "reference_url",
 			Type:        "url",
 			How:         "--reference run:<id>, --reference https://..., or --reference @path",
-			Description: "Reference media used to steer or chain a generation. Local files are uploaded first.",
-			Example:     "--reference run:abc123",
+			Description: requiredPrefix + " Local files are uploaded first.",
+			Example:     "--reference " + referenceExamplePath(row),
 		})
 	}
 
@@ -473,6 +483,9 @@ func promptSettingExampleFor(row generationActionRow) string {
 		return fmt.Sprintf("treecli generate %s \"read this in the sampled voice\" --reference @voice.mp3 --out clone.%s", row.Action, ext)
 	case "video_sfx":
 		return fmt.Sprintf("treecli generate %s \"rain, tires on wet asphalt\" --reference @clip.mp4 --out sfx.%s", row.Action, ext)
+	}
+	if actionRequiresReference(row) {
+		return fmt.Sprintf("treecli generate %s \"prompt\" --reference %s --out output.%s", row.Action, referenceExamplePath(row), ext)
 	}
 	return fmt.Sprintf("treecli generate %s \"a cinematic mountain sunrise\" --out output.%s", row.Action, ext)
 }
@@ -675,9 +688,13 @@ func generationExamplesFor(row generationActionRow) []string {
 			fmt.Sprintf("treecli generate %s \"cinematic electronic\" --instrumental --reference run:abc123 --out track.mp3", row.Action),
 		)
 	default:
-		examples = append(examples, fmt.Sprintf("treecli generate %s \"prompt\" --out output.%s", row.Action, ext))
-		if row.AcceptsReference {
-			examples = append(examples, fmt.Sprintf("treecli generate %s \"prompt\" --reference @reference.png --out output.%s", row.Action, ext))
+		if actionRequiresReference(row) {
+			examples = append(examples, fmt.Sprintf("treecli generate %s \"prompt\" --reference %s --out output.%s", row.Action, referenceExamplePath(row), ext))
+		} else {
+			examples = append(examples, fmt.Sprintf("treecli generate %s \"prompt\" --out output.%s", row.Action, ext))
+			if row.AcceptsReference {
+				examples = append(examples, fmt.Sprintf("treecli generate %s \"prompt\" --reference %s --out output.%s", row.Action, referenceExamplePath(row), ext))
+			}
 		}
 	}
 
@@ -696,9 +713,10 @@ func directGenerationNotesFor(row generationActionRow) []string {
 	}
 	if canonicalAIActionName(row.Action) == "video_sfx" {
 		notes = append(notes, "Direct video_sfx requires --reference with video media; post-backed `treecli action sfx` can infer video from the thread.")
-	}
-	if canonicalAIActionName(row.Action) == "clone" {
+	} else if canonicalAIActionName(row.Action) == "clone" {
 		notes = append(notes, "Direct clone requires --reference with audio media; post-backed `treecli action clone` can infer audio from the thread.")
+	} else if actionRequiresReference(row) {
+		notes = append(notes, fmt.Sprintf("Direct %s requires --reference with %s media.", row.Action, strings.Join(referenceKindsFor(row), " or ")))
 	}
 	return notes
 }
@@ -741,6 +759,75 @@ func chatterboxSettings(includeVoice bool) []settingHelp {
 	return settings
 }
 
+func actionRequiresReference(row generationActionRow) bool {
+	if row.RequiresReference {
+		return true
+	}
+	action := canonicalAIActionName(row.Action)
+	if action == "clone" || action == "video_sfx" || action == "grokvideo1.5" || action == "kling3_omni" {
+		return true
+	}
+	return strings.HasPrefix(action, "edit") || strings.HasPrefix(action, "animate")
+}
+
+func referenceKindsFor(row generationActionRow) []string {
+	kinds := []string{}
+	for _, kind := range row.ReferenceKinds {
+		kind = strings.ToLower(strings.TrimSpace(kind))
+		if kind != "" {
+			kinds = append(kinds, kind)
+		}
+	}
+	if len(kinds) > 0 {
+		return kinds
+	}
+
+	action := canonicalAIActionName(row.Action)
+	switch {
+	case action == "clone":
+		return []string{"audio"}
+	case action == "video_sfx":
+		return []string{"video"}
+	case action == "kling3_omni":
+		return []string{"image", "video"}
+	case action == "grokvideo1.5", strings.HasPrefix(action, "edit"), strings.HasPrefix(action, "animate"):
+		return []string{"image"}
+	default:
+		return nil
+	}
+}
+
+func referenceExamplePath(row generationActionRow) string {
+	kinds := referenceKindsFor(row)
+	kind := "image"
+	if len(kinds) > 0 {
+		kind = kinds[0]
+	}
+	switch kind {
+	case "audio":
+		return "@voice.mp3"
+	case "video":
+		return "@clip.mp4"
+	default:
+		return "@image.png"
+	}
+}
+
+func referenceSummary(row generationActionRow) string {
+	if !row.AcceptsReference && !actionRequiresReference(row) {
+		return "no"
+	}
+	kinds := referenceKindsFor(row)
+	label := "yes"
+	if actionRequiresReference(row) {
+		label = "required"
+	}
+	if len(kinds) > 0 {
+		label += ":" + strings.Join(kinds, "|")
+	}
+	return label
+}
+
 func defaultOutputExtension(kind string) string {
 	switch strings.ToLower(strings.TrimSpace(kind)) {
 	case "audio":
@@ -778,6 +865,10 @@ func printGenerationActionDetail(row generationActionRow) error {
 	if row.DirectGeneration {
 		fmt.Printf("Async: %s\n", yesno(row.Async))
 		fmt.Printf("Accepts reference: %s\n", yesno(row.AcceptsReference))
+		fmt.Printf("Requires reference: %s\n", yesno(actionRequiresReference(row)))
+		if kinds := referenceKindsFor(row); len(kinds) > 0 {
+			fmt.Printf("Reference kinds: %s\n", strings.Join(kinds, ", "))
+		}
 		fmt.Printf("Supports instrumental: %s\n", yesno(row.SupportsInstrumental))
 		if row.DurationMax > 0 {
 			fmt.Printf("Duration: %d-%ds\n", row.DurationMin, row.DurationMax)

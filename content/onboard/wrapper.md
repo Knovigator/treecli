@@ -34,6 +34,7 @@ Important Treechat action model:
 - Use plain generation actions like `flux`, `veo3`, or `kling` when you want a new asset from a prompt.
 - Use an `animate_*` action when you want to animate an existing image.
 - Use an `edit_*` action when you want to edit an existing image.
+- Direct `treecli generate` edit/animate calls need `--reference @image.png` or another explicit image reference because there is no thread context.
 - Use `tts`/`chatterbox` or `eleven_tts` for text-to-speech, `clone` for Chatterbox voice cloning with an audio reference, and `video_sfx` for video sound effects; CLI aliases include `chatterbox`, `eleven`, `elevenlabs`, `11`, `sfx`, `mmaudio`, and `foley`.
 - If the task is "animate this previous image" or "edit this previous image", do not pick a plain generation action.
 - Use `--payment usd` for Stripe metered AI billing or `--payment bsv` / `--payment bitcoinsv` for Bitcoin SV; omit it to use the account default.

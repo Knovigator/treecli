@@ -32,6 +32,8 @@ Use `treecli` as the CLI surface for Treechat automation in this repo.
 - Chatterbox voice clone: `treecli action --reply-to <quest-id> clone "read this in the uploaded voice"` in a thread with audio, or `treecli generate clone "read this in the sampled voice" --reference @voice.mp3 --out clone.mp3`.
 - ElevenLabs text-to-speech: `treecli action eleven_tts "read this in a crisp narration voice"` or `treecli generate eleven_tts "read this in a crisp narration voice" --out narration.mp3`; aliases include `eleven`, `elevenlabs`, and `11`.
 - Video sound effects: `treecli action sfx "rain, tires on wet asphalt, distant thunder"` or `treecli generate sfx "rain, tires on wet asphalt, distant thunder" --reference @clip.mp4 --out sfx.mp3`; aliases include `sfx`, `mmaudio`, and `foley`.
+- Direct existing-image animation: `treecli generate animate_kling "slow handheld push-in" --reference @image.png --out animated.mp4`.
+- Direct existing-image edit: `treecli generate edit_qwen "replace the sky with stars" --reference @image.png --out edited.png`.
 - Treechat action model:
 - Use plain AI actions like `flux`, `veo3`, or `kling` to generate a new asset from the prompt.
 - Use `animate_*` AI actions to animate an existing image from the thread or attachment context.
@@ -42,7 +44,7 @@ Use `treecli` as the CLI surface for Treechat automation in this repo.
 - `treecli action` waits by default and shows a spinner in interactive terminals.
 - For post-less local media generation, inspect support with `treecli generate actions --direct-only`.
 - Use `treecli generate actions --verbose` or `treecli generate describe <action>` to get model descriptions, accepted inputs, settings, reference behavior, and examples before generating.
-- Generate local media with `treecli generate <action> "prompt" --out <file>` and pass settings with `--input key=value`, `--settings '{...}'`, `--duration`, `--instrumental`, `--reference`, or `--payment` as described by the action and billing intent.
+- Generate local media with `treecli generate <action> "prompt" --out <file>` and pass settings with `--input key=value`, `--settings '{...}'`, `--duration`, `--instrumental`, `--reference`, or `--payment` as described by the action and billing intent. Direct edit, animate, clone, and video sound-effect actions require explicit reference media because direct generation has no thread context.
 
 ### Async Action Workflows
 
