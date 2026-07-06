@@ -107,6 +107,73 @@ func TestParseActionInvocationSeparatesTagAndPrompt(t *testing.T) {
 	}
 }
 
+func TestParseActionInvocationCanonicalizesReplicateIntegrationAliases(t *testing.T) {
+	tests := []struct {
+		name            string
+		args            []string
+		expectedTag     string
+		expectedPrompt  string
+		expectedContent string
+	}{
+		{
+			name:            "video sfx shorthand",
+			args:            []string{"sfx", "rain", "on", "wet", "asphalt"},
+			expectedTag:     "video_sfx",
+			expectedPrompt:  "rain on wet asphalt",
+			expectedContent: "!video_sfx rain on wet asphalt",
+		},
+		{
+			name:            "eleven labs numeric shorthand",
+			args:            []string{"!11 read this in a warm voice"},
+			expectedTag:     "eleven_tts",
+			expectedPrompt:  "read this in a warm voice",
+			expectedContent: "!eleven_tts read this in a warm voice",
+		},
+		{
+			name:            "eleven labs word shorthand",
+			args:            []string{"elevenlabs", "short", "narration"},
+			expectedTag:     "eleven_tts",
+			expectedPrompt:  "short narration",
+			expectedContent: "!eleven_tts short narration",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			invocation, err := parseActionInvocation(test.args)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if invocation.Tag != test.expectedTag {
+				t.Fatalf("expected tag %q, got %q", test.expectedTag, invocation.Tag)
+			}
+			if invocation.Prompt != test.expectedPrompt {
+				t.Fatalf("expected prompt %q, got %q", test.expectedPrompt, invocation.Prompt)
+			}
+			if invocation.NormalizedContent != test.expectedContent {
+				t.Fatalf("expected normalized content %q, got %q", test.expectedContent, invocation.NormalizedContent)
+			}
+
+			payloadJSON, err := actionRequestsJSONString(invocation, 0, "")
+			if err != nil {
+				t.Fatalf("unexpected action request error: %v", err)
+			}
+
+			var payload []map[string]interface{}
+			if err := json.Unmarshal([]byte(payloadJSON), &payload); err != nil {
+				t.Fatalf("invalid JSON payload: %v", err)
+			}
+			if len(payload) != 1 {
+				t.Fatalf("expected one action request, got %d", len(payload))
+			}
+			if payload[0]["tag"] != test.expectedTag {
+				t.Fatalf("expected request tag %q, got %v", test.expectedTag, payload[0]["tag"])
+			}
+		})
+	}
+}
+
 func TestActionCommandKeepsHiddenTagsCompatibilityCommand(t *testing.T) {
 	if actionTagsCompatCmd.Use != "tags" {
 		t.Fatalf("expected hidden compatibility command to use tags, got %q", actionTagsCompatCmd.Use)

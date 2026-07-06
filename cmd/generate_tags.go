@@ -188,7 +188,7 @@ func generationActionRows(models []api.AIModelRef, directActions []api.Generatio
 		if shouldHideDirectGenerationAction(directAction) {
 			continue
 		}
-		action := normalizedActionName(generationActionInfoName(directAction))
+		action := canonicalAIActionName(generationActionInfoName(directAction))
 		if action == "" {
 			continue
 		}
@@ -202,7 +202,7 @@ func generationActionRows(models []api.AIModelRef, directActions []api.Generatio
 			continue
 		}
 
-		action := normalizedActionName(model.ActionTagName)
+		action := canonicalAIActionName(model.ActionTagName)
 		if action == "" {
 			continue
 		}
@@ -220,7 +220,7 @@ func generationActionRows(models []api.AIModelRef, directActions []api.Generatio
 		if shouldHideDirectGenerationAction(directAction) {
 			continue
 		}
-		action := normalizedActionName(generationActionInfoName(directAction))
+		action := canonicalAIActionName(generationActionInfoName(directAction))
 		if action == "" || seen[action] {
 			continue
 		}
@@ -286,21 +286,30 @@ func completeGenerationActionRowNames(rows []generationActionRow, toComplete str
 
 	for _, row := range rows {
 		action := strings.TrimPrefix(strings.TrimSpace(row.Action), "!")
-		normalizedAction := normalizedActionName(action)
+		normalizedAction := canonicalAIActionName(action)
 		if normalizedAction == "" {
 			continue
 		}
-		if normalizedPrefix != "" && !strings.HasPrefix(normalizedAction, normalizedPrefix) {
-			continue
+		for _, candidate := range aiActionCompletionCandidates(action) {
+			normalizedCandidate := normalizedActionName(candidate)
+			matchesPrefix := normalizedPrefix == "" || strings.HasPrefix(normalizedCandidate, normalizedPrefix)
+			if !matchesPrefix && normalizedCandidate == normalizedAction && strings.HasPrefix(normalizedAction, normalizedPrefix) {
+				matchesPrefix = true
+			}
+			if !matchesPrefix {
+				continue
+			}
+			seenKey := normalizedActionName(candidate)
+			if seenActions[seenKey] {
+				continue
+			}
+			seenActions[seenKey] = true
+			completion := candidate
+			if wantBangPrefix {
+				completion = "!" + candidate
+			}
+			completions = append(completions, completion)
 		}
-		if seenActions[normalizedAction] {
-			continue
-		}
-		seenActions[normalizedAction] = true
-		if wantBangPrefix {
-			action = "!" + action
-		}
-		completions = append(completions, action)
 	}
 
 	sort.Strings(completions)
@@ -308,9 +317,9 @@ func completeGenerationActionRowNames(rows []generationActionRow, toComplete str
 }
 
 func findGenerationActionRow(rows []generationActionRow, action string) (generationActionRow, bool) {
-	normalized := normalizedActionName(action)
+	normalized := canonicalAIActionName(action)
 	for _, row := range rows {
-		if normalizedActionName(row.Action) == normalized {
+		if canonicalAIActionName(row.Action) == normalized {
 			return row, true
 		}
 	}
@@ -363,7 +372,7 @@ func shouldHideDirectGenerationAction(directTag api.GenerationActionInfo) bool {
 	if strings.EqualFold(strings.TrimSpace(directTag.Provider), "openclaw") {
 		return true
 	}
-	return strings.HasPrefix(normalizedActionName(generationActionInfoName(directTag)), "openclaw")
+	return strings.HasPrefix(canonicalAIActionName(generationActionInfoName(directTag)), "openclaw")
 }
 
 func generationActionInfoName(info api.GenerationActionInfo) string {
@@ -484,7 +493,7 @@ func backendSettingsFor(row generationActionRow) []settingHelp {
 }
 
 func knownSettingsFor(row generationActionRow) []settingHelp {
-	switch normalizedActionName(row.Action) {
+	switch canonicalAIActionName(row.Action) {
 	case "flux":
 		return []settingHelp{
 			{
@@ -584,7 +593,7 @@ func generationExamplesFor(row generationActionRow) []string {
 	ext := defaultOutputExtension(row.Kind)
 	examples := []string{fmt.Sprintf("treecli generate %s \"prompt\" --out output.%s", row.Action, ext)}
 
-	switch normalizedActionName(row.Action) {
+	switch canonicalAIActionName(row.Action) {
 	case "flux2":
 		examples = append(examples, fmt.Sprintf("treecli generate %s \"wide hero banner\" --out banner.webp --input aspect_ratio=3:1", row.Action))
 	case "suno":

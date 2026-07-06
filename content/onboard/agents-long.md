@@ -28,6 +28,8 @@ Use `treecli` as the CLI surface for Treechat automation in this repo.
 - Discover model-backed AI actions with `treecli action actions`.
 - Root action: `treecli action flux "a glass cathedral in the rain"`.
 - Reply action: `treecli action --reply-to <quest-id> animate_kling "animate this as a handheld push-in"`.
+- Text-to-speech: `treecli action eleven_tts "read this in a crisp narration voice"` or `treecli generate eleven_tts "read this in a crisp narration voice" --out narration.mp3`; aliases include `eleven`, `elevenlabs`, and `11`.
+- Video sound effects: `treecli action sfx "rain, tires on wet asphalt, distant thunder"` or `treecli generate sfx "rain, tires on wet asphalt, distant thunder" --out sfx.mp4`; aliases include `sfx`, `mmaudio`, and `foley`.
 - Treechat action model:
 - Use plain AI actions like `flux`, `veo3`, or `kling` to generate a new asset from the prompt.
 - Use `animate_*` AI actions to animate an existing image from the thread or attachment context.

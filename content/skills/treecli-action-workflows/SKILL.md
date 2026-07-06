@@ -17,11 +17,15 @@ Use this skill when you need to submit or inspect Treechat AI action work throug
 - Use plain generation actions like `flux`, `veo3`, or `kling` when you want a brand-new asset from the prompt.
 - Use an `animate_*` action when the goal is to animate an existing image.
 - Use an `edit_*` action when the goal is to edit an existing image.
+- Use `eleven_tts` for text-to-speech audio. Accepted CLI aliases are `eleven`, `elevenlabs`, and `11`.
+- Use `video_sfx` for video sound effects or foley. Accepted CLI aliases are `sfx`, `mmaudio`, and `foley`.
 - If the user says "animate this image" or "edit the previous image", do not swap in a plain generation action or you will likely create a new asset instead of transforming the existing one.
 
 ## Submit Action Work
 
 - Root action: `treecli action flux "a glass cathedral in the rain"`.
+- Text-to-speech action: `treecli action eleven_tts "read this in a crisp narration voice"`.
+- Video sound effects action: `treecli action sfx "rain, tires on wet asphalt, distant thunder"`.
 - Root action with requested audio/video duration: `treecli action stableaudio "ambient build, 120 BPM" --duration 90`.
 - Reply action: `treecli action --reply-to <quest-id> animate_kling "animate this as a handheld push-in"`.
 - Existing-image animation: `treecli action --reply-to <quest-id> animate_kling "animate this still as a handheld push-in"`.
@@ -44,6 +48,8 @@ Use this skill when you need to submit or inspect Treechat AI action work throug
 - Use `treecli generate actions --verbose` for a full human/agent-readable catalog with model descriptions, inputs, settings, reference behavior, examples, and notes.
 - Use `treecli generate describe <action>` before generating when you need focused help for one model.
 - Run direct generation with `treecli generate <action> "prompt" --out <file>`.
+- Text-to-speech direct generation: `treecli generate eleven_tts "read this in a crisp narration voice" --out narration.mp3`.
+- Video sound effects direct generation: `treecli generate sfx "rain, tires on wet asphalt, distant thunder" --out sfx.mp4`.
 - Pass settings with `--input key=value` for individual values, `--settings '{...}'` for a JSON settings object, `--duration` for duration-aware actions, `--instrumental` for music actions, `--reference run:<id>|https://...|@path` for reference-aware actions, and `--payment usd|bsv` for per-run billing rail selection.
 
 ## Output Rules

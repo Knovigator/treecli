@@ -71,6 +71,49 @@ func TestRunGenerateRejectsNonPositiveTimeoutBeforeAuth(t *testing.T) {
 	}
 }
 
+func TestParseGenerateInvocationCanonicalizesReplicateIntegrationAliases(t *testing.T) {
+	tests := []struct {
+		name           string
+		args           []string
+		expectedAction string
+		expectedPrompt string
+	}{
+		{
+			name:           "video sfx shorthand",
+			args:           []string{"sfx", "rain", "on", "wet", "asphalt"},
+			expectedAction: "video_sfx",
+			expectedPrompt: "rain on wet asphalt",
+		},
+		{
+			name:           "eleven labs numeric shorthand",
+			args:           []string{"!11", "read", "this"},
+			expectedAction: "eleven_tts",
+			expectedPrompt: "read this",
+		},
+		{
+			name:           "canonical action",
+			args:           []string{"!video_sfx", "foley", "pass"},
+			expectedAction: "video_sfx",
+			expectedPrompt: "foley pass",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			action, prompt, err := parseGenerateInvocation(test.args)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if action != test.expectedAction {
+				t.Fatalf("expected action %q, got %q", test.expectedAction, action)
+			}
+			if prompt != test.expectedPrompt {
+				t.Fatalf("expected prompt %q, got %q", test.expectedPrompt, prompt)
+			}
+		})
+	}
+}
+
 func TestGenerationActionRowsIncludesFullCatalogAndMarksDirectSupport(t *testing.T) {
 	rows := generationActionRows(
 		[]api.AIModelRef{
@@ -188,6 +231,33 @@ func TestFindGenerationActionRowNormalizesBangPrefix(t *testing.T) {
 	}
 }
 
+func TestFindGenerationActionRowCanonicalizesReplicateIntegrationAliases(t *testing.T) {
+	tests := []struct {
+		query    string
+		expected string
+	}{
+		{query: "sfx", expected: "video_sfx"},
+		{query: "!11", expected: "eleven_tts"},
+	}
+
+	rows := []generationActionRow{
+		{Action: "eleven_tts"},
+		{Action: "video_sfx"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.query, func(t *testing.T) {
+			row, ok := findGenerationActionRow(rows, test.query)
+			if !ok {
+				t.Fatalf("expected to find %q", test.query)
+			}
+			if row.Action != test.expected {
+				t.Fatalf("expected %q row, got %#v", test.expected, row)
+			}
+		})
+	}
+}
+
 func TestCompleteGenerationActionRowNamesFiltersAndPreservesBangPrefix(t *testing.T) {
 	rows := []generationActionRow{
 		{Action: "flux2"},
@@ -203,6 +273,29 @@ func TestCompleteGenerationActionRowNamesFiltersAndPreservesBangPrefix(t *testin
 	}
 	if got[0] != "!flux2" {
 		t.Fatalf("expected bang-prefixed flux2 completion, got %#v", got)
+	}
+}
+
+func TestCompleteGenerationActionRowNamesIncludesReplicateIntegrationAliases(t *testing.T) {
+	rows := []generationActionRow{
+		{Action: "eleven_tts"},
+		{Action: "video_sfx"},
+	}
+
+	got := completeGenerationActionRowNames(rows, "s")
+
+	if len(got) != 1 || got[0] != "sfx" {
+		t.Fatalf("expected sfx completion, got %#v", got)
+	}
+
+	got = completeGenerationActionRowNames(rows, "video")
+	if len(got) != 1 || got[0] != "video_sfx" {
+		t.Fatalf("expected video_sfx completion, got %#v", got)
+	}
+
+	got = completeGenerationActionRowNames(rows, "!11")
+	if len(got) != 1 || got[0] != "!11" {
+		t.Fatalf("expected bang-prefixed 11 completion, got %#v", got)
 	}
 }
 
