@@ -2,6 +2,8 @@ package api
 
 import (
 	"bytes"
+	"crypto/md5"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -596,11 +598,26 @@ func postMultipart(
 	form neturl.Values,
 	uploads []MultipartFile,
 ) (*resty.Response, error) {
-	request := newRequest(accessToken, client, uid).
+	// Prefer S3 direct upload: send each attachment's bytes straight to S3 and attach it by
+	// signed_id (a plain form field), so the create request itself stays tiny and the app server
+	// never buffers file bytes. Any attachment whose direct upload fails falls back to a multipart
+	// file part, which the backend still accepts — so this is backwards compatible with the
+	// original files[] byte upload and with backends that lack the direct-upload endpoint.
+	var multipartFallback []MultipartFile
+	for _, upload := range uploads {
+		signedID, err := directUploadToS3(backendURL, accessToken, client, uid, upload)
+		if err != nil || signedID == "" {
+			multipartFallback = append(multipartFallback, upload)
+			continue
+		}
+		form.Add(upload.FieldName, signedID)
+	}
+
+	request := newRequestWithTimeout(accessToken, client, uid, 5*time.Minute).
 		SetHeader("accept", "application/json").
 		SetFormDataFromValues(form)
 
-	for _, upload := range uploads {
+	for _, upload := range multipartFallback {
 		if strings.TrimSpace(upload.ContentType) != "" {
 			request.SetMultipartField(
 				upload.FieldName,
@@ -623,6 +640,78 @@ func postMultipart(
 	}
 
 	return resp, nil
+}
+
+// directUploadToS3 uploads a file's bytes straight to S3 via an Active Storage direct upload and
+// returns the resulting blob's signed_id. The caller attaches the blob by passing that signed_id
+// as an ordinary form field (e.g. files[]=<signed_id>) instead of the raw bytes.
+//
+// Flow (all Active Storage native): POST /rails/active_storage/direct_uploads with the blob's
+// metadata (filename, byte_size, base64 MD5 checksum, content_type) → the backend registers a blob
+// and returns { signed_id, direct_upload: { url, headers } } → PUT the bytes to that presigned S3
+// URL with exactly the returned headers. Any error is returned so the caller can fall back to a
+// multipart file part.
+func directUploadToS3(backendURL, accessToken, client, uid string, file MultipartFile) (string, error) {
+	sum := md5.Sum(file.Content)
+	checksum := base64.StdEncoding.EncodeToString(sum[:])
+	contentType := strings.TrimSpace(file.ContentType)
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+
+	// 1) Register the blob and get a presigned PUT URL. This endpoint is CSRF-exempt and does not
+	//    require app auth, but we send the auth headers harmlessly for consistency.
+	initResp, err := newRequestWithTimeout(accessToken, client, uid, 60*time.Second).
+		SetHeader("accept", "application/json").
+		SetHeader("Content-Type", "application/json").
+		SetBody(map[string]interface{}{
+			"blob": map[string]interface{}{
+				"filename":     file.FileName,
+				"byte_size":    len(file.Content),
+				"checksum":     checksum,
+				"content_type": contentType,
+			},
+		}).
+		Post(fmt.Sprintf("%s/rails/active_storage/direct_uploads", backendURL))
+	if err != nil {
+		return "", fmt.Errorf("direct-upload init request: %w", err)
+	}
+	if initResp.StatusCode() >= 300 {
+		return "", fmt.Errorf("direct-upload init: status %d", initResp.StatusCode())
+	}
+
+	var du struct {
+		SignedID     string `json:"signed_id"`
+		DirectUpload struct {
+			URL     string            `json:"url"`
+			Headers map[string]string `json:"headers"`
+		} `json:"direct_upload"`
+	}
+	if err := json.Unmarshal(initResp.Body(), &du); err != nil {
+		return "", fmt.Errorf("direct-upload parse: %w", err)
+	}
+	if du.SignedID == "" || du.DirectUpload.URL == "" {
+		return "", fmt.Errorf("direct-upload: missing signed_id or url")
+	}
+
+	// 2) PUT the bytes straight to S3. Use a bare client with only the headers the backend returned:
+	//    the presigned URL carries its own auth, and adding our access-token headers would break the
+	//    S3 signature.
+	putClient := resty.New()
+	putClient.SetTimeout(15 * time.Minute)
+	putReq := putClient.R()
+	for k, v := range du.DirectUpload.Headers {
+		putReq.SetHeader(k, v)
+	}
+	putResp, err := putReq.SetBody(file.Content).Put(du.DirectUpload.URL)
+	if err != nil {
+		return "", fmt.Errorf("direct-upload PUT: %w", err)
+	}
+	if putResp.StatusCode() >= 300 {
+		return "", fmt.Errorf("direct-upload PUT: status %d", putResp.StatusCode())
+	}
+
+	return du.SignedID, nil
 }
 
 func ResolveAnswerMediaLinks(answer Answer, fallbackBase string) []ResolvedMediaLink {

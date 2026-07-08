@@ -141,9 +141,10 @@ func prepareAttachmentUploads(attachmentPath, imageField, recordingField, fileFi
 
 	return []api.MultipartFile{
 		{
-			FieldName: fieldName,
-			FileName:  filepath.Base(attachmentPath),
-			Content:   fileContent,
+			FieldName:   fieldName,
+			FileName:    filepath.Base(attachmentPath),
+			ContentType: mimeType,
+			Content:     fileContent,
 		},
 	}, nil
 }
