@@ -1,9 +1,13 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -148,6 +152,148 @@ func TestCreateGenerationSendsActionRequestPayload(t *testing.T) {
 	}
 }
 
+func TestUploadReferenceUsesDirectUploadEndpoint(t *testing.T) {
+	referenceData := []byte("\x89PNG\r\n\x1a\nreference-bytes")
+	referencePath := writeTempReferenceFile(t, "frame.png", referenceData)
+
+	seenRegister := false
+	seenPut := false
+	seenAttach := false
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v1/ai/generations/references/direct_upload":
+			seenRegister = true
+			if got := r.Header.Get("access-token"); got != "secret-token" {
+				t.Fatalf("expected auth header on direct-upload registration, got %q", got)
+			}
+			var payload map[string]interface{}
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decoding direct-upload registration: %v", err)
+			}
+			if payload["filename"] != "frame.png" || payload["content_type"] != "image/png" {
+				t.Fatalf("unexpected registration payload: %#v", payload)
+			}
+			if payload["checksum"] != md5Base64(referenceData) {
+				t.Fatalf("expected checksum %q, got %#v", md5Base64(referenceData), payload["checksum"])
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"signed_id": "signed-reference",
+				"direct_upload": map[string]interface{}{
+					"url": server.URL + "/s3/reference.png",
+					"headers": map[string]string{
+						"Content-Type": "image/png",
+						"Content-MD5":  md5Base64(referenceData),
+					},
+				},
+			})
+		case "/s3/reference.png":
+			seenPut = true
+			for _, header := range []string{"access-token", "client", "uid"} {
+				if got := r.Header.Get(header); got != "" {
+					t.Fatalf("expected no Treechat auth header %s on direct PUT, got %q", header, got)
+				}
+			}
+			if got := r.Header.Get("Content-Type"); got != "image/png" {
+				t.Fatalf("expected PUT Content-Type image/png, got %q", got)
+			}
+			if got := r.Header.Get("Content-MD5"); got != md5Base64(referenceData) {
+				t.Fatalf("expected PUT Content-MD5 %q, got %q", md5Base64(referenceData), got)
+			}
+			if got := r.ContentLength; got != int64(len(referenceData)) {
+				t.Fatalf("expected PUT Content-Length %d, got %d", len(referenceData), got)
+			}
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				t.Fatalf("reading PUT body: %v", err)
+			}
+			if !bytes.Equal(body, referenceData) {
+				t.Fatalf("unexpected PUT body %q", string(body))
+			}
+			w.WriteHeader(http.StatusOK)
+		case "/api/v1/ai/generations/references":
+			seenAttach = true
+			if err := r.ParseForm(); err != nil {
+				t.Fatalf("parsing signed_id attach form: %v", err)
+			}
+			if got := r.FormValue("signed_id"); got != "signed-reference" {
+				t.Fatalf("expected signed_id attach, got %q", got)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"id":"ref-1","url":"https://cdn.example.test/ref.png","content_type":"image/png","kind":"image"}`))
+		default:
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	out, err := UploadReference(server.URL, "secret-token", "client-id", "user@example.test", referencePath)
+	if err != nil {
+		t.Fatalf("UploadReference returned error: %v", err)
+	}
+	if !seenRegister || !seenPut || !seenAttach {
+		t.Fatalf("expected register, PUT, and attach requests; got register=%t put=%t attach=%t", seenRegister, seenPut, seenAttach)
+	}
+	if out.URL != "https://cdn.example.test/ref.png" || out.ContentType != "image/png" || out.Kind != "image" {
+		t.Fatalf("unexpected response: %#v", out)
+	}
+}
+
+func TestUploadReferenceFallsBackToMultipartWhenDirectUploadUnavailable(t *testing.T) {
+	referenceData := []byte("\x89PNG\r\n\x1a\nreference-bytes")
+	referencePath := writeTempReferenceFile(t, "frame.png", referenceData)
+
+	seenDirectUpload := false
+	seenMultipart := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v1/ai/generations/references/direct_upload":
+			seenDirectUpload = true
+			http.NotFound(w, r)
+		case "/api/v1/ai/generations/references":
+			seenMultipart = true
+			if err := r.ParseMultipartForm(2 << 20); err != nil {
+				t.Fatalf("parsing multipart fallback: %v", err)
+			}
+			file, header, err := r.FormFile("file")
+			if err != nil {
+				t.Fatalf("expected multipart file fallback: %v", err)
+			}
+			defer file.Close()
+			if header.Filename != "frame.png" {
+				t.Fatalf("expected fallback filename frame.png, got %q", header.Filename)
+			}
+			if got := header.Header.Get("Content-Type"); got != "image/png" {
+				t.Fatalf("expected image/png fallback content type, got %q", got)
+			}
+			body, err := io.ReadAll(file)
+			if err != nil {
+				t.Fatalf("reading fallback file: %v", err)
+			}
+			if !bytes.Equal(body, referenceData) {
+				t.Fatalf("unexpected fallback file body %q", string(body))
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"id":"ref-1","url":"https://cdn.example.test/ref.png","content_type":"image/png","kind":"image"}`))
+		default:
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	out, err := UploadReference(server.URL, "secret-token", "client-id", "user@example.test", referencePath)
+	if err != nil {
+		t.Fatalf("UploadReference returned error: %v", err)
+	}
+	if !seenDirectUpload || !seenMultipart {
+		t.Fatalf("expected direct-upload attempt and multipart fallback; got direct=%t multipart=%t", seenDirectUpload, seenMultipart)
+	}
+	if out.URL != "https://cdn.example.test/ref.png" {
+		t.Fatalf("unexpected response: %#v", out)
+	}
+}
+
 func TestListGenerationActionsPrefersActionsEndpoint(t *testing.T) {
 	var seenPaths []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -201,4 +347,13 @@ func TestListGenerationActionsFallsBackToLegacyTagsEndpoint(t *testing.T) {
 	if len(seenPaths) != 2 || seenPaths[0] != "/api/v1/ai/generations/actions" || seenPaths[1] != "/api/v1/ai/generations/tags" {
 		t.Fatalf("expected actions then tags fallback, got %#v", seenPaths)
 	}
+}
+
+func writeTempReferenceFile(t *testing.T, name string, data []byte) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), name)
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatalf("writing temp reference file: %v", err)
+	}
+	return path
 }
