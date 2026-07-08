@@ -651,28 +651,31 @@ func postMultipart(
 // and returns { signed_id, direct_upload: { url, headers } } → PUT the bytes to that presigned S3
 // URL with exactly the returned headers. Any error is returned so the caller can fall back to a
 // multipart file part.
-func directUploadToS3(backendURL, accessToken, client, uid string, file MultipartFile) (string, error) {
-	sum := md5.Sum(file.Content)
-	checksum := base64.StdEncoding.EncodeToString(sum[:])
-	contentType := strings.TrimSpace(file.ContentType)
-	if contentType == "" {
-		contentType = "application/octet-stream"
-	}
+// directUploadTarget is the response from a direct-upload registration endpoint: a blob signed_id
+// plus the presigned PUT URL/headers the client uses to send the bytes straight to storage.
+type directUploadTarget struct {
+	SignedID     string `json:"signed_id"`
+	DirectUpload struct {
+		URL     string            `json:"url"`
+		Headers map[string]string `json:"headers"`
+	} `json:"direct_upload"`
+}
 
-	// 1) Register the blob and get a presigned PUT URL. This endpoint is CSRF-exempt and does not
-	//    require app auth, but we send the auth headers harmlessly for consistency.
+func md5Base64(data []byte) string {
+	sum := md5.Sum(data)
+	return base64.StdEncoding.EncodeToString(sum[:])
+}
+
+// registerDirectUploadAndPut registers a blob at registerPath (which returns a presigned PUT
+// target), PUTs the bytes straight to storage, and returns the blob signed_id. The register body is
+// caller-supplied so this works for the standard ActiveStorage endpoint and for custom ones (e.g.
+// the AI-reference registration that keeps an extensioned blob key).
+func registerDirectUploadAndPut(backendURL, accessToken, client, uid, registerPath string, body interface{}, content []byte) (string, error) {
 	initResp, err := newRequestWithTimeout(accessToken, client, uid, 60*time.Second).
 		SetHeader("accept", "application/json").
 		SetHeader("Content-Type", "application/json").
-		SetBody(map[string]interface{}{
-			"blob": map[string]interface{}{
-				"filename":     file.FileName,
-				"byte_size":    len(file.Content),
-				"checksum":     checksum,
-				"content_type": contentType,
-			},
-		}).
-		Post(fmt.Sprintf("%s/rails/active_storage/direct_uploads", backendURL))
+		SetBody(body).
+		Post(fmt.Sprintf("%s%s", backendURL, registerPath))
 	if err != nil {
 		return "", fmt.Errorf("direct-upload init request: %w", err)
 	}
@@ -680,13 +683,7 @@ func directUploadToS3(backendURL, accessToken, client, uid string, file Multipar
 		return "", fmt.Errorf("direct-upload init: status %d", initResp.StatusCode())
 	}
 
-	var du struct {
-		SignedID     string `json:"signed_id"`
-		DirectUpload struct {
-			URL     string            `json:"url"`
-			Headers map[string]string `json:"headers"`
-		} `json:"direct_upload"`
-	}
+	var du directUploadTarget
 	if err := json.Unmarshal(initResp.Body(), &du); err != nil {
 		return "", fmt.Errorf("direct-upload parse: %w", err)
 	}
@@ -694,16 +691,16 @@ func directUploadToS3(backendURL, accessToken, client, uid string, file Multipar
 		return "", fmt.Errorf("direct-upload: missing signed_id or url")
 	}
 
-	// 2) PUT the bytes straight to S3. Use a bare client with only the headers the backend returned:
-	//    the presigned URL carries its own auth, and adding our access-token headers would break the
-	//    S3 signature.
+	// PUT the bytes straight to S3 with a bare client and ONLY the headers the backend returned:
+	// the presigned URL carries its own auth, and adding our access-token headers would break the
+	// S3 signature.
 	putClient := resty.New()
 	putClient.SetTimeout(15 * time.Minute)
 	putReq := putClient.R()
 	for k, v := range du.DirectUpload.Headers {
 		putReq.SetHeader(k, v)
 	}
-	putResp, err := putReq.SetBody(file.Content).Put(du.DirectUpload.URL)
+	putResp, err := putReq.SetBody(content).Put(du.DirectUpload.URL)
 	if err != nil {
 		return "", fmt.Errorf("direct-upload PUT: %w", err)
 	}
@@ -712,6 +709,48 @@ func directUploadToS3(backendURL, accessToken, client, uid string, file Multipar
 	}
 
 	return du.SignedID, nil
+}
+
+// directUploadToS3 registers + uploads a file via the standard ActiveStorage direct-upload endpoint
+// and returns its signed_id.
+func directUploadToS3(backendURL, accessToken, client, uid string, file MultipartFile) (string, error) {
+	contentType := strings.TrimSpace(file.ContentType)
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	body := map[string]interface{}{
+		"blob": map[string]interface{}{
+			"filename":     file.FileName,
+			"byte_size":    len(file.Content),
+			"checksum":     md5Base64(file.Content),
+			"content_type": contentType,
+		},
+	}
+	return registerDirectUploadAndPut(backendURL, accessToken, client, uid, "/rails/active_storage/direct_uploads", body, file.Content)
+}
+
+// postRawMultipart sends a plain multipart form (no direct upload). Used by callers that must keep
+// server-side file handling — e.g. AI reference uploads whose server generates an extensioned blob
+// key — and as the fallback when a direct-upload endpoint is unavailable.
+func postRawMultipart(backendURL, path, accessToken, client, uid string, form neturl.Values, uploads []MultipartFile) (*resty.Response, error) {
+	request := newRequestWithTimeout(accessToken, client, uid, 5*time.Minute).
+		SetHeader("accept", "application/json").
+		SetFormDataFromValues(form)
+	for _, upload := range uploads {
+		if strings.TrimSpace(upload.ContentType) != "" {
+			request.SetMultipartField(upload.FieldName, upload.FileName, upload.ContentType, bytes.NewReader(upload.Content))
+		} else {
+			request.SetFileReader(upload.FieldName, upload.FileName, bytes.NewReader(upload.Content))
+		}
+	}
+	resp, err := request.Post(fmt.Sprintf("%s%s", backendURL, path))
+	if err != nil {
+		return nil, fmt.Errorf("error making request: %v", err)
+	}
+	if resp.StatusCode() != http.StatusOK {
+		return nil, fmt.Errorf("received status code %d: %s", resp.StatusCode(), SafeResponseBody(resp.Body()))
+	}
+	return resp, nil
 }
 
 func ResolveAnswerMediaLinks(answer Answer, fallbackBase string) []ResolvedMediaLink {
