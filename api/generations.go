@@ -235,36 +235,62 @@ func UploadReference(backendURL, accessToken, client, uid, filePath string) (Ref
 		return ReferenceUploadResponse{}, fmt.Errorf("reading reference file %s: %w", filePath, err)
 	}
 	contentType := DetectFileContentType(filePath, data)
-	uploads := []MultipartFile{
-		{
-			FieldName:   "file",
-			FileName:    filepath.Base(filePath),
-			ContentType: contentType,
-			Content:     data,
-		},
+	filename := filepath.Base(filePath)
+
+	// Prefer S3 direct upload: register a reference blob (the server keeps an extensioned key so the
+	// presigned URL path carries the file extension for extension-checking providers), PUT the bytes
+	// straight to S3, then attach by signed_id. Fall back to a raw multipart file upload when the
+	// direct-upload endpoint is unavailable (older backend) or any step fails.
+	if out, ok := uploadReferenceDirect(backendURL, accessToken, client, uid, filename, contentType, data); ok {
+		return out, nil
 	}
 
-	resp, err := postMultipart(
-		backendURL,
-		"/api/v1/ai/generations/references",
-		accessToken,
-		client,
-		uid,
-		neturl.Values{},
-		uploads,
-	)
+	uploads := []MultipartFile{{FieldName: "file", FileName: filename, ContentType: contentType, Content: data}}
+	resp, err := postRawMultipart(backendURL, "/api/v1/ai/generations/references", accessToken, client, uid, neturl.Values{}, uploads)
 	if err != nil {
 		return ReferenceUploadResponse{}, err
 	}
+	return parseReferenceUploadResponse(resp.Body(), contentType)
+}
 
+// uploadReferenceDirect uploads the reference file straight to S3 via the reference direct-upload
+// registration endpoint and attaches it by signed_id. Returns (response, true) on success, or
+// (_, false) so the caller can fall back to a raw multipart upload.
+func uploadReferenceDirect(backendURL, accessToken, client, uid, filename, contentType string, data []byte) (ReferenceUploadResponse, bool) {
+	ct := strings.TrimSpace(contentType)
+	if ct == "" {
+		ct = "application/octet-stream"
+	}
+	body := map[string]interface{}{
+		"filename":     filename,
+		"content_type": ct,
+		"byte_size":    len(data),
+		"checksum":     md5Base64(data),
+	}
+	signedID, err := registerDirectUploadAndPut(backendURL, accessToken, client, uid, "/api/v1/ai/generations/references/direct_upload", body, data)
+	if err != nil || signedID == "" {
+		return ReferenceUploadResponse{}, false
+	}
+	resp, err := postRawMultipart(backendURL, "/api/v1/ai/generations/references", accessToken, client, uid, neturl.Values{"signed_id": {signedID}}, nil)
+	if err != nil {
+		return ReferenceUploadResponse{}, false
+	}
+	out, err := parseReferenceUploadResponse(resp.Body(), contentType)
+	if err != nil || out.URL == "" {
+		return ReferenceUploadResponse{}, false
+	}
+	return out, true
+}
+
+func parseReferenceUploadResponse(body []byte, contentType string) (ReferenceUploadResponse, error) {
 	var out ReferenceUploadResponse
-	if err := json.Unmarshal(resp.Body(), &out); err != nil {
+	if err := json.Unmarshal(body, &out); err != nil {
 		return ReferenceUploadResponse{}, fmt.Errorf("parsing reference upload response: %w", err)
 	}
 	if out.URL == "" {
 		msg := out.Error
 		if msg == "" {
-			msg = SafeResponseBody(resp.Body())
+			msg = SafeResponseBody(body)
 		}
 		return out, fmt.Errorf("reference upload returned no url: %s", msg)
 	}

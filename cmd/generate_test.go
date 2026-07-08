@@ -490,6 +490,10 @@ func TestFirstGenerationMediaPrefersTypedMediaOutputs(t *testing.T) {
 func TestResolveFileInputSettingsUploadsReferenceLikeInput(t *testing.T) {
 	uploadSeen := false
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v1/ai/generations/references/direct_upload" {
+			http.NotFound(w, r)
+			return
+		}
 		if r.URL.Path != "/api/v1/ai/generations/references" {
 			t.Fatalf("unexpected path %s", r.URL.Path)
 		}
