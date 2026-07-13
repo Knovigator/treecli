@@ -288,7 +288,7 @@ func resolveProfileName() string {
 		return normalizeProfileName(profileName)
 	}
 
-	return "dev"
+	return "prod"
 }
 
 func normalizeProfileName(profileName string) string {
