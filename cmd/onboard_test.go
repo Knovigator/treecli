@@ -69,7 +69,7 @@ func TestUpsertOnboardBlockAppendsToExistingContent(t *testing.T) {
 	tempDir := chdirToTempDir(t)
 	target := filepath.Join(tempDir, "AGENTS.md")
 
-	existing := "# My project\n\nHouse rules here.\n"
+	existing := "# My project\n\nHouse rules here.\n\n\n"
 	if err := os.WriteFile(target, []byte(existing), 0644); err != nil {
 		t.Fatalf("seeding file: %v", err)
 	}
@@ -89,8 +89,48 @@ func TestUpsertOnboardBlockAppendsToExistingContent(t *testing.T) {
 	if !strings.HasPrefix(string(content), "# My project") {
 		t.Fatal("expected existing content to be preserved at the top")
 	}
+	if !strings.HasPrefix(string(content), existing) {
+		t.Fatal("expected append to preserve every existing byte")
+	}
 	if !strings.Contains(string(content), "variant=short") {
 		t.Fatal("expected short variant marker")
+	}
+}
+
+func TestValidateOnboardAgentsFlagsRejectsIgnoredOptions(t *testing.T) {
+	testCases := []struct {
+		name    string
+		variant string
+		write   bool
+		check   bool
+		file    string
+	}{
+		{name: "file without operation", file: "AGENTS.md"},
+		{name: "variant with check", variant: "short", check: true},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			if err := validateOnboardAgentsFlags(testCase.variant, testCase.write, testCase.check, testCase.file); err == nil {
+				t.Fatal("expected invalid flag combination to return an error")
+			}
+		})
+	}
+
+	if err := validateOnboardAgentsFlags("short", true, false, "AGENTS.md"); err != nil {
+		t.Fatalf("expected --write --short --file to be valid, got %v", err)
+	}
+	if err := validateOnboardAgentsFlags("", false, true, "AGENTS.md"); err != nil {
+		t.Fatalf("expected --check --file to be valid, got %v", err)
+	}
+}
+
+func TestValidateOnboardRootFlagsRejectsJSONWithLegacyMode(t *testing.T) {
+	if err := validateOnboardRootFlags(true, true); err == nil {
+		t.Fatal("expected --json with legacy onboarding flags to return an error")
+	}
+	if err := validateOnboardRootFlags(true, false); err != nil {
+		t.Fatalf("expected standalone --json to be valid, got %v", err)
 	}
 }
 
@@ -215,6 +255,25 @@ func TestOnboardBlockStateInFile(t *testing.T) {
 	}
 }
 
+func TestOnboardAgentsCheckFailsWhenAnyManagedBlockIsStale(t *testing.T) {
+	chdirToTempDir(t)
+
+	if _, err := upsertOnboardBlockInFile("AGENTS.md", "long"); err != nil {
+		t.Fatalf("installing current AGENTS.md block: %v", err)
+	}
+	if err := os.WriteFile(
+		"CLAUDE.md",
+		[]byte(onboardBeginMarkerPrefix+" variant=short -->\nstale\n"+onboardEndMarker+"\n"),
+		0644,
+	); err != nil {
+		t.Fatalf("installing stale CLAUDE.md block: %v", err)
+	}
+
+	if err := runOnboardAgentsCheck(); err == nil {
+		t.Fatal("expected check to fail while any managed guidance block is stale")
+	}
+}
+
 func TestResolveOnboardWriteTargets(t *testing.T) {
 	chdirToTempDir(t)
 
@@ -289,5 +348,13 @@ func TestBuildOnboardNextStepsDropsCompletedItems(t *testing.T) {
 	}
 	if !strings.Contains(steps[1].Command, "onboard agents --write") {
 		t.Fatalf("expected guidance refresh step, got %q", steps[1].Command)
+	}
+
+	status.Profile.SignedIn = true
+	status.AgentFiles[0].Block = string(onboardBlockCurrent)
+	status.Skills.Installed[0].Count = 1
+	steps = buildOnboardNextSteps(status)
+	if len(steps) != 1 || !strings.Contains(steps[0].Command, "skills install all") {
+		t.Fatalf("expected a partial skill install to remain incomplete, got %v", steps)
 	}
 }

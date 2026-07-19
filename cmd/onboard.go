@@ -29,6 +29,7 @@ Subcommands:
   treecli onboard agents --write       # install/update the guidance block in AGENTS.md
   treecli onboard agents --check       # verify the guidance block is present and current
   treecli onboard guide                # full onboarding guide document`,
+	Args: cobra.NoArgs,
 	RunE: runOnboard,
 }
 
@@ -117,7 +118,11 @@ func init() {
 }
 
 func runOnboard(cmd *cobra.Command, args []string) error {
-	if onboardShort || onboardLong || onboardAgentsMD || onboardOutputPath != "" {
+	legacyMode := onboardShort || onboardLong || onboardAgentsMD || onboardOutputPath != ""
+	if err := validateOnboardRootFlags(onboardJSON, legacyMode); err != nil {
+		return err
+	}
+	if legacyMode {
 		return runOnboardLegacy()
 	}
 
@@ -136,6 +141,13 @@ func runOnboard(cmd *cobra.Command, args []string) error {
 	}
 
 	printOnboardStatus(status)
+	return nil
+}
+
+func validateOnboardRootFlags(jsonOutput bool, legacyMode bool) error {
+	if jsonOutput && legacyMode {
+		return fmt.Errorf("--json cannot be combined with deprecated onboarding flags")
+	}
 	return nil
 }
 
@@ -197,6 +209,9 @@ func runOnboardAgents(cmd *cobra.Command, args []string) error {
 	if onboardAgentsLong {
 		variant = "long"
 	}
+	if err := validateOnboardAgentsFlags(variant, onboardAgentsWrite, onboardAgentsCheck, onboardAgentsFile); err != nil {
+		return err
+	}
 
 	if onboardAgentsCheck {
 		return runOnboardAgentsCheck()
@@ -214,6 +229,16 @@ func runOnboardAgents(cmd *cobra.Command, args []string) error {
 	}
 
 	printWithTrailingNewline(content)
+	return nil
+}
+
+func validateOnboardAgentsFlags(variant string, write bool, check bool, file string) error {
+	if strings.TrimSpace(file) != "" && !write && !check {
+		return fmt.Errorf("--file requires --write or --check")
+	}
+	if check && variant != "" {
+		return fmt.Errorf("--short and --long cannot be used with --check")
+	}
 	return nil
 }
 
@@ -240,6 +265,7 @@ func runOnboardAgentsCheck() error {
 	}
 
 	anyCurrent := false
+	anyStale := false
 	for _, target := range targets {
 		state, variant, err := onboardBlockStateInFile(target)
 		if err != nil {
@@ -252,11 +278,15 @@ func runOnboardAgentsCheck() error {
 			anyCurrent = true
 		case onboardBlockStale:
 			fmt.Printf("%s: guidance block stale (%s)\n", target, variant)
+			anyStale = true
 		case onboardBlockAbsent:
 			fmt.Printf("%s: no guidance block\n", target)
 		}
 	}
 
+	if anyStale {
+		return fmt.Errorf("one or more treecli guidance blocks are stale; run treecli onboard agents --write")
+	}
 	if !anyCurrent {
 		return fmt.Errorf("no current treecli guidance block found; run treecli onboard agents --write")
 	}
@@ -333,7 +363,14 @@ func upsertOnboardBlock(existing string, managedBlock string, path string) (stri
 		return managedBlock + "\n", "created", nil
 	}
 
-	return strings.TrimRight(existing, "\n") + "\n\n" + managedBlock + "\n", "appended", nil
+	separator := "\n\n"
+	if strings.HasSuffix(existing, "\n\n") {
+		separator = ""
+	} else if strings.HasSuffix(existing, "\n") {
+		separator = "\n"
+	}
+
+	return existing + separator + managedBlock + "\n", "appended", nil
 }
 
 func onboardVariantFromMarkers(content string) string {
@@ -543,13 +580,7 @@ func buildOnboardNextSteps(status onboardStatus) []onboardNextStep {
 		})
 	}
 
-	skillsInstalledSomewhere := false
-	for _, target := range status.Skills.Installed {
-		if target.Count > 0 {
-			skillsInstalledSomewhere = true
-		}
-	}
-	if !skillsInstalledSomewhere && status.Skills.Packaged > 0 {
+	if !onboardSkillsComplete(status.Skills) && status.Skills.Packaged > 0 {
 		steps = append(steps, onboardNextStep{
 			Description: "Install the packaged agent skills (pick --claude, --codex, or --pi)",
 			Command:     "treecli skills install all --claude",
@@ -557,6 +588,18 @@ func buildOnboardNextSteps(status onboardStatus) []onboardNextStep {
 	}
 
 	return steps
+}
+
+func onboardSkillsComplete(skills onboardSkillsStatus) bool {
+	if skills.Packaged == 0 {
+		return true
+	}
+	for _, target := range skills.Installed {
+		if target.Count >= skills.Packaged {
+			return true
+		}
+	}
+	return false
 }
 
 func printOnboardStatus(status onboardStatus) {
@@ -573,26 +616,28 @@ func printOnboardStatus(status onboardStatus) {
 	}
 
 	blockLine := "no guidance block in AGENTS.md or CLAUDE.md here"
-	blockDone := false
+	hasCurrentBlock := false
+	hasStaleBlock := false
 	for _, file := range status.AgentFiles {
 		switch file.Block {
 		case string(onboardBlockCurrent):
-			blockLine = fmt.Sprintf("agent guidance: %s (current, %s)", file.Path, file.Variant)
-			blockDone = true
-		case string(onboardBlockStale):
-			if !blockDone {
-				blockLine = fmt.Sprintf("agent guidance: %s (stale)", file.Path)
+			hasCurrentBlock = true
+			if !hasStaleBlock {
+				blockLine = fmt.Sprintf("agent guidance: %s (current, %s)", file.Path, file.Variant)
 			}
+		case string(onboardBlockStale):
+			hasStaleBlock = true
+			blockLine = fmt.Sprintf("agent guidance: %s (stale)", file.Path)
 		}
 	}
+	blockDone := hasCurrentBlock && !hasStaleBlock
 	fmt.Printf("  %s %s\n", checkbox(blockDone), blockLine)
 
 	skillsLine := "skills: none installed"
-	skillsDone := false
+	skillsDone := onboardSkillsComplete(status.Skills)
 	installedParts := []string{}
 	for _, target := range status.Skills.Installed {
 		if target.Count > 0 {
-			skillsDone = true
 			installedParts = append(installedParts, fmt.Sprintf("%d/%d %s", target.Count, status.Skills.Packaged, target.Target))
 		}
 	}
