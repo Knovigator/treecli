@@ -47,6 +47,31 @@ The project was renamed from `treectl` to `treecli` in `v0.2.0`.
 - Release archives still include a `treectl` compatibility binary, and the installer writes it by default. Set `TREECLI_INSTALL_LEGACY=0` to skip that compatibility command.
 - Existing `TREECTL_*` environment variables and `treectl/config.toml` are accepted as migration fallbacks.
 
+## Onboarding
+
+Check where your setup stands and what to do next:
+
+```sh
+treecli onboard          # checklist: profile, login, agent guidance, skills
+treecli onboard --json   # machine-readable status
+```
+
+Give coding agents treecli guidance by installing a managed block into the
+project's instruction file. The block is wrapped in marker comments and
+updated in place, so re-running never duplicates it:
+
+```sh
+treecli onboard agents --write                 # AGENTS.md (or existing CLAUDE.md)
+treecli onboard agents --write --file CLAUDE.md
+treecli onboard agents --check                 # non-zero exit if missing or stale
+treecli onboard agents                         # print the raw block instead
+```
+
+`treecli onboard guide` prints the full onboarding document, and
+`treecli skills install all --claude` (or `--codex` / `--pi`) installs the
+packaged agent skills. Design details are in
+[docs/onboarding-architecture.md](docs/onboarding-architecture.md).
+
 ## Common Commands
 
 ```sh
@@ -137,7 +162,7 @@ gh release view v0.2.0 --repo Knovigator/treecli
 
 ## Agent Usage
 
-Agents should install `treecli`, authenticate with `treecli login` or supported `TREECLI_*` environment variables, inspect model capabilities with `treecli generate actions --verbose` or `treecli generate describe <action>`, and rely on server-side authorization for all Treechat access. Do not distribute tokens inside release artifacts.
+Agents should install `treecli`, run `treecli onboard` to see what setup remains, authenticate with `treecli login` or supported `TREECLI_*` environment variables, install project guidance with `treecli onboard agents --write`, inspect model capabilities with `treecli generate actions --verbose` or `treecli generate describe <action>`, and rely on server-side authorization for all Treechat access. Do not distribute tokens inside release artifacts.
 
 ## License
 

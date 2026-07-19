@@ -70,6 +70,7 @@ Use `treecli` as the CLI surface for Treechat automation in this repo.
 - Check for a newer release with `treecli update --check`.
 - Install the latest release with `treecli update`.
 - Use `treecli update --json` or `treecli update --check --json` when another tool needs structured update status.
+- After updating, refresh this guidance block with `treecli onboard agents --write`; verify it with `treecli onboard agents --check`.
 
 ### Shell Completion
 
