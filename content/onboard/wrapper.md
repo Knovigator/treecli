@@ -8,18 +8,25 @@ Add treecli guidance to your instruction file:
 - `AGENTS.md` for Codex and generic agent tools
 - `CLAUDE.md` for Claude Code
 
-Append if the file already exists.
-
-Raw block for direct append:
+Install or refresh the block idempotently (recommended — it is wrapped in
+marker comments and updated in place, so re-runs never duplicate it):
 
 ```bash
-# Full agents.md block (default long)
-treecli onboard --agents-md >> AGENTS.md
-
-# Explicit short/long variants
-treecli onboard --agents-md --short >> AGENTS.md
-treecli onboard --agents-md --long >> AGENTS.md
+treecli onboard agents --write                 # AGENTS.md (or existing CLAUDE.md) in the current directory
+treecli onboard agents --write --file CLAUDE.md
+treecli onboard agents --write --short         # compact variant
+treecli onboard agents --check                 # verify present and current; non-zero exit otherwise
 ```
+
+Print the raw block if you want to place it yourself:
+
+```bash
+treecli onboard agents           # full block (default)
+treecli onboard agents --short   # compact block
+```
+
+Check overall setup state (profile, login, guidance block, skills) with
+`treecli onboard`; add `--json` for machine-readable status.
 
 Install packaged treecli skills instead of copying them by hand:
 

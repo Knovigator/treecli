@@ -15,5 +15,5 @@
 - Use `treecli action --no-wait` plus `treecli action status --answer ...` or `--thread ...` for async flows.
 - Human-readable output is the default. Use `--json` when you need structured output.
 - Install packaged skills with `treecli skills list` and `treecli skills install ...`.
-- Check for a newer CLI release with `treecli update --check`; install it with `treecli update`. Use `--json` for machine-readable update status.
+- Check for a newer CLI release with `treecli update --check`; install it with `treecli update`. Use `--json` for machine-readable update status. After updating, refresh this guidance block with `treecli onboard agents --write`.
 - Turn on bash/zsh completions in the current shell with `if [ -n "${ZSH_VERSION:-}" ]; then autoload -U compinit && compinit; source <(treecli completion zsh); elif command -v complete >/dev/null 2>&1; then source <(treecli completion bash); else echo "Current shell does not support bash completion; use zsh or a bash with progcomp."; fi`.
