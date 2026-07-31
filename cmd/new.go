@@ -27,8 +27,10 @@ var replyThreadID string
 var replyAttachment string
 var replySpaceID string
 var replyMessageType string
+var replyWriteID string
 
 type replyCreateOptions struct {
+	WriteID            string
 	ReplyToQuestID     string
 	Content            string
 	DeltaJSON          string
@@ -48,6 +50,7 @@ func init() {
 	newReplyCmd.Flags().StringVarP(&replyAttachment, "attachment", "f", "", "Path to the file to attach")
 	newReplyCmd.Flags().StringVar(&replySpaceID, "space-id", "", "Space ID to create the reply in")
 	newReplyCmd.Flags().StringVar(&replyMessageType, "message-type", "", "Optional message_type for the reply")
+	newReplyCmd.Flags().StringVar(&replyWriteID, "id", "", "UUID for this reply; reuse it to retry safely")
 	newReplyCmd.Flags().StringVarP(&createOutputFormat, "output", "o", "ascii", "Output format: ascii or json")
 	newReplyCmd.Flags().BoolVar(&createJSONOutput, "json", false, "Output JSON instead of human-readable text")
 	_ = newReplyCmd.MarkFlagRequired("reply-to")
@@ -75,6 +78,7 @@ func runNewReply(cmd *cobra.Command, args []string) error {
 	result, err := createReply(
 		profile,
 		replyCreateOptions{
+			WriteID:        replyWriteID,
 			ReplyToQuestID: replyToQuestID,
 			Content:        content,
 			Attachment:     replyAttachment,
@@ -90,29 +94,24 @@ func runNewReply(cmd *cobra.Command, args []string) error {
 }
 
 func createReply(profile profileConfig, options replyCreateOptions) (api.CreateAnswerResponse, error) {
-	spaceID, err := resolveSpaceID(profile, options.SpaceID)
+	answerID, err := resolveWriteID(options.WriteID)
 	if err != nil {
 		return api.CreateAnswerResponse{}, err
 	}
 
-	answerID, err := newUUID()
+	spaceID, err := resolveSpaceID(profile, options.SpaceID)
 	if err != nil {
-		return api.CreateAnswerResponse{}, fmt.Errorf("error generating answer id: %w", err)
-	}
-
-	childQuestID, err := newUUID()
-	if err != nil {
-		return api.CreateAnswerResponse{}, fmt.Errorf("error generating child quest id: %w", err)
+		return api.CreateAnswerResponse{}, withWriteID(answerID, err)
 	}
 
 	uploads, err := prepareAttachmentUploads(options.Attachment, "images[]", "recording", "files[]")
 	if err != nil {
-		return api.CreateAnswerResponse{}, err
+		return api.CreateAnswerResponse{}, withWriteID(answerID, err)
 	}
 
 	deltaJSON, err := textToDeltaJSONString(options.Content)
 	if err != nil {
-		return api.CreateAnswerResponse{}, err
+		return api.CreateAnswerResponse{}, withWriteID(answerID, err)
 	}
 	if strings.TrimSpace(options.DeltaJSON) != "" {
 		deltaJSON = options.DeltaJSON
@@ -125,7 +124,6 @@ func createReply(profile profileConfig, options replyCreateOptions) (api.CreateA
 		profile.UID,
 		api.CreateAnswerRequest{
 			AnswerID:           answerID,
-			ChildQuestID:       childQuestID,
 			QuestID:            options.ReplyToQuestID,
 			SpaceID:            spaceID,
 			UserID:             profile.CurrentUserID,
@@ -137,7 +135,7 @@ func createReply(profile profileConfig, options replyCreateOptions) (api.CreateA
 		},
 	)
 	if err != nil {
-		return api.CreateAnswerResponse{}, err
+		return api.CreateAnswerResponse{}, withWriteID(answerID, err)
 	}
 
 	return result, nil

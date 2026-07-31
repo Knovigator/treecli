@@ -27,7 +27,7 @@ func clipLink(url, content, attachment string, target streamTarget, outputFormat
 		return err
 	}
 
-	result, err := createClipQuest(profile, url, content, attachment, target)
+	result, err := createClipQuest(profile, url, content, attachment, target, "")
 	if err != nil {
 		return fmt.Errorf("creating post: %w", err)
 	}
@@ -427,23 +427,30 @@ func createClipQuest(
 	content string,
 	attachment string,
 	target streamTarget,
+	requestedWriteID string,
 ) (api.CreateQuestResponse, error) {
-	image, video, file, err := prepareClipAttachmentData(attachment)
+	questID, err := resolveWriteID(requestedWriteID)
 	if err != nil {
 		return api.CreateQuestResponse{}, err
+	}
+
+	image, video, file, err := prepareClipAttachmentData(attachment)
+	if err != nil {
+		return api.CreateQuestResponse{}, withWriteID(questID, err)
 	}
 
 	deltaJSON, err := textToDeltaJSONString(content)
 	if err != nil {
-		return api.CreateQuestResponse{}, err
+		return api.CreateQuestResponse{}, withWriteID(questID, err)
 	}
 
-	return api.CreateClipQuest(
+	result, err := api.CreateClipQuest(
 		profile.BackendURL,
 		profile.AccessToken,
 		profile.Client,
 		profile.UID,
 		api.CreateClipQuestRequest{
+			QuestID:     questID,
 			URL:         url,
 			Content:     content,
 			DeltaJSON:   deltaJSON,
@@ -453,6 +460,11 @@ func createClipQuest(
 			Destination: clipDestinationFromTarget(target),
 		},
 	)
+	if err != nil {
+		return api.CreateQuestResponse{}, withWriteID(questID, err)
+	}
+
+	return result, nil
 }
 
 func clipDestinationFromTarget(target streamTarget) map[string]interface{} {
@@ -482,6 +494,7 @@ func printCreateQuestResult(profile profileConfig, result api.CreateQuestRespons
 	}
 
 	fmt.Printf("Post created. Thread: %s Root answer: %s\n", result.Quest.ID, rootAnswerID)
+	fmt.Printf("Write ID: %s\n", result.Quest.ID)
 	fmt.Printf("Link: %s\n", threadLink(profile, result.Quest.ID))
 	return nil
 }
@@ -505,6 +518,7 @@ func printCreateAnswerResult(profile profileConfig, result api.CreateAnswerRespo
 	}
 
 	fmt.Printf("Reply created. Thread: %s Answer: %s\n", threadID, result.Answer.ID)
+	fmt.Printf("Write ID: %s\n", result.Answer.ID)
 	if threadID != "" {
 		fmt.Printf("Link: %s\n", threadLink(profile, threadID))
 	}

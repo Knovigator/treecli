@@ -76,6 +76,7 @@ var postMessageType string
 var postTeamID string
 var postPublic bool
 var postPrivate bool
+var postWriteID string
 var createOutputFormat string
 var createJSONOutput bool
 var actionAttachment string
@@ -87,6 +88,7 @@ var actionMessageType string
 var actionTeamID string
 var actionPublic bool
 var actionPrivate bool
+var actionWriteID string
 var actionAllowUnknownTag bool
 var actionPaymentMode string
 var actionOutputFormat string
@@ -104,6 +106,7 @@ var actionStatusPollInterval time.Duration
 var actionStatusTimeout time.Duration
 
 type rootThreadCreateOptions struct {
+	WriteID            string
 	Content            string
 	DeltaJSON          string
 	ActionRequestsJSON string
@@ -120,6 +123,7 @@ type rootThreadCreateOptions struct {
 
 type actionResult struct {
 	Status        string   `json:"status"`
+	WriteID       string   `json:"write_id,omitempty"`
 	ThreadUUID    string   `json:"thread_uuid"`
 	PostUUID      string   `json:"post_uuid"`
 	ThreadLink    string   `json:"thread_link"`
@@ -140,6 +144,7 @@ type actionSpinner struct {
 
 type actionSubmission struct {
 	ThreadID string
+	WriteID  string
 	Answer   api.Answer
 }
 
@@ -155,6 +160,7 @@ func init() {
 	newPostCmd.Flags().StringVar(&postTeamID, "team-id", "", "Optional stream/team ID to post into")
 	newPostCmd.Flags().BoolVar(&postPublic, "public", false, "Mark the new thread as public")
 	newPostCmd.Flags().BoolVar(&postPrivate, "private", false, "Mark the new thread as private")
+	newPostCmd.Flags().StringVar(&postWriteID, "id", "", "UUID for this post or reply; reuse it to retry safely")
 	newPostCmd.Flags().StringVarP(&createOutputFormat, "output", "o", "ascii", "Output format: ascii or json")
 	newPostCmd.Flags().BoolVar(&createJSONOutput, "json", false, "Output JSON instead of human-readable text")
 	_ = newPostCmd.Flags().MarkHidden("thread")
@@ -169,6 +175,7 @@ func init() {
 	ActionCmd.Flags().StringVar(&actionTeamID, "team-id", "", "Optional stream/team ID to post into")
 	ActionCmd.Flags().BoolVar(&actionPublic, "public", false, "Mark the new thread as public")
 	ActionCmd.Flags().BoolVar(&actionPrivate, "private", false, "Mark the new thread as private")
+	ActionCmd.Flags().StringVar(&actionWriteID, "id", "", "UUID for this action post or reply; reuse it to retry safely")
 	ActionCmd.Flags().BoolVar(&actionAllowUnknownTag, "allow-unknown-action", false, "Submit the action even if it is not present in the current model-backed AI action list")
 	ActionCmd.Flags().BoolVar(&actionAllowUnknownTag, "allow-unknown-tag", false, "Compatibility alias for --allow-unknown-action")
 	ActionCmd.Flags().StringVar(&actionPaymentMode, "payment", "", "Payment rail for this action: usd or bsv/bitcoinsv (default: account setting)")
@@ -221,6 +228,7 @@ func runNewPost(cmd *cobra.Command, args []string) error {
 		result, replyErr := createReply(
 			profile,
 			replyCreateOptions{
+				WriteID:        postWriteID,
 				ReplyToQuestID: replyToQuestID,
 				Content:        content,
 				Attachment:     postAttachment,
@@ -248,6 +256,7 @@ func runNewPost(cmd *cobra.Command, args []string) error {
 	result, err := createRootThread(
 		profile,
 		rootThreadCreateOptions{
+			WriteID:     postWriteID,
 			Content:     content,
 			URL:         postUrl,
 			Attachment:  postAttachment,
@@ -395,28 +404,38 @@ func runActionStatus(cmd *cobra.Command, args []string) error {
 }
 
 func createRootThread(profile profileConfig, options rootThreadCreateOptions) (api.CreateQuestResponse, error) {
-	spaceID, err := resolveSpaceID(profile, options.SpaceID)
+	questID, err := resolveWriteID(options.WriteID)
 	if err != nil {
 		return api.CreateQuestResponse{}, err
+	}
+
+	spaceID, err := resolveSpaceID(profile, options.SpaceID)
+	if err != nil {
+		return api.CreateQuestResponse{}, withWriteID(questID, err)
 	}
 
 	resolvedTarget, err := resolveRootThreadTarget(profile, options)
 	if err != nil {
-		return api.CreateQuestResponse{}, err
+		return api.CreateQuestResponse{}, withWriteID(questID, err)
 	}
 
 	if options.URL != "" || resolvedTarget.Kind == "clips" {
-		return createClipQuest(profile, options.URL, options.Content, options.Attachment, resolvedTarget)
-	}
-
-	questID, err := newUUID()
-	if err != nil {
-		return api.CreateQuestResponse{}, fmt.Errorf("error generating thread id: %w", err)
+		return createClipQuest(
+			profile,
+			options.URL,
+			options.Content,
+			options.Attachment,
+			resolvedTarget,
+			questID,
+		)
 	}
 
 	parentAnswerID, err := newUUID()
 	if err != nil {
-		return api.CreateQuestResponse{}, fmt.Errorf("error generating answer id: %w", err)
+		return api.CreateQuestResponse{}, withWriteID(
+			questID,
+			fmt.Errorf("error generating answer id: %w", err),
+		)
 	}
 
 	uploads, err := prepareAttachmentUploads(
@@ -426,12 +445,12 @@ func createRootThread(profile profileConfig, options rootThreadCreateOptions) (a
 		"parent_attributes[files][]",
 	)
 	if err != nil {
-		return api.CreateQuestResponse{}, err
+		return api.CreateQuestResponse{}, withWriteID(questID, err)
 	}
 
 	deltaJSON, err := textToDeltaJSONString(options.Content)
 	if err != nil {
-		return api.CreateQuestResponse{}, err
+		return api.CreateQuestResponse{}, withWriteID(questID, err)
 	}
 	if strings.TrimSpace(options.DeltaJSON) != "" {
 		deltaJSON = options.DeltaJSON
@@ -471,7 +490,7 @@ func createRootThread(profile profileConfig, options rootThreadCreateOptions) (a
 		},
 	)
 	if err != nil {
-		return api.CreateQuestResponse{}, err
+		return api.CreateQuestResponse{}, withWriteID(questID, err)
 	}
 
 	return result, nil
@@ -560,6 +579,9 @@ func printActionResult(result actionResult, outputFormat string) error {
 		fmt.Println(string(prettyJSON))
 	case "ascii":
 		fmt.Printf("Status: %s\n", result.Status)
+		if result.WriteID != "" {
+			fmt.Printf("Write ID: %s\n", result.WriteID)
+		}
 		fmt.Printf("Thread UUID: %s\n", result.ThreadUUID)
 		fmt.Printf("Post UUID: %s\n", result.PostUUID)
 		fmt.Printf("Thread link: %s\n", result.ThreadLink)
@@ -829,10 +851,12 @@ func createAndMaybePollAction(
 	}
 
 	if actionNoWait {
-		return actionResultFromAnswer(profile, submission.ThreadID, submission.Answer), nil
+		result := actionResultFromAnswer(profile, submission.ThreadID, submission.Answer)
+		result.WriteID = submission.WriteID
+		return result, nil
 	}
 
-	return pollActionResult(
+	result, err := pollActionResult(
 		profile,
 		submission.ThreadID,
 		submission.Answer.ID,
@@ -840,6 +864,11 @@ func createAndMaybePollAction(
 		actionTimeout,
 		actionPollInterval,
 	)
+	if err != nil {
+		return actionResult{}, withWriteID(submission.WriteID, err)
+	}
+	result.WriteID = submission.WriteID
+	return result, nil
 }
 
 func createActionSubmission(
@@ -873,6 +902,7 @@ func createActionSubmission(
 		replyResult, err := createReply(
 			profile,
 			replyCreateOptions{
+				WriteID:            actionWriteID,
 				ReplyToQuestID:     replyToQuestID,
 				Content:            invocation.NormalizedContent,
 				DeltaJSON:          actionDeltaJSON,
@@ -893,6 +923,7 @@ func createActionSubmission(
 
 		return actionSubmission{
 			ThreadID: threadID,
+			WriteID:  replyResult.Answer.ID,
 			Answer:   replyResult.Answer,
 		}, nil
 	}
@@ -900,6 +931,7 @@ func createActionSubmission(
 	createResult, err := createRootThread(
 		profile,
 		rootThreadCreateOptions{
+			WriteID:            actionWriteID,
 			Content:            invocation.NormalizedContent,
 			DeltaJSON:          actionDeltaJSON,
 			ActionRequestsJSON: actionRequestsJSON,
@@ -923,6 +955,7 @@ func createActionSubmission(
 
 	return actionSubmission{
 		ThreadID: createResult.Quest.ID,
+		WriteID:  createResult.Quest.ID,
 		Answer:   *createResult.Quest.Parent,
 	}, nil
 }
