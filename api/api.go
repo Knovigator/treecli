@@ -50,6 +50,7 @@ type CreateAnswerRequest struct {
 }
 
 type CreateClipQuestRequest struct {
+	QuestID     string
 	URL         string
 	Content     string
 	DeltaJSON   string
@@ -464,6 +465,9 @@ func CreateClipQuest(
 	request CreateClipQuestRequest,
 ) (CreateQuestResponse, error) {
 	form := neturl.Values{}
+	if request.QuestID != "" {
+		form.Set("id", request.QuestID)
+	}
 
 	if request.URL != "" {
 		form.Set("quest[answers_attributes][0][url_attributes][address]", request.URL)
