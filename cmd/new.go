@@ -87,7 +87,7 @@ func runNewReply(cmd *cobra.Command, args []string) error {
 		},
 	)
 	if err != nil {
-		return fmt.Errorf("creating reply: %w", err)
+		return writeErrorForOutput(fmt.Errorf("creating reply: %w", err), resolvedOutputFormat)
 	}
 
 	return printCreateAnswerResult(profile, result, resolvedOutputFormat)
@@ -135,6 +135,18 @@ func createReply(profile profileConfig, options replyCreateOptions) (api.CreateA
 		},
 	)
 	if err != nil {
+		if shouldReconcileWrite(err) {
+			if reconciled, ok := reconcileAnswerWrite(
+				profile,
+				answerID,
+				options.ReplyToQuestID,
+				spaceID,
+				options.Content,
+				deltaJSON,
+			); ok {
+				return reconciled, nil
+			}
+		}
 		return api.CreateAnswerResponse{}, withWriteID(answerID, err)
 	}
 

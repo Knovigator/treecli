@@ -115,6 +115,7 @@ type Answer struct {
 	QuestID                      string              `json:"quest_id"`
 	UserID                       string              `json:"user_id"`
 	Content                      string              `json:"content"`
+	DeltaJSON                    json.RawMessage     `json:"delta_json,omitempty"`
 	DisplayContent               string              `json:"display_content"`
 	Path                         string              `json:"path"`
 	CreatedAt                    string              `json:"created_at"`

@@ -29,7 +29,7 @@ func clipLink(url, content, attachment string, target streamTarget, outputFormat
 
 	result, err := createClipQuest(profile, url, content, attachment, target, "")
 	if err != nil {
-		return fmt.Errorf("creating post: %w", err)
+		return writeErrorForOutput(fmt.Errorf("creating post: %w", err), outputFormat)
 	}
 
 	return printCreateQuestResult(profile, result, outputFormat)
@@ -461,6 +461,19 @@ func createClipQuest(
 		},
 	)
 	if err != nil {
+		if shouldReconcileWrite(err) {
+			if reconciled, ok := reconcileQuestWrite(
+				profile,
+				questID,
+				profile.ActiveSpaceID,
+				content,
+				deltaJSON,
+				url,
+				true,
+			); ok {
+				return reconciled, nil
+			}
+		}
 		return api.CreateQuestResponse{}, withWriteID(questID, err)
 	}
 
@@ -477,7 +490,7 @@ func clipDestinationFromTarget(target streamTarget) map[string]interface{} {
 
 func printCreateQuestResult(profile profileConfig, result api.CreateQuestResponse, outputFormat string) error {
 	if outputFormat == "json" {
-		prettyJSON, err := api.PrettyJSON(result.Raw)
+		prettyJSON, err := prettyWriteSuccessJSON(result.Raw, result.Quest.ID)
 		if err != nil {
 			return fmt.Errorf("formatting JSON: %w", err)
 		}
@@ -501,7 +514,7 @@ func printCreateQuestResult(profile profileConfig, result api.CreateQuestRespons
 
 func printCreateAnswerResult(profile profileConfig, result api.CreateAnswerResponse, outputFormat string) error {
 	if outputFormat == "json" {
-		prettyJSON, err := api.PrettyJSON(result.Raw)
+		prettyJSON, err := prettyWriteSuccessJSON(result.Raw, result.Answer.ID)
 		if err != nil {
 			return fmt.Errorf("formatting JSON: %w", err)
 		}

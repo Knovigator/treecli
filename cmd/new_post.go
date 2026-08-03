@@ -237,7 +237,10 @@ func runNewPost(cmd *cobra.Command, args []string) error {
 			},
 		)
 		if replyErr != nil {
-			return fmt.Errorf("creating post reply: %w", replyErr)
+			return writeErrorForOutput(
+				fmt.Errorf("creating post reply: %w", replyErr),
+				resolvedOutputFormat,
+			)
 		}
 
 		return printCreateAnswerResult(profile, result, resolvedOutputFormat)
@@ -270,7 +273,7 @@ func runNewPost(cmd *cobra.Command, args []string) error {
 		},
 	)
 	if err != nil {
-		return fmt.Errorf("creating post: %w", err)
+		return writeErrorForOutput(fmt.Errorf("creating post: %w", err), resolvedOutputFormat)
 	}
 
 	return printCreateQuestResult(profile, result, resolvedOutputFormat)
@@ -331,7 +334,7 @@ func runAction(cmd *cobra.Command, args []string) error {
 		paymentMode,
 	)
 	if err != nil {
-		return err
+		return writeErrorForOutput(err, resolvedOutputFormat)
 	}
 
 	return printActionResult(actionResult, resolvedOutputFormat)
@@ -490,6 +493,19 @@ func createRootThread(profile profileConfig, options rootThreadCreateOptions) (a
 		},
 	)
 	if err != nil {
+		if shouldReconcileWrite(err) {
+			if reconciled, ok := reconcileQuestWrite(
+				profile,
+				questID,
+				spaceID,
+				options.Content,
+				deltaJSON,
+				"",
+				false,
+			); ok {
+				return reconciled, nil
+			}
+		}
 		return api.CreateQuestResponse{}, withWriteID(questID, err)
 	}
 
