@@ -196,6 +196,42 @@ func GetNotificationsCount(
 	return count, nil
 }
 
+func GetUpvalueHistory(
+	backendURL string,
+	accessToken string,
+	client string,
+	uid string,
+	page int,
+	perPage int,
+) (UpvalueHistoryResponse, error) {
+	request := newRequest(accessToken, client, uid).
+		SetHeader("accept", "application/json")
+
+	if page > 0 {
+		request.SetQueryParam("page", fmt.Sprintf("%d", page))
+	}
+	if perPage > 0 {
+		request.SetQueryParam("per_page", fmt.Sprintf("%d", perPage))
+	}
+
+	resp, err := request.Get(fmt.Sprintf("%s/api/v1/bsv/history", backendURL))
+	if err != nil {
+		return UpvalueHistoryResponse{}, fmt.Errorf("error making request: %v", err)
+	}
+
+	if resp.StatusCode() != http.StatusOK {
+		return UpvalueHistoryResponse{}, fmt.Errorf("received status code %d: %s", resp.StatusCode(), SafeResponseBody(resp.Body()))
+	}
+
+	var history UpvalueHistoryResponse
+	if err := json.Unmarshal(resp.Body(), &history); err != nil {
+		return UpvalueHistoryResponse{}, fmt.Errorf("error parsing response: %v", err)
+	}
+	history.Raw = append(history.Raw[:0], resp.Body()...)
+
+	return history, nil
+}
+
 func GetAnswer(backendURL, answerID, accessToken, client, uid string) (AnswerResponse, error) {
 	resp, err := newRequest(accessToken, client, uid).
 		SetHeader("accept", "application/json").
@@ -617,6 +653,8 @@ func postMultipart(
 		form.Add(upload.FieldName, signedID)
 	}
 
+	// Fallback multipart uploads can still take well over the 10s default while the server
+	// processes media inline, so keep a generous timeout for the create request.
 	request := newRequestWithTimeout(accessToken, client, uid, 5*time.Minute).
 		SetHeader("accept", "application/json").
 		SetFormDataFromValues(form)

@@ -7,11 +7,13 @@ description: Use treecli to authenticate profiles, read Treechat threads, create
 
 Use this skill when you need to interact with Treechat through the `treecli` CLI instead of hand-rolling API calls.
 
-## Profiles and Login
+## Profiles and Authentication
 
 1. Run `treecli profile list` to see the available profiles.
 2. Inspect the active profile with `treecli profile show`.
-3. Log in with `treecli login --profile dev` or the profile you actually need.
+3. Production is the default. Create an account with `treecli signup`, or log in
+   to an existing account with `treecli login`.
+4. For local development, explicitly pass `--profile dev` to each command.
 
 ## Reading Existing Data
 

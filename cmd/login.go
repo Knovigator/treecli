@@ -288,7 +288,7 @@ func resolveProfileName() string {
 		return normalizeProfileName(profileName)
 	}
 
-	return "dev"
+	return "prod"
 }
 
 func normalizeProfileName(profileName string) string {
@@ -447,6 +447,21 @@ func resolveEmail() (string, error) {
 	return email, nil
 }
 
+func readHiddenPassword(prompt string) (string, error) {
+	if !term.IsTerminal(int(syscall.Stdin)) {
+		return "", fmt.Errorf("stdin is not a terminal; use --password-stdin for non-interactive input")
+	}
+
+	fmt.Print(prompt)
+	passwordBytes, err := term.ReadPassword(int(syscall.Stdin))
+	fmt.Println()
+	if err != nil {
+		return "", fmt.Errorf("error reading password: %w", err)
+	}
+
+	return strings.TrimSpace(string(passwordBytes)), nil
+}
+
 func resolvePassword() (string, error) {
 	if readPasswordFromStdin {
 		passwordBytes, err := io.ReadAll(os.Stdin)
@@ -466,14 +481,10 @@ func resolvePassword() (string, error) {
 		return loginPassword, nil
 	}
 
-	fmt.Print("Enter password: ")
-	passwordBytes, err := term.ReadPassword(int(syscall.Stdin))
+	password, err := readHiddenPassword("Enter password: ")
 	if err != nil {
-		return "", fmt.Errorf("error reading password: %w", err)
+		return "", err
 	}
-
-	password := strings.TrimSpace(string(passwordBytes))
-	fmt.Println()
 
 	if password == "" {
 		return "", fmt.Errorf("password cannot be empty")
@@ -509,24 +520,7 @@ func performLogin(backendURL, email, password string) (authTokens, error) {
 			return authTokens{}, fmt.Errorf("login failed: %s", formatResponseError(resp))
 		}
 
-		tokens := authTokens{
-			AccessToken: strings.TrimSpace(resp.Header().Get("access-token")),
-			Client:      strings.TrimSpace(resp.Header().Get("client")),
-			UID:         strings.TrimSpace(resp.Header().Get("uid")),
-			Expiry:      strings.TrimSpace(resp.Header().Get("expiry")),
-		}
-
-		if tokens.AccessToken == "" {
-			return authTokens{}, fmt.Errorf("access token not found in response headers")
-		}
-		if tokens.Client == "" {
-			return authTokens{}, fmt.Errorf("client not found in response headers")
-		}
-		if tokens.UID == "" {
-			return authTokens{}, fmt.Errorf("uid not found in response headers")
-		}
-
-		return tokens, nil
+		return authTokensFromResponse(resp)
 	}
 
 	if lastError != nil {
@@ -534,6 +528,27 @@ func performLogin(backendURL, email, password string) (authTokens, error) {
 	}
 
 	return authTokens{}, fmt.Errorf("login failed: no auth endpoint succeeded")
+}
+
+func authTokensFromResponse(resp *resty.Response) (authTokens, error) {
+	tokens := authTokens{
+		AccessToken: strings.TrimSpace(resp.Header().Get("access-token")),
+		Client:      strings.TrimSpace(resp.Header().Get("client")),
+		UID:         strings.TrimSpace(resp.Header().Get("uid")),
+		Expiry:      strings.TrimSpace(resp.Header().Get("expiry")),
+	}
+
+	if tokens.AccessToken == "" {
+		return authTokens{}, fmt.Errorf("access token not found in response headers")
+	}
+	if tokens.Client == "" {
+		return authTokens{}, fmt.Errorf("client not found in response headers")
+	}
+	if tokens.UID == "" {
+		return authTokens{}, fmt.Errorf("uid not found in response headers")
+	}
+
+	return tokens, nil
 }
 
 func fetchBootstrap(backendURL string, tokens authTokens) (*loginBootstrap, error) {

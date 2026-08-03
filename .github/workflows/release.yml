@@ -20,6 +20,12 @@ jobs:
         steps:
             - uses: actions/checkout@v4
 
+            - name: Preserve release tooling before tag checkout
+              run: |
+                  mkdir -p "$RUNNER_TEMP/treecli-release-tools"
+                  cp scripts/build-release.sh scripts/verify-release.sh "$RUNNER_TEMP/treecli-release-tools/"
+                  chmod +x "$RUNNER_TEMP/treecli-release-tools/"*.sh
+
             - name: Resolve release tag
               id: release
               run: |
@@ -55,55 +61,21 @@ jobs:
                   cache-dependency-path: go.sum
 
             - name: Test
-              run: go test ./...
+              run: go test -mod=readonly -race -shuffle=on -count=1 ./...
 
             - name: Build release artifacts
               env:
                   TREECLI_VERSION: ${{ steps.release.outputs.tag }}
+                  TREECLI_REPO_ROOT: ${{ github.workspace }}
               run: |
-                  set -euo pipefail
+                  "$RUNNER_TEMP/treecli-release-tools/build-release.sh" "$TREECLI_VERSION"
 
-                  rm -rf dist
-                  mkdir -p dist
-
-                  build_target() {
-                      goos="$1"
-                      goarch="$2"
-                      ext=""
-                      if [ "$goos" = "windows" ]; then
-                          ext=".exe"
-                      fi
-
-                      package="treecli_${TREECLI_VERSION}_${goos}_${goarch}"
-                      legacy_package="treectl_${TREECLI_VERSION}_${goos}_${goarch}"
-                      workdir="dist/${package}"
-                      mkdir -p "$workdir"
-
-                      CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" go build \
-                          -trimpath \
-                          -ldflags "-s -w -X github.com/Knovigator/treecli/cmd.CurrentVersion=${TREECLI_VERSION}" \
-                          -o "${workdir}/treecli${ext}" \
-                          .
-                      cp "${workdir}/treecli${ext}" "${workdir}/treectl${ext}"
-
-                      if [ "$goos" = "windows" ]; then
-                          (cd "$workdir" && zip -q -r "../${package}.zip" .)
-                          cp "dist/${package}.zip" "dist/${legacy_package}.zip"
-                      else
-                          tar -C "$workdir" -czf "dist/${package}.tar.gz" .
-                          tar -C "$workdir" -czf "dist/${legacy_package}.tar.gz" .
-                      fi
-
-                      rm -rf "$workdir"
-                  }
-
-                  build_target darwin amd64
-                  build_target darwin arm64
-                  build_target linux amd64
-                  build_target linux arm64
-                  build_target windows amd64
-
-                  (cd dist && sha256sum treecli_* treectl_* > checksums.txt)
+            - name: Verify release artifacts
+              env:
+                  TREECLI_VERSION: ${{ steps.release.outputs.tag }}
+                  TREECLI_REPO_ROOT: ${{ github.workspace }}
+              run: |
+                  "$RUNNER_TEMP/treecli-release-tools/verify-release.sh" "$TREECLI_VERSION"
 
             - name: Publish GitHub release
               uses: softprops/action-gh-release@v2

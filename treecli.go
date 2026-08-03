@@ -73,10 +73,11 @@ fi
 
 func init() {
 	cobra.OnInitialize(initConfig)
-	rootCmd.PersistentFlags().StringVar(&cmd.SelectedProfile, "profile", "", "Profile to use (dev, staging, prod, or custom)")
+	rootCmd.PersistentFlags().StringVar(&cmd.SelectedProfile, "profile", "", "Profile to use (default: prod; dev, staging, prod, or custom)")
 	rootCmd.PersistentFlags().StringVar(&cmd.BackendURLOverride, "backend-url", "", "Override the backend API base URL for this invocation")
 	rootCmd.PersistentFlags().StringVar(&cmd.AppHostOverride, "app-host", "", "Override the app host for generated links for this invocation")
 	rootCmd.AddCommand(cmd.LoginCmd)
+	rootCmd.AddCommand(cmd.SignupCmd)
 	rootCmd.AddCommand(cmd.GetCmd)
 	rootCmd.AddCommand(cmd.ActionCmd)
 	rootCmd.AddCommand(cmd.GenerateCmd)
