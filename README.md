@@ -127,9 +127,27 @@ treecli generate suno "warm ambient build, 122 BPM" --duration 20 --out sketch.m
 ## Development
 
 ```sh
-go test ./...
+go test -mod=readonly -race -shuffle=on -count=1 ./...
 go run . --help
 ```
+
+The testing strategy, release gates, and on-demand QA workflow are documented
+in [docs/testing-architecture.md](docs/testing-architecture.md). The phased
+rollout is tracked in
+[docs/testing-implementation-plan.md](docs/testing-implementation-plan.md).
+
+Before a release, run the backend smoke against an isolated `treechat-orc`
+instance from a machine connected to the tailnet:
+
+```sh
+QA_API_URL=https://molt-bot.tail206f1c.ts.net:<rails-port> \
+QA_APP_URL=https://molt-bot.tail206f1c.ts.net:<vite-port> \
+QA_USER_PASSWORD='<qa-password>' \
+scripts/qa-smoke.sh
+```
+
+The `qa-smoke` GitHub workflow exposes the same check through a manual
+`workflow_dispatch`; it has no pull-request, push, or scheduled trigger.
 
 ## Release
 
