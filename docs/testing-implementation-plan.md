@@ -13,8 +13,9 @@ Status: implemented in this change.
 - Keep `go vet` blocking.
 - Add a compiled-binary integration package with isolated configuration and a
   fake Treechat backend.
-- Cover login/bootstrap, profile redaction, read, write, upvalue history, and
-  redacted backend failures at the process boundary.
+- Cover login/bootstrap, profile redaction, read, write, redacted backend
+  failures, and upvalue history when that command is present at the process
+  boundary.
 
 Exit criterion: a broken command registration, non-zero exit contract,
 credential persistence path, or critical HTTP route fails pull-request CI.

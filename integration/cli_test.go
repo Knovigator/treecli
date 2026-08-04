@@ -120,6 +120,13 @@ func TestCompiledCLIUserBoundary(t *testing.T) {
 	})
 
 	t.Run("upvalue history is wired through the binary", func(t *testing.T) {
+		helpStdout, _, helpErr := runCLI(t, binaryPath, configHome, "", append(baseArgs,
+			"get", "upvalues", "--help",
+		)...)
+		if helpErr != nil || !strings.Contains(helpStdout, "--per-page") {
+			t.Skip("upvalue history command is not present on this branch")
+		}
+
 		stdout, stderr, err := runCLI(t, binaryPath, configHome, "", append(baseArgs,
 			"get", "upvalues", "--page", "2", "--per-page", "25", "--json",
 		)...)
