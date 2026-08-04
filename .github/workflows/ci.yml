@@ -20,8 +20,43 @@ jobs:
                   go-version: '1.22.x'
                   cache-dependency-path: go.sum
 
-            - name: Test
-              run: go test -mod=readonly ./...
+            - name: Test with race detection and coverage
+              run: go test -mod=readonly -race -shuffle=on -count=1 -coverprofile=coverage.out ./...
 
             - name: Vet
               run: go vet ./...
+
+            - name: Build and verify release artifacts
+              env:
+                  TREECLI_DIST_DIR: ${{ runner.temp }}/treecli-dist
+              run: |
+                  scripts/build-release.sh v0.0.0-ci
+                  scripts/verify-release.sh v0.0.0-ci "$TREECLI_DIST_DIR"
+
+    native-smoke:
+        name: native-smoke (${{ matrix.os }})
+        runs-on: ${{ matrix.os }}
+        strategy:
+            fail-fast: false
+            matrix:
+                os:
+                    - ubuntu-latest
+                    - macos-latest
+                    - windows-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: actions/setup-go@v5
+              with:
+                  go-version: '1.22.x'
+                  cache-dependency-path: go.sum
+
+            - name: Build and start the native CLI
+              shell: bash
+              run: |
+                  binary="$RUNNER_TEMP/treecli-native"
+                  if [ "$RUNNER_OS" = "Windows" ]; then
+                      binary="${binary}.exe"
+                  fi
+                  go build -trimpath -o "$binary" .
+                  "$binary" --help >/dev/null

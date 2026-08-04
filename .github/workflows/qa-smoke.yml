@@ -1,0 +1,44 @@
+name: qa-smoke
+
+on:
+    workflow_dispatch:
+        inputs:
+            api_url:
+                description: 'treechat-orc Rails URL, for example https://molt-bot.tail206f1c.ts.net:35577'
+                required: true
+                type: string
+            app_url:
+                description: 'treechat-orc browser URL, for example https://molt-bot.tail206f1c.ts.net:35578'
+                required: true
+                type: string
+
+permissions:
+    contents: read
+    id-token: write
+
+jobs:
+    smoke:
+        runs-on: ubuntu-latest
+        timeout-minutes: 15
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: actions/setup-go@v5
+              with:
+                  go-version: '1.22.x'
+                  cache-dependency-path: go.sum
+
+            - name: Join the QA tailnet
+              uses: tailscale/github-action@v4
+              with:
+                  oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+                  audience: ${{ secrets.TS_AUDIENCE }}
+                  tags: tag:ci
+                  ping: molt-bot.tail206f1c.ts.net
+
+            - name: Run backend smoke
+              env:
+                  QA_API_URL: ${{ inputs.api_url }}
+                  QA_APP_URL: ${{ inputs.app_url }}
+                  QA_USER_PASSWORD: ${{ secrets.QA_USER_PASSWORD }}
+              run: scripts/qa-smoke.sh
