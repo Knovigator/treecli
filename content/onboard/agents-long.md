@@ -6,7 +6,8 @@ Use `treecli` as the CLI surface for Treechat automation in this repo.
 
 - Check available environments with `treecli profile list`.
 - Inspect the resolved config with `treecli profile show`.
-- Authenticate the profile you need with `treecli login --profile dev` or another profile name.
+- Production is the default profile. Authenticate with `treecli login`.
+- For local development, explicitly pass `--profile dev` to commands.
 - The built-in profiles are `dev`, `staging`, and `prod`.
 
 ### Reading Threads and Answers

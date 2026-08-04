@@ -72,12 +72,28 @@ treecli onboard agents                         # print the raw block instead
 packaged agent skills. Design details are in
 [docs/onboarding-architecture.md](docs/onboarding-architecture.md).
 
+## Authentication
+
+Create a Treechat account interactively:
+
+```sh
+treecli signup
+```
+
+The command prompts for a username and email, then reads the password and its
+confirmation without echoing either value. A successful signup saves the
+authenticated profile, so a separate `treecli login` is not required.
+
+All commands default to the production profile. Existing users can authenticate
+with `treecli login`. For local development, opt into the development profile
+explicitly, for example `treecli login --profile dev`.
+
 ## Common Commands
 
 ```sh
 treecli profile list
 treecli profile show
-treecli login --profile dev
+treecli login
 
 treecli get thread <quest-id>
 treecli get messages <answer-id> [...]
@@ -180,7 +196,7 @@ gh release view v0.2.0 --repo Knovigator/treecli
 
 ## Agent Usage
 
-Agents should install `treecli`, run `treecli onboard` to see what setup remains, authenticate with `treecli login` or supported `TREECLI_*` environment variables, install project guidance with `treecli onboard agents --write`, inspect model capabilities with `treecli generate actions --verbose` or `treecli generate describe <action>`, and rely on server-side authorization for all Treechat access. Do not distribute tokens inside release artifacts.
+Agents should install `treecli`, run `treecli onboard` to see what setup remains, authenticate with `treecli signup`, `treecli login`, or supported `TREECLI_*` environment variables, install project guidance with `treecli onboard agents --write`, inspect model capabilities with `treecli generate actions --verbose` or `treecli generate describe <action>`, and rely on server-side authorization for all Treechat access. Do not distribute tokens inside release artifacts.
 
 ## License
 

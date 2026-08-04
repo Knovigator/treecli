@@ -52,6 +52,44 @@ type NotificationsCountResponse struct {
 	Raw              json.RawMessage `json:"-"`
 }
 
+type UpvalueHistoryResponse struct {
+	Upvalues []BsvUpvalue    `json:"upvalues"`
+	Page     int             `json:"page"`
+	PerPage  int             `json:"per_page"`
+	HasMore  bool            `json:"has_more"`
+	Raw      json.RawMessage `json:"-"`
+}
+
+type BsvUpvalue struct {
+	ID         string                 `json:"id"`
+	TxID       string                 `json:"tx_id"`
+	Amount     string                 `json:"amount"`
+	Fee        string                 `json:"fee"`
+	CreatedAt  string                 `json:"created_at"`
+	FromUserID string                 `json:"from_user_id"`
+	ToUserID   string                 `json:"to_user_id"`
+	IsBoost    bool                   `json:"is_boost"`
+	Metadata   map[string]interface{} `json:"metadata"`
+	Status     string                 `json:"status"`
+	FromUser   User                   `json:"from_user"`
+	ToUser     User                   `json:"to_user"`
+	BsvTx      *BsvUpvalueTx          `json:"bsv_tx"`
+	Answer     BsvUpvalueAnswer       `json:"answer"`
+}
+
+type BsvUpvalueTx struct {
+	ID            string `json:"id"`
+	TxID          string `json:"tx_id"`
+	Status        string `json:"status"`
+	Confirmations int    `json:"confirmations"`
+	Confirmed     bool   `json:"confirmed"`
+}
+
+type BsvUpvalueAnswer struct {
+	ID          string       `json:"id"`
+	ChildQuests []ChildQuest `json:"child_quests"`
+}
+
 type UpvaluedContentLeaderboardResponse struct {
 	Period struct {
 		StartDate string `json:"start_date"`
