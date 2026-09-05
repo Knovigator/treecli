@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"net/url"
 
 	"github.com/Knovigator/treecli/api"
 	"github.com/spf13/cobra"
@@ -10,7 +11,7 @@ import (
 var getThreadCmd = &cobra.Command{
 	Use:     "thread [thread_id]",
 	Aliases: []string{"quest"},
-	Short:   "Get information about a specific thread",
+	Short:   "Deprecated: use get threads <thread_id>",
 	Long:    `Fetch and display information about a thread using its ID.`,
 	Args:    cobra.ExactArgs(1),
 	RunE:    runGetThread,
@@ -27,30 +28,33 @@ func init() {
 }
 
 func runGetThread(cmd *cobra.Command, args []string) error {
-	threadID := args[0]
+	if cmd == nil {
+		cmd = &cobra.Command{}
+	}
+	fmt.Fprintln(cmd.ErrOrStderr(), "Warning: get thread is deprecated; use get threads.")
+	return fetchAndPrintThread(cmd, args[0], resolveOutputFormat(outputFormat, getJSONOutput))
+}
 
+func fetchAndPrintThread(cmd *cobra.Command, id, format string) error {
+	if format != "ascii" && format != "json" {
+		return invalidOutputFormatError(format)
+	}
 	profile, err := requireAuthenticatedProfile()
 	if err != nil {
 		return err
 	}
-
-	threadInfo, err := api.GetThread(profile.BackendURL, threadID, profile.AccessToken, profile.Client, profile.UID)
+	thread, err := api.GetThread(profile.BackendURL, url.PathEscape(id), profile.AccessToken, profile.Client, profile.UID)
 	if err != nil {
 		return err
 	}
-
-	switch resolveOutputFormat(outputFormat, getJSONOutput) {
-	case "json":
-		prettyJSON, err := api.PrettyJSON(threadInfo.Raw)
+	if format == "json" {
+		text, err := api.PrettyJSON(thread.Raw)
 		if err != nil {
 			return fmt.Errorf("formatting JSON: %w", err)
 		}
-		fmt.Println(prettyJSON)
-	case "ascii":
-		fmt.Println(threadInfo.Quest.ToASCII())
-	default:
-		return invalidOutputFormatError(outputFormat)
+		fmt.Fprintln(cmd.OutOrStdout(), text)
+	} else {
+		fmt.Fprintln(cmd.OutOrStdout(), thread.Quest.ToASCII())
 	}
-
 	return nil
 }

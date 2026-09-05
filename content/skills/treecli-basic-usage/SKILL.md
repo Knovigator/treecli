@@ -17,7 +17,14 @@ Use this skill when you need to interact with Treechat through the `treecli` CLI
 
 ## Reading Existing Data
 
-- Fetch a thread with `treecli get thread <quest-id>`.
+- Get your newest authored root thread: `treecli get threads --user me --root --limit 1`.
+- List another user's authored branches: `treecli get threads --user alice --branch --page 2 --limit 20`.
+- Listing defaults to your threads, includes authorized private content in the current space, and sorts by creation time (newest first), then ID. Omit `--root`/`--branch` to include both; they cannot be combined.
+- `--limit` is page size (1–100, default 20). `--page` starts at 1. JSON collections contain `threads` and `pagination` (`page`, `limit`, `next_page`, `has_more`). Page boundaries can move when data changes; this is not a snapshot export.
+- Fetch all accessible child threads with `treecli get threads --answer <answer-id>`. An answer may have zero or multiple children; JSON contains a `threads` array without pagination.
+- ID and answer lookups cannot be combined with listing filters. A single thread lookup keeps the existing `quest` JSON envelope.
+- `get thread` is deprecated; it still works and warns on stderr. Authored listing requires a backend with the authored collection API; an older backend produces a compatibility error.
+- Fetch a thread with `treecli get threads <quest-id>`.
 - Fetch one or more answers with `treecli get messages <answer-id> [...]`.
 - Add `--json` when another tool needs structured output.
 

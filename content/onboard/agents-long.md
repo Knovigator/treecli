@@ -12,7 +12,7 @@ Use `treecli` as the CLI surface for Treechat automation in this repo.
 
 ### Reading Threads and Answers
 
-- Fetch a thread with `treecli get thread <quest-id>`.
+- Fetch a thread with `treecli get threads <quest-id>`.
 - Fetch one or more answers with `treecli get messages <answer-id> [...]`.
 - Use `--json` when another tool needs structured output.
 

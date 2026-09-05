@@ -11,6 +11,7 @@ var GetCmd = &cobra.Command{
 }
 
 func init() {
+	GetCmd.AddCommand(newGetThreadsCommand())
 	GetCmd.AddCommand(getThreadCmd)
 	GetCmd.AddCommand(getMessagesCmd)
 	GetCmd.AddCommand(getNotificationsCmd)
