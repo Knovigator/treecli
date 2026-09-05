@@ -1,7 +1,7 @@
 ## treecli CLI Guidance
 
 - Production is the default profile. Use `treecli profile list`, `treecli profile show`, and `treecli login` to inspect and authenticate it; pass `--profile dev` explicitly for local development.
-- Read data with `treecli get thread <quest-id>` and `treecli get messages <answer-id> [...]`.
+- Read data with `treecli get threads <quest-id>` and `treecli get messages <answer-id> [...]`.
 - Create a root post with `treecli new post "text"` and a reply with `treecli new post --reply-to <quest-id> "text"`.
 - Root posts default to private; use `--stream` only on root posts and root actions.
 - Discover AI actions with `treecli action actions`.

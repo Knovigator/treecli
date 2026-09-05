@@ -140,6 +140,32 @@ treecli generate suno "warm ambient build, 122 BPM" --duration 20 --out sketch.m
 
 `treecli generate` supports repeatable `--input key=value`, JSON `--settings`, `--duration`, `--instrumental`, and `--reference run:<id>|https://...|@path`. For direct edits or image-to-video runs, use the base image/video action with explicit `--reference` media because direct generation has no thread context to infer it from. Clone and video sound-effect actions also require explicit reference media. Use `treecli generate describe <action>` before generating when an agent needs model descriptions, accepted inputs, settings, examples, and reference behavior.
 
+## Reading threads
+
+```sh
+treecli get threads --user me --root --limit 1
+treecli get threads --user alice --branch --page 2 --limit 20 --json
+treecli get threads THREAD_ID
+treecli get threads --answer ANSWER_ID --json
+```
+
+Listing defaults to your authored threads in the current space, newest-created
+first (ID breaks ties). `--user` accepts a username, user ID, or `me`; prefix a
+username with `@` to disambiguate it from an ID or `me`. `--root` and `--branch`
+are mutually exclusive; omitting both includes both. Visibility is enforced by
+the server, including access to your private threads.
+
+`--limit` sets page size (1–100, default 20); `--page` defaults to 1. Collection
+JSON contains `threads` and `pagination` with `page`, `limit`, `next_page`, and
+`has_more`. Changing data can move page boundaries. Answer lookup returns all
+accessible child threads, including an empty array when none exist, without
+pagination. Thread-ID lookup retains the existing `quest` JSON envelope.
+Lookup modes cannot be combined with listing filters.
+
+`get thread` remains compatible but is deprecated and warns on stderr. Authored
+listing requires the backend's authored collection support; older backends
+produce an explicit compatibility error.
+
 ## Development
 
 ```sh

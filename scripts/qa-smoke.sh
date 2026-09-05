@@ -46,10 +46,12 @@ if command -v curl >/dev/null 2>&1; then
     curl -fsS "${qa_api_url%/}/health" >/dev/null
 fi
 
-run_cli() {
+run_cli_for_profile() {
+    qa_profile="$1"
+    shift
     if [ -n "$qa_app_url" ]; then
         "$qa_binary" \
-            --profile release-smoke \
+            --profile "$qa_profile" \
             --backend-url "$qa_api_url" \
             --app-host "$qa_app_url" \
             "$@"
@@ -57,10 +59,33 @@ run_cli() {
     fi
 
     "$qa_binary" \
-        --profile release-smoke \
+        --profile "$qa_profile" \
         --backend-url "$qa_api_url" \
         "$@"
 }
+
+run_cli() {
+    run_cli_for_profile release-smoke "$@"
+}
+
+signup_timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
+signup_email="treecli-smoke-${signup_timestamp}-$$@qa.treechat.test"
+signup_username="treecli_smoke_${signup_timestamp}_$$"
+printf '%s\n' "$qa_password" | run_cli_for_profile release-signup \
+    signup --username "$signup_username" --email "$signup_email" --password-stdin
+
+signup_profile_json="${qa_tmp_dir}/signup-profile.json"
+run_cli_for_profile release-signup profile show --json > "$signup_profile_json"
+python3 -m json.tool "$signup_profile_json" >/dev/null
+if grep -F "$signup_email" "$signup_profile_json" >/dev/null 2>&1; then
+    echo "signup profile output leaked the disposable QA email" >&2
+    exit 1
+fi
+signup_space_id=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("active_space_id", ""))' "$signup_profile_json")
+if [ -z "$signup_space_id" ]; then
+    echo "QA signup bootstrap did not provide an active space" >&2
+    exit 1
+fi
 
 printf '%s\n' "$qa_password" | run_cli login --email "$qa_email" --password-stdin
 
@@ -88,19 +113,38 @@ fi
 
 smoke_marker="treecli-release-smoke-$(date -u +%Y%m%dT%H%M%SZ)"
 created_json="${qa_tmp_dir}/created.json"
-run_cli new post "$smoke_marker" --private --json > "$created_json"
+run_cli_for_profile release-signup new post "$smoke_marker" --private --json > "$created_json"
 quest_id=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["quest"]["id"])' "$created_json")
 answer_id=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["quest"]["parent"]["id"])' "$created_json")
 
 thread_json="${qa_tmp_dir}/thread.json"
-run_cli get thread "$quest_id" --json > "$thread_json"
+run_cli_for_profile release-signup get threads "$quest_id" --json > "$thread_json"
 python3 -m json.tool "$thread_json" >/dev/null
 grep -F "$smoke_marker" "$thread_json" >/dev/null
 
 message_json="${qa_tmp_dir}/message.json"
-run_cli get messages "$answer_id" --json > "$message_json"
+run_cli_for_profile release-signup get messages "$answer_id" --json > "$message_json"
 python3 -m json.tool "$message_json" >/dev/null
 grep -F "$smoke_marker" "$message_json" >/dev/null
+
+# Use the disposable signup account so concurrent smoke runs cannot change
+# which thread is newest for this author.
+latest_json="${qa_tmp_dir}/latest.json"
+run_cli_for_profile release-signup get threads --user me --root --limit 1 --json > "$latest_json"
+python3 - "$latest_json" "$quest_id" <<'PYTEST'
+import json, sys
+result = json.load(open(sys.argv[1]))
+assert [thread["id"] for thread in result["threads"]] == [sys.argv[2]], result
+assert result["pagination"]["limit"] == 1, result
+PYTEST
+
+children_json="${qa_tmp_dir}/children.json"
+run_cli_for_profile release-signup get threads --answer "$answer_id" --json > "$children_json"
+python3 - "$children_json" "$quest_id" <<'PYTEST'
+import json, sys
+result = json.load(open(sys.argv[1]))
+assert sys.argv[2] in [thread["id"] for thread in result["threads"]], result
+PYTEST
 
 echo "QA smoke passed"
 echo "API: ${qa_api_url}"
