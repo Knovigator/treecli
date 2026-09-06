@@ -12,12 +12,13 @@ import (
 )
 
 var rootCmd = &cobra.Command{
-	Use:           "treecli",
-	Short:         "treecli controls Treechat",
-	Long:          `A CLI application for interacting with Treechat.`,
-	Version:       cmd.CurrentVersion,
-	SilenceErrors: true,
-	SilenceUsage:  true,
+	Use:               "treecli",
+	Short:             "treecli controls Treechat",
+	Long:              `A CLI application for interacting with Treechat.`,
+	Version:           cmd.CurrentVersion,
+	SilenceErrors:     true,
+	SilenceUsage:      true,
+	PersistentPreRunE: cmd.ConfigureAccountSelection,
 }
 
 const (
@@ -73,6 +74,8 @@ fi
 
 func init() {
 	cobra.OnInitialize(initConfig)
+	rootCmd.PersistentFlags().StringVar(&cmd.SelectedEnvironment, "env", "", "Server environment (default: production; prod, staging, dev, or a custom name)")
+	rootCmd.PersistentFlags().StringVar(&cmd.SelectedAccount, "account", "", "Saved account in the selected environment (default: that environment’s active account, or default)")
 	rootCmd.PersistentFlags().StringVar(&cmd.SelectedProfile, "profile", "", "Profile to use (default: prod; dev, staging, prod, or custom)")
 	rootCmd.PersistentFlags().StringVar(&cmd.BackendURLOverride, "backend-url", "", "Override the backend API base URL for this invocation")
 	rootCmd.PersistentFlags().StringVar(&cmd.AppHostOverride, "app-host", "", "Override the app host for generated links for this invocation")
@@ -85,6 +88,8 @@ func init() {
 	rootCmd.AddCommand(cmd.QuoteReplyCmd)
 	rootCmd.AddCommand(cmd.NewCmd) // Add the new top-level command
 	rootCmd.AddCommand(cmd.BillingCmd)
+	_ = rootCmd.PersistentFlags().MarkDeprecated("profile", "use --env and --account to select the server and identity separately")
+	rootCmd.AddCommand(cmd.AccountCmd)
 	rootCmd.AddCommand(cmd.ProfileCmd)
 	rootCmd.AddCommand(cmd.OnboardCmd)
 	rootCmd.AddCommand(cmd.SkillsCmd)

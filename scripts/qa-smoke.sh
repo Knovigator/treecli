@@ -51,7 +51,7 @@ run_cli_for_profile() {
     shift
     if [ -n "$qa_app_url" ]; then
         "$qa_binary" \
-            --profile "$qa_profile" \
+            --env release-qa --account "$qa_profile" \
             --backend-url "$qa_api_url" \
             --app-host "$qa_app_url" \
             "$@"
@@ -59,7 +59,7 @@ run_cli_for_profile() {
     fi
 
     "$qa_binary" \
-        --profile "$qa_profile" \
+        --env release-qa --account "$qa_profile" \
         --backend-url "$qa_api_url" \
         "$@"
 }
@@ -75,7 +75,7 @@ printf '%s\n' "$qa_password" | run_cli_for_profile release-signup \
     signup --username "$signup_username" --email "$signup_email" --password-stdin
 
 signup_profile_json="${qa_tmp_dir}/signup-profile.json"
-run_cli_for_profile release-signup profile show --json > "$signup_profile_json"
+run_cli_for_profile release-signup account show --json > "$signup_profile_json"
 python3 -m json.tool "$signup_profile_json" >/dev/null
 if grep -F "$signup_email" "$signup_profile_json" >/dev/null 2>&1; then
     echo "signup profile output leaked the disposable QA email" >&2
@@ -90,7 +90,7 @@ fi
 printf '%s\n' "$qa_password" | run_cli login --email "$qa_email" --password-stdin
 
 profile_json="${qa_tmp_dir}/profile.json"
-run_cli profile show --json > "$profile_json"
+run_cli account show --json > "$profile_json"
 if grep -F "$qa_email" "$profile_json" >/dev/null 2>&1; then
     echo "profile output leaked the QA email" >&2
     exit 1

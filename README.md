@@ -52,7 +52,7 @@ The project was renamed from `treectl` to `treecli` in `v0.2.0`.
 Check where your setup stands and what to do next:
 
 ```sh
-treecli onboard          # checklist: profile, login, agent guidance, skills
+treecli onboard          # checklist: environment/account, login, agent guidance, skills
 treecli onboard --json   # machine-readable status
 ```
 
@@ -82,17 +82,16 @@ treecli signup
 
 The command prompts for a username and email, then reads the password and its
 confirmation without echoing either value. A successful signup saves the
-authenticated profile, so a separate `treecli login` is not required.
+authenticated account, so a separate `treecli login` is not required.
 
-All commands default to the production profile. Existing users can authenticate
-with `treecli login`. For local development, opt into the development profile
-explicitly, for example `treecli login --profile dev`.
+Commands default to production. Use `treecli --account NAME login` to save a
+login, or `treecli --env dev --account NAME login` for local development.
 
 ## Common Commands
 
 ```sh
-treecli profile list
-treecli profile show
+treecli account list
+treecli account show
 treecli login
 
 treecli get thread <quest-id>
@@ -139,6 +138,65 @@ treecli generate suno "warm ambient build, 122 BPM" --duration 20 --out sketch.m
 `tts` accepts the CLI alias `chatterbox`. `eleven_tts` accepts CLI aliases `eleven`, `elevenlabs`, and `11`. `video_sfx` accepts CLI aliases `sfx`, `mmaudio`, and `foley`.
 
 `treecli generate` supports repeatable `--input key=value`, JSON `--settings`, `--duration`, `--instrumental`, and `--reference run:<id>|https://...|@path`. For direct edits or image-to-video runs, use the base image/video action with explicit `--reference` media because direct generation has no thread context to infer it from. Clone and video sound-effect actions also require explicit reference media. Use `treecli generate describe <action>` before generating when an agent needs model descriptions, accepted inputs, settings, examples, and reference behavior.
+
+## Environments and accounts
+
+Select the server with `--env` and the saved identity with `--account`:
+
+```sh
+treecli --account brooz login                 # production (the default)
+treecli --account gm-bot login                # another production account
+treecli --account gm-bot branch-reply POST_ID "Hello"
+treecli --env staging --account gm-bot login  # separate staging credentials
+treecli --env dev --account brooz login       # local development
+
+treecli account list
+treecli --account gm-bot account show --json
+treecli account use gm-bot                    # default account for production
+treecli --env staging account use gm-bot     # default account for staging only
+```
+
+`prod` and `production` name the production environment; `dev` and `development`
+name local development. `staging` is also built in. Account names are local
+labels, not verified usernames. Names use letters, numbers, hyphens or underscores
+and are normalized to lowercase.
+
+The environment defaults to production. `TREECLI_ENV` sets an explicit default;
+`--env` takes precedence. Account selection uses `--account`, then
+`TREECLI_ACCOUNT`, then that environment's saved active account, then `default`.
+Successful login/signup selects that account for its environment. Logging into
+staging never changes the default environment or production's active account.
+`account show` displays saved user IDs and redacted credentials; it does not
+make a live identity request or prove that a token is still valid.
+
+Custom servers use a separate environment name:
+
+```sh
+treecli --env qa --backend-url https://qa.example.test --account gm-bot login
+treecli --env qa --account gm-bot branch-reply POST_ID "QA reply"
+```
+
+Credentials are stored per environment and account, bound to the backend URL
+used at login. Changing `--backend-url` (or `TREECLI_BACKEND_URL`) clears the
+resolved credentials for that invocation when the URL differs; log in to that
+server explicitly. Reading with an override does not overwrite saved logins.
+Use a distinct environment name for each server.
+
+### Migrating from profiles
+
+`--profile` and `profile list/show/use` are deprecated but remain available for
+legacy scripts, with warnings on stderr. Do not combine that interface (including
+`TREECLI_PROFILE`/`TREECTL_PROFILE`) with `--env` or `--account`.
+
+Existing profile records are retained. A profile named `custom` on production
+can be used as `--env prod --account custom`; a built-in `prod` login is also
+available as production's `default` account. Credentials are reused only if the
+saved server matches the selected environment. The legacy active account is
+preserved when its server matches, but `active_profile` never changes the new
+default server away from production. Explicit account selection avoids ambiguity.
+A custom profile for a different server needs a matching custom environment URL
+or a fresh login. New logins are saved separately under environments/accounts;
+legacy profile records are not deleted or rewritten.
 
 ## Reading threads
 

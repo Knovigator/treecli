@@ -45,6 +45,8 @@ type authTokens struct {
 }
 
 type profileConfig struct {
+	Environment   string `json:"environment,omitempty"`
+	Account       string `json:"account,omitempty"`
 	Name          string `json:"name"`
 	BackendURL    string `json:"backend_url"`
 	AppHost       string `json:"app_host"`
@@ -74,7 +76,7 @@ var LoginCmd = &cobra.Command{
 
 var ProfileCmd = &cobra.Command{
 	Use:   "profile",
-	Short: "Inspect and switch treecli profiles",
+	Short: "Deprecated: inspect legacy profiles; use account commands",
 	Long:  `List, inspect, and switch the saved treecli profiles.`,
 }
 
@@ -153,7 +155,11 @@ func runLogin(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("saving profile: %w", err)
 	}
 
-	fmt.Printf("Login successful. Profile: %s Backend: %s\n", profile.Name, profile.BackendURL)
+	if profile.Environment != "" {
+		fmt.Printf("Login successful. Environment: %s Account: %s Backend: %s\n", profile.Environment, profile.Account, profile.BackendURL)
+	} else {
+		fmt.Printf("Login successful. Profile: %s Backend: %s\n", profile.Name, profile.BackendURL)
+	}
 	return nil
 }
 
@@ -305,6 +311,13 @@ func firstEnv(names ...string) string {
 }
 
 func resolveProfile(profileName string) (profileConfig, error) {
+	if accountSelection {
+		return resolveAccount()
+	}
+	return resolveLegacyProfile(profileName)
+}
+
+func resolveLegacyProfile(profileName string) (profileConfig, error) {
 	resolvedProfileName := normalizeProfileName(profileName)
 	profile := builtInProfiles()[resolvedProfileName]
 	profile.Name = resolvedProfileName
@@ -409,6 +422,9 @@ func requireAuthenticatedProfile() (profileConfig, error) {
 	}
 
 	if profile.AccessToken == "" || profile.Client == "" || profile.UID == "" {
+		if profile.Environment != "" {
+			return profileConfig{}, fmt.Errorf("missing credentials for account %q in environment %q; run treecli --env %s --account %s login", profile.Account, profile.Environment, profile.Environment, profile.Account)
+		}
 		return profileConfig{}, fmt.Errorf("missing credentials for profile %q; run treecli login --profile %s", profile.Name, profile.Name)
 	}
 	if err := validateCredentialTransport(profile.BackendURL); err != nil {
@@ -595,6 +611,14 @@ func saveProfile(profile profileConfig, setActive bool) error {
 	viper.SetConfigType("toml")
 
 	profileKeyPrefix := fmt.Sprintf("profiles.%s.", normalizeProfileName(profile.Name))
+	if profile.Environment != "" {
+		profileKeyPrefix = "accounts." + profile.Environment + "." + profile.Account + "."
+		viper.Set("environments."+profile.Environment+".backend_url", profile.BackendURL)
+		viper.Set("environments."+profile.Environment+".app_host", profile.AppHost)
+		if setActive {
+			viper.Set("environments."+profile.Environment+".active_account", profile.Account)
+		}
+	}
 	viper.Set(profileKeyPrefix+"backend_url", normalizeBaseURL(profile.BackendURL))
 	viper.Set(profileKeyPrefix+"app_host", normalizeAppHost(profile.AppHost))
 	viper.Set(profileKeyPrefix+"access_token", profile.AccessToken)
@@ -604,7 +628,7 @@ func saveProfile(profile profileConfig, setActive bool) error {
 	viper.Set(profileKeyPrefix+"current_user_id", profile.CurrentUserID)
 	viper.Set(profileKeyPrefix+"active_space_id", profile.ActiveSpaceID)
 
-	if setActive {
+	if setActive && profile.Environment == "" {
 		viper.Set("active_profile", normalizeProfileName(profile.Name))
 	}
 
