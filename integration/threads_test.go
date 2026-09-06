@@ -66,7 +66,7 @@ func TestCompiledThreadsCommands(t *testing.T) {
 			if result[tc.key] == nil || !strings.Contains(out, "future_field") {
 				t.Fatalf("lost payload: %s", out)
 			}
-			if strings.Contains(stderr, "deprecated") != tc.deprecated {
+			if strings.Contains(stderr, "get thread is deprecated") != tc.deprecated {
 				t.Fatalf("unexpected stderr %q", stderr)
 			}
 		})

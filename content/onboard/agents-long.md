@@ -2,13 +2,84 @@
 
 Use `treecli` as the CLI surface for Treechat automation in this repo.
 
-### Profiles and Auth
+### Environments and accounts
 
-- Check available environments with `treecli profile list`.
-- Inspect the resolved config with `treecli profile show`.
-- Production is the default profile. Authenticate with `treecli login`.
-- For local development, explicitly pass `--profile dev` to commands.
-- The built-in profiles are `dev`, `staging`, and `prod`.
+Select the server with `--env` and the saved identity with `--account`:
+
+```sh
+treecli --account brooz login                 # production (the default)
+treecli --account gm-bot login                # another production account
+treecli --account gm-bot branch-reply POST_ID "Hello"
+treecli --env staging --account gm-bot login  # separate staging credentials
+treecli --env dev --account brooz login       # local development
+
+treecli account list
+treecli --account gm-bot account show --json
+treecli account use gm-bot                    # default account for production
+treecli --env staging account use gm-bot     # default account for staging only
+```
+
+`prod` and `production` name the production environment; `dev` and `development`
+name local development. `staging` is also built in. Account names are local
+labels, not verified usernames. Names use letters, numbers, hyphens or underscores
+and are normalized to lowercase.
+
+The environment defaults to production. `TREECLI_ENV` sets an explicit default;
+`--env` takes precedence. Account selection uses `--account`, then
+`TREECLI_ACCOUNT`, then that environment's saved active account, then `default`.
+Successful login/signup selects that account for its environment. Logging into
+staging never changes the default environment or production's active account.
+`account show` displays saved user IDs and redacted credentials; it does not
+make a live identity request or prove that a token is still valid.
+
+Custom servers use a separate environment name:
+
+```sh
+treecli --env qa --backend-url https://qa.example.test --account gm-bot login
+treecli --env qa --account gm-bot branch-reply POST_ID "QA reply"
+```
+
+Credentials are stored per environment and account, bound to the backend URL
+used at login. Changing `--backend-url` (or `TREECLI_BACKEND_URL`) clears the
+resolved credentials for that invocation when the URL differs; log in to that
+server explicitly. Reading with an override does not overwrite saved logins.
+Use a distinct environment name for each server.
+
+#### Checking which account you are using
+
+```sh
+treecli whoami                 # verify the currently selected account
+treecli whoami --json          # environment, account, backend_url, username, user_id
+treecli account use gm-bot
+treecli whoami                 # verify the newly selected default
+```
+
+`whoami` makes a live authenticated request. It reports the server's username
+and user ID, even if the saved ID is stale. Expired/invalid credentials,
+network errors, or missing identity data fail without reporting a saved identity.
+It does not switch accounts or rewrite configuration. `account show` remains
+an offline view of saved configuration and credentials (redacted).
+
+You normally need no selector. Use `--env staging whoami` to check the selected
+staging account, or `--account OTHER whoami` only to inspect a different saved
+account without changing your default. A local account label is not proof of
+the username; `whoami` verifies the actual login.
+
+#### Migrating from profiles
+
+`--profile` and `profile list/show/use` are deprecated but remain available for
+legacy scripts, with warnings on stderr. Do not combine that interface (including
+`TREECLI_PROFILE`/`TREECTL_PROFILE`) with `--env` or `--account`.
+
+Existing profile records are retained. A profile named `custom` on production
+can be used as `--env prod --account custom`; a built-in `prod` login is also
+available as production's `default` account. Credentials are reused only if the
+saved server matches the selected environment. The legacy active account is
+preserved when its server matches, but `active_profile` never changes the new
+default server away from production. Explicit account selection avoids ambiguity.
+A custom profile for a different server needs a matching custom environment URL
+or a fresh login. New logins are saved separately under environments/accounts;
+legacy profile records are not deleted or rewritten.
 
 ### Reading Threads and Answers
 

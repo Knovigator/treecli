@@ -79,6 +79,9 @@ func runSignup(cmd *cobra.Command, args []string) error {
 
 	bootstrap, err := fetchBootstrap(profile.BackendURL, tokens)
 	if err != nil {
+		if profile.Environment != "" {
+			return fmt.Errorf("signup failed: account created but setup failed: %w; run treecli --env %s --account %s login", err, profile.Environment, profile.Account)
+		}
 		return fmt.Errorf("signup failed: account created but profile setup failed: %w; run treecli login --profile %s", err, profile.Name)
 	}
 
@@ -94,7 +97,11 @@ func runSignup(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("signup succeeded but saving profile failed: %w", err)
 	}
 
-	fmt.Printf("Signup successful. Profile: %s Backend: %s\n", profile.Name, profile.BackendURL)
+	if profile.Environment != "" {
+		fmt.Printf("Signup successful. Environment: %s Account: %s Backend: %s\n", profile.Environment, profile.Account, profile.BackendURL)
+	} else {
+		fmt.Printf("Signup successful. Profile: %s Backend: %s\n", profile.Name, profile.BackendURL)
+	}
 	return nil
 }
 

@@ -17,7 +17,7 @@ var OnboardCmd = &cobra.Command{
 	Short: "Check setup status and get next steps for humans and agents",
 	Long: `Show treecli setup status and the next steps to finish onboarding.
 
-The bare command prints a checklist: active profile, login state, whether this
+The bare command prints a checklist: selected environment and account, login state, whether this
 directory's agent instruction files (AGENTS.md / CLAUDE.md) carry the treecli
 guidance block, and which packaged skills are installed.
 
@@ -462,10 +462,12 @@ type onboardStatus struct {
 }
 
 type onboardProfileStatus struct {
-	Name       string `json:"name"`
-	BackendURL string `json:"backend_url,omitempty"`
-	SignedIn   bool   `json:"signed_in"`
-	Error      string `json:"error,omitempty"`
+	Environment string `json:"environment,omitempty"`
+	Account     string `json:"account,omitempty"`
+	Name        string `json:"name"`
+	BackendURL  string `json:"backend_url,omitempty"`
+	SignedIn    bool   `json:"signed_in"`
+	Error       string `json:"error,omitempty"`
 }
 
 type onboardFileStatus struct {
@@ -496,6 +498,10 @@ func collectOnboardStatus() (onboardStatus, error) {
 
 	profileName := resolveProfileName()
 	status.Profile.Name = profileName
+	if accountSelection {
+		status.Profile.Environment, status.Profile.Account, _ = accountNames()
+		status.Profile.Name = status.Profile.Account
+	}
 	profile, err := resolveProfile(profileName)
 	if err != nil {
 		status.Profile.Error = err.Error()
@@ -558,6 +564,11 @@ func buildOnboardNextSteps(status onboardStatus) []onboardNextStep {
 		})
 	}
 
+	if status.Profile.Environment != "" && len(steps) > 0 {
+		steps[0].Description = "Inspect or authenticate the selected environment and account"
+		steps[0].Command = fmt.Sprintf("treecli --env %s --account %s login", status.Profile.Environment, status.Profile.Account)
+	}
+
 	hasCurrentBlock := false
 	hasStaleBlock := false
 	for _, file := range status.AgentFiles {
@@ -608,7 +619,14 @@ func printOnboardStatus(status onboardStatus) {
 
 	fmt.Printf("  [x] treecli %s\n", status.CLIVersion)
 
-	if status.Profile.Error != "" {
+	if status.Profile.Environment != "" {
+		fmt.Printf("  Environment: %s Account: %s (%s)\n", status.Profile.Environment, status.Profile.Account, status.Profile.BackendURL)
+		if status.Profile.Error != "" {
+			fmt.Printf("  [ ] %s\n", status.Profile.Error)
+		} else {
+			fmt.Printf("  %s login: %s\n", checkbox(status.Profile.SignedIn), signedInLabel(status.Profile.SignedIn))
+		}
+	} else if status.Profile.Error != "" {
 		fmt.Printf("  [ ] profile %q: %s\n", status.Profile.Name, status.Profile.Error)
 	} else {
 		fmt.Printf("  [x] profile: %s (%s)\n", status.Profile.Name, status.Profile.BackendURL)

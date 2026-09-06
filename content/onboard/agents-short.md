@@ -1,6 +1,10 @@
 ## treecli CLI Guidance
 
-- Production is the default profile. Use `treecli profile list`, `treecli profile show`, and `treecli login` to inspect and authenticate it; pass `--profile dev` explicitly for local development.
+- Select the server with `--env` (default production; `prod`, `staging`, `dev`, or a custom environment) and identity with `--account NAME`. Log in with `treecli --account NAME login`; staging/dev credentials are separate.
+- Inspect accounts with `treecli account list` and `treecli --account NAME account show`. `treecli account use NAME` selects the default account for the chosen environment only. Names are labels; show reports saved IDs, not a live username check.
+- Run `treecli whoami` (or `whoami --json`) to verify the currently selected account’s live username and user ID. No account argument is needed. `account show` is offline; `whoami` requires valid credentials and never falls back to saved identity on failure.
+- `--profile` is deprecated. Existing matching-server profiles can be used as account names; the `prod` login is available as production's `default` account. Never combine legacy profile selection with `--env`/`--account`. An old active profile never selects a non-production server for new commands.
+- Use a separate `--env qa --backend-url URL` for a custom server. Saved credentials are bound to that URL; a different backend requires login.
 - Read data with `treecli get threads <quest-id>` and `treecli get messages <answer-id> [...]`.
 - Create a root post with `treecli new post "text"`; add an unquoted post to a known thread with `treecli new post --thread <quest-id> "text"` (`--reply-to` remains compatible and takes a thread ID).
 - Reply beneath a specific post with `treecli branch-reply <post-id-or-link> "text"`: it enters the child branch and quotes its title/head. Add `--no-quote` to omit the title quote.

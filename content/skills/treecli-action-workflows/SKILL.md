@@ -9,7 +9,7 @@ Use this skill when you need to submit or inspect Treechat AI action work throug
 
 ## Discover AI Actions
 
-- Run `treecli action actions` to inspect the current model-backed AI actions for the active profile.
+- Run `treecli action actions` to inspect the current model-backed AI actions for the selected environment and account.
 - Use `--allow-unknown-action` only when you intentionally need to bypass local AI action validation.
 
 ## Treechat Action Model

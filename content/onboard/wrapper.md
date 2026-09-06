@@ -25,7 +25,7 @@ treecli onboard agents           # full block (default)
 treecli onboard agents --short   # compact block
 ```
 
-Check overall setup state (profile, login, guidance block, skills) with
+Check overall setup state (environment/account, login, guidance block, skills) with
 `treecli onboard`; add `--json` for machine-readable status.
 
 Install packaged treecli skills instead of copying them by hand:
