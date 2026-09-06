@@ -30,6 +30,7 @@ var replyMessageType string
 var replyWriteID string
 
 type replyCreateOptions struct {
+	ReplyToAnswerID    string
 	WriteID            string
 	ReplyToQuestID     string
 	Content            string
@@ -124,6 +125,7 @@ func createReply(profile profileConfig, options replyCreateOptions) (api.CreateA
 		profile.UID,
 		api.CreateAnswerRequest{
 			AnswerID:           answerID,
+			ReplyToAnswerID:    options.ReplyToAnswerID,
 			QuestID:            options.ReplyToQuestID,
 			SpaceID:            spaceID,
 			UserID:             profile.CurrentUserID,

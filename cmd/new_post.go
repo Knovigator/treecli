@@ -153,7 +153,7 @@ func init() {
 	newPostCmd.Flags().StringVarP(&postAttachment, "attachment", "f", "", "Path to the file to attach")
 	newPostCmd.Flags().StringVar(&postStream, "stream", "", "Target stream name or UUID. Defaults to private.")
 	newPostCmd.Flags().StringVar(&postReplyTo, "reply-to", "", "Reply to the thread/quest with this id or link instead of creating a new root thread")
-	newPostCmd.Flags().StringVar(&postReplyTo, "thread", "", "Compatibility alias for --reply-to")
+	newPostCmd.Flags().StringVar(&postReplyTo, "thread", "", "Post in this thread without quoting a post (thread UUID or link)")
 	newPostCmd.Flags().StringVar(&postSpaceID, "space-id", "", "Space ID to create the post in")
 	newPostCmd.Flags().StringVar(&postThreadType, "thread-type", "", "Optional thread_type for the new thread")
 	newPostCmd.Flags().StringVar(&postMessageType, "message-type", "", "Optional message_type for the submitted answer")
@@ -163,7 +163,6 @@ func init() {
 	newPostCmd.Flags().StringVar(&postWriteID, "id", "", "UUID for this post or reply; reuse it to retry safely")
 	newPostCmd.Flags().StringVarP(&createOutputFormat, "output", "o", "ascii", "Output format: ascii or json")
 	newPostCmd.Flags().BoolVar(&createJSONOutput, "json", false, "Output JSON instead of human-readable text")
-	_ = newPostCmd.Flags().MarkHidden("thread")
 
 	ActionCmd.Flags().StringVarP(&actionAttachment, "attachment", "f", "", "Path to the file to attach")
 	ActionCmd.Flags().StringVar(&actionStream, "stream", "", "Target stream name or UUID. Defaults to private.")

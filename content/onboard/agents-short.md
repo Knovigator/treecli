@@ -2,7 +2,10 @@
 
 - Production is the default profile. Use `treecli profile list`, `treecli profile show`, and `treecli login` to inspect and authenticate it; pass `--profile dev` explicitly for local development.
 - Read data with `treecli get threads <quest-id>` and `treecli get messages <answer-id> [...]`.
-- Create a root post with `treecli new post "text"` and a reply with `treecli new post --reply-to <quest-id> "text"`.
+- Create a root post with `treecli new post "text"`; add an unquoted post to a known thread with `treecli new post --thread <quest-id> "text"` (`--reply-to` remains compatible and takes a thread ID).
+- Reply beneath a specific post with `treecli branch-reply <post-id-or-link> "text"`: it enters the child branch and quotes its title/head. Add `--no-quote` to omit the title quote.
+- Stay in the post's containing thread and quote it with `treecli quote-reply <post-id-or-link> "text"`. Both commands resolve the destination automatically; unresolved destinations fail. Root posts have no containing thread; use `branch-reply`.
+- Replies support `--json` and `--id UUID` for retries. If the backend does not confirm the destination or quote, inspect the reported write ID before retrying; a post may already exist.
 - Root posts default to private; use `--stream` only on root posts and root actions.
 - Discover AI actions with `treecli action actions`.
 - Submit action work with `treecli action <action> "prompt"` or `treecli action --reply-to <quest-id> <action> "prompt"`.

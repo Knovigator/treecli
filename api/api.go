@@ -37,6 +37,7 @@ type CreateQuestRequest struct {
 }
 
 type CreateAnswerRequest struct {
+	ReplyToAnswerID    string
 	AnswerID           string
 	ChildQuestID       string
 	QuestID            string
@@ -452,6 +453,9 @@ func CreateAnswer(
 	form.Set("id", request.AnswerID)
 	form.Set("space_id", request.SpaceID)
 	form.Set("quest_id", request.QuestID)
+	if request.ReplyToAnswerID != "" {
+		form.Set("reply_to_answer_id", request.ReplyToAnswerID)
+	}
 	if request.UserID != "" {
 		form.Set("user_id", request.UserID)
 	}
