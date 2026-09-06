@@ -133,6 +133,7 @@ type TeamRef struct {
 }
 
 type Quest struct {
+	SideQuest               bool     `json:"side_quest"`
 	ID                      string   `json:"id"`
 	SpaceID                 string   `json:"space_id"`
 	UserID                  string   `json:"user_id"`
@@ -148,6 +149,7 @@ type Quest struct {
 }
 
 type Answer struct {
+	ReplyToAnswerID              string              `json:"reply_to_answer_id"`
 	ID                           string              `json:"id"`
 	SpaceID                      string              `json:"space_id"`
 	QuestID                      string              `json:"quest_id"`

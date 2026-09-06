@@ -36,6 +36,51 @@ Use this skill when you need to interact with Treechat through the `treecli` CLI
 - Root posts can target a stream with `--stream private`, `--stream public`, `--stream clips`, a stream name, or a stream UUID.
 - Replies inherit thread placement, so do not pass root-only stream flags with `--reply-to`.
 
+## Replying to a specific post
+
+Treechat posts (`Answer` IDs in the API) live in threads (`Quest` IDs). A post
+can also be the title/head of its own child branch. Choose where your reply belongs:
+
+| Command | Destination | Quoted post (`reply_to_answer_id`) |
+| --- | --- | --- |
+| `treecli branch-reply POST_ID "text"` | Post's child branch | Target post, the branch title/head |
+| `treecli branch-reply POST_ID --no-quote "text"` | Post's child branch | None |
+| `treecli quote-reply POST_ID "text"` | Post's containing thread | Target post |
+| `treecli new post --thread THREAD_ID "text"` | Specified thread | None |
+
+Both explicit reply commands accept a post UUID or post link, support `--json`,
+`--attachment`, and `--id UUID` for safe retries, and inherit the destination's
+visibility. `--no-quote` is only available on `branch-reply`.
+
+For example, reply beneath an individual GM comment:
+
+```sh
+treecli branch-reply GM_COMMENT_ID "Tip limit reached for this post ☕"
+# Same branch, without the title quote:
+treecli branch-reply GM_COMMENT_ID --no-quote "Tip limit reached for this post ☕"
+# Stay alongside the GM comment in its containing thread, quoting it:
+treecli quote-reply GM_COMMENT_ID "Tip limit reached for this post ☕"
+```
+
+The CLI resolves the destination automatically. Branch replies prefer the
+canonical discussion child (`side_quest`); a single child is also accepted.
+Missing, inaccessible, or ambiguous destinations fail before writing. A root
+post has no containing thread, so use `branch-reply` for it. Inspect available
+branches with `treecli get threads --answer POST_ID --json`.
+
+API equivalents use `POST /api/v1/answers`: set `quest_id` to the destination
+above, and set `reply_to_answer_id` to the target post ID unless using
+`--no-quote`. The backend accepts a quoted target in the same thread or the
+thread's own title/head. The CLI checks the returned destination and quote;
+if the backend does not confirm them, the command fails and reports the write
+ID because the post may already exist. Inspect it before retrying; do not
+retry with a new ID. This check detects incompatible backends but cannot undo
+a post they already created.
+
+`new post --reply-to THREAD_ID` remains a compatible alias for thread posting;
+it takes a **thread** ID and does not quote a post. Use the explicit commands
+above when starting from a **post** ID.
+
 ## Working Rules
 
 - Prefer `treecli` over raw API calls when the CLI already supports the flow.

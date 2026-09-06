@@ -81,6 +81,8 @@ func init() {
 	rootCmd.AddCommand(cmd.GetCmd)
 	rootCmd.AddCommand(cmd.ActionCmd)
 	rootCmd.AddCommand(cmd.GenerateCmd)
+	rootCmd.AddCommand(cmd.BranchReplyCmd)
+	rootCmd.AddCommand(cmd.QuoteReplyCmd)
 	rootCmd.AddCommand(cmd.NewCmd) // Add the new top-level command
 	rootCmd.AddCommand(cmd.BillingCmd)
 	rootCmd.AddCommand(cmd.ProfileCmd)

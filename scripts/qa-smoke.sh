@@ -146,6 +146,27 @@ result = json.load(open(sys.argv[1]))
 assert sys.argv[2] in [thread["id"] for thread in result["threads"]], result
 PYTEST
 
+# Exercise all explicit reply modes and verify persisted edges after reading back.
+branch_json="${qa_tmp_dir}/branch-reply.json"
+plain_json="${qa_tmp_dir}/branch-plain.json"
+quote_json="${qa_tmp_dir}/quote-reply.json"
+run_cli_for_profile release-signup branch-reply "$answer_id" "${smoke_marker}-branch" --json > "$branch_json"
+run_cli_for_profile release-signup branch-reply "$answer_id" --no-quote "${smoke_marker}-plain" --json > "$plain_json"
+branch_answer_id=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["answer"]["id"])' "$branch_json")
+plain_answer_id=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["answer"]["id"])' "$plain_json")
+run_cli_for_profile release-signup quote-reply "$branch_answer_id" "${smoke_marker}-quote" --json > "$quote_json"
+quote_answer_id=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["answer"]["id"])' "$quote_json")
+replies_json="${qa_tmp_dir}/replies.json"
+run_cli_for_profile release-signup get messages "$branch_answer_id" "$plain_answer_id" "$quote_answer_id" --json > "$replies_json"
+python3 - "$replies_json" "$quest_id" "$answer_id" "$branch_answer_id" "$plain_answer_id" "$quote_answer_id" <<'PYTEST'
+import json, sys
+posts = {post["id"]: post for post in json.load(open(sys.argv[1]))["answers"]}
+for post_id, target in [(sys.argv[4], sys.argv[3]), (sys.argv[5], None), (sys.argv[6], sys.argv[4])]:
+    post = posts[post_id]
+    assert post["quest_id"] == sys.argv[2], post
+    assert post.get("reply_to_answer_id") == target, post
+PYTEST
+
 echo "QA smoke passed"
 echo "API: ${qa_api_url}"
 echo "Thread: ${quest_id}"
