@@ -95,6 +95,17 @@ if grep -F "$qa_email" "$profile_json" >/dev/null 2>&1; then
     echo "profile output leaked the QA email" >&2
     exit 1
 fi
+identity_json="${qa_tmp_dir}/identity.json"
+run_cli whoami --json > "$identity_json"
+python3 - "$identity_json" "$profile_json" <<'PYTEST'
+import json, sys
+identity, profile = [json.load(open(path)) for path in sys.argv[1:]]
+assert identity["user_id"] == profile["current_user_id"], identity
+assert identity["username"], identity
+assert identity["environment"] == "release-qa", identity
+assert identity["account"] == "release-smoke", identity
+PYTEST
+
 space_id=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("active_space_id", ""))' "$profile_json")
 if [ -z "$space_id" ]; then
     echo "QA user bootstrap did not provide an active space" >&2

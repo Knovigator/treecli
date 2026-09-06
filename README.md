@@ -92,6 +92,7 @@ login, or `treecli --env dev --account NAME login` for local development.
 ```sh
 treecli account list
 treecli account show
+treecli whoami
 treecli login
 
 treecli get thread <quest-id>
@@ -181,6 +182,26 @@ used at login. Changing `--backend-url` (or `TREECLI_BACKEND_URL`) clears the
 resolved credentials for that invocation when the URL differs; log in to that
 server explicitly. Reading with an override does not overwrite saved logins.
 Use a distinct environment name for each server.
+
+### Checking which account you are using
+
+```sh
+treecli whoami                 # verify the currently selected account
+treecli whoami --json          # environment, account, backend_url, username, user_id
+treecli account use gm-bot
+treecli whoami                 # verify the newly selected default
+```
+
+`whoami` makes a live authenticated request. It reports the server's username
+and user ID, even if the saved ID is stale. Expired/invalid credentials,
+network errors, or missing identity data fail without reporting a saved identity.
+It does not switch accounts or rewrite configuration. `account show` remains
+an offline view of saved configuration and credentials (redacted).
+
+You normally need no selector. Use `--env staging whoami` to check the selected
+staging account, or `--account OTHER whoami` only to inspect a different saved
+account without changing your default. A local account label is not proof of
+the username; `whoami` verifies the actual login.
 
 ### Migrating from profiles
 

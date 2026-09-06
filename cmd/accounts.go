@@ -174,7 +174,7 @@ var AccountCmd = newAccountCommand()
 func newAccountCommand() *cobra.Command {
 	command := &cobra.Command{Use: "account", Short: "Inspect and select saved accounts in an environment"}
 	var jsonOutput bool
-	show := &cobra.Command{Use: "show", Short: "Show the selected environment and account (credentials redacted)", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
+	show := &cobra.Command{Use: "show", Short: "Show saved account configuration offline; use whoami to verify identity", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
 		profile, err := resolveAccount()
 		if err != nil {
 			return err

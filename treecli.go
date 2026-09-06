@@ -90,6 +90,7 @@ func init() {
 	rootCmd.AddCommand(cmd.BillingCmd)
 	_ = rootCmd.PersistentFlags().MarkDeprecated("profile", "use --env and --account to select the server and identity separately")
 	rootCmd.AddCommand(cmd.AccountCmd)
+	rootCmd.AddCommand(cmd.WhoamiCmd)
 	rootCmd.AddCommand(cmd.ProfileCmd)
 	rootCmd.AddCommand(cmd.OnboardCmd)
 	rootCmd.AddCommand(cmd.SkillsCmd)
