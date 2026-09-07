@@ -493,7 +493,8 @@ func createRootThread(profile profileConfig, options rootThreadCreateOptions) (a
 		},
 	)
 	if err != nil {
-		if shouldReconcileWrite(err) {
+		// GET responses cannot prove attachment bytes or action request settings match.
+		if len(uploads) == 0 && options.ActionRequestsJSON == "" && shouldReconcileWrite(err) {
 			if reconciled, ok := reconcileQuestWrite(
 				profile,
 				questID,
@@ -502,6 +503,9 @@ func createRootThread(profile profileConfig, options rootThreadCreateOptions) (a
 				deltaJSON,
 				"",
 				false,
+				resolvedTarget,
+				options.ThreadType,
+				options.MessageType,
 			); ok {
 				return reconciled, nil
 			}

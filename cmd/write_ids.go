@@ -119,6 +119,9 @@ func prettyWriteSuccessJSON(raw json.RawMessage, writeID string) (string, error)
 	if err := json.Unmarshal(raw, &payload); err != nil {
 		return "", err
 	}
+	if payload == nil {
+		return "", fmt.Errorf("expected a JSON object in write response")
+	}
 	encodedWriteID, err := json.Marshal(writeID)
 	if err != nil {
 		return "", err

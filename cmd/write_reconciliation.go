@@ -36,6 +36,7 @@ func reconcileAnswerWrite(
 	spaceID string,
 	content string,
 	deltaJSON string,
+	messageType string,
 ) (api.CreateAnswerResponse, bool) {
 	result, err := api.GetAnswer(
 		profile.BackendURL,
@@ -44,7 +45,8 @@ func reconcileAnswerWrite(
 		profile.Client,
 		profile.UID,
 	)
-	if err != nil || !sameAnswerWrite(result.Answer, profile.CurrentUserID, answerID, questID, spaceID, content, deltaJSON) {
+	if err != nil || !sameAnswerWrite(result.Answer, profile.CurrentUserID, answerID, questID, spaceID, content, deltaJSON) ||
+		result.Answer.MessageType != messageType {
 		return api.CreateAnswerResponse{}, false
 	}
 
@@ -80,6 +82,9 @@ func reconcileQuestWrite(
 	deltaJSON string,
 	url string,
 	bareQuestJSON bool,
+	target streamTarget,
+	threadType string,
+	messageType string,
 ) (api.CreateQuestResponse, bool) {
 	result, err := api.GetThread(
 		profile.BackendURL,
@@ -88,7 +93,9 @@ func reconcileQuestWrite(
 		profile.Client,
 		profile.UID,
 	)
-	if err != nil || !sameQuestWrite(result.Quest, profile.CurrentUserID, questID, spaceID, content, deltaJSON, url) {
+	if err != nil || !sameQuestWrite(result.Quest, profile.CurrentUserID, questID, spaceID, content, deltaJSON, url) ||
+		!sameQuestDestination(result.Quest, target, bareQuestJSON) ||
+		result.Quest.ThreadType != threadType || result.Quest.Parent.MessageType != messageType {
 		return api.CreateQuestResponse{}, false
 	}
 
@@ -130,10 +137,32 @@ func sameQuestWrite(
 		return false
 	}
 
-	if url == "" {
-		return true
+	storedURL := ""
+	if quest.Parent.URL != nil {
+		storedURL = quest.Parent.URL.Address
 	}
-	return quest.Parent != nil && quest.Parent.URL != nil && quest.Parent.URL.Address == url
+	return storedURL == url
+}
+
+func sameQuestDestination(quest api.Quest, target streamTarget, isClip bool) bool {
+	// Require an explicit clip identity and a positive match for the destination.
+	// Rails may serialize the unused visibility flag as null rather than false.
+	if quest.IsClip == nil || *quest.IsClip != isClip {
+		return false
+	}
+	switch target.Kind {
+	case "public":
+		return quest.TeamID == "" && quest.Public != nil && *quest.Public &&
+			(quest.Private == nil || !*quest.Private)
+	case "private", "clips":
+		return quest.TeamID == "" && quest.Private != nil && *quest.Private &&
+			(quest.Public == nil || !*quest.Public)
+	case "team":
+		return target.ID != "" && quest.TeamID == target.ID &&
+			(quest.Private == nil || !*quest.Private)
+	default:
+		return false
+	}
 }
 
 func sameWriteJSON(stored json.RawMessage, requested string) bool {

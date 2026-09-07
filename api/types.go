@@ -96,6 +96,11 @@ type TeamRef struct {
 
 type Quest struct {
 	ID                      string   `json:"id"`
+	TeamID                  string   `json:"team_id"`
+	Public                  *bool    `json:"public"`
+	Private                 *bool    `json:"private"`
+	IsClip                  *bool    `json:"is_clip"`
+	ThreadType              string   `json:"thread_type"`
 	SpaceID                 string   `json:"space_id"`
 	UserID                  string   `json:"user_id"`
 	Content                 string   `json:"content"`

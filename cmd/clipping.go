@@ -461,7 +461,8 @@ func createClipQuest(
 		},
 	)
 	if err != nil {
-		if shouldReconcileWrite(err) {
+		// A fetched clip does not expose an identity for the uploaded attachment bytes.
+		if strings.TrimSpace(attachment) == "" && shouldReconcileWrite(err) {
 			if reconciled, ok := reconcileQuestWrite(
 				profile,
 				questID,
@@ -470,6 +471,9 @@ func createClipQuest(
 				deltaJSON,
 				url,
 				true,
+				target,
+				"",
+				"",
 			); ok {
 				return reconciled, nil
 			}

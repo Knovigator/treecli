@@ -135,7 +135,8 @@ func createReply(profile profileConfig, options replyCreateOptions) (api.CreateA
 		},
 	)
 	if err != nil {
-		if shouldReconcileWrite(err) {
+		// GET responses cannot prove attachment bytes or action request settings match.
+		if len(uploads) == 0 && options.ActionRequestsJSON == "" && shouldReconcileWrite(err) {
 			if reconciled, ok := reconcileAnswerWrite(
 				profile,
 				answerID,
@@ -143,6 +144,7 @@ func createReply(profile profileConfig, options replyCreateOptions) (api.CreateA
 				spaceID,
 				options.Content,
 				deltaJSON,
+				options.MessageType,
 			); ok {
 				return reconciled, nil
 			}

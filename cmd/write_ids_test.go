@@ -169,7 +169,7 @@ func TestCreateRootThreadReconcilesConflictWithMatchingWrite(t *testing.T) {
 			getCount++
 			_, _ = fmt.Fprintf(
 				writer,
-				`{"quest":{"id":%q,"space_id":"space-id","user_id":"user-id","parent":{"id":"root-answer-id","user_id":"user-id","content":"safe retry","delta_json":{"ops":[{"insert":"safe retry"}]}}}}`,
+				`{"quest":{"id":%q,"space_id":"space-id","user_id":"user-id","private":true,"public":null,"is_clip":false,"parent":{"id":"root-answer-id","user_id":"user-id","content":"safe retry","delta_json":{"ops":[{"insert":"safe retry"}]}}}}`,
 				testWriteID,
 			)
 		default:
@@ -292,7 +292,7 @@ func TestCreateClipQuestReconcilesConflictAndPreservesClipJSONShape(t *testing.T
 		case request.Method == http.MethodGet && request.URL.Path == "/api/v1/quests/"+testWriteID:
 			_, _ = fmt.Fprintf(
 				writer,
-				`{"quest":{"id":%q,"space_id":"space-id","user_id":"user-id","parent":{"id":"root-answer-id","user_id":"user-id","content":"safe clip retry","delta_json":{"ops":[{"insert":"safe clip retry"}]},"url":{"address":"https://example.com"}}}}`,
+				`{"quest":{"id":%q,"space_id":"space-id","user_id":"user-id","private":true,"public":null,"is_clip":true,"parent":{"id":"root-answer-id","user_id":"user-id","content":"safe clip retry","delta_json":{"ops":[{"insert":"safe clip retry"}]},"url":{"address":"https://example.com"}}}}`,
 				testWriteID,
 			)
 		default:
