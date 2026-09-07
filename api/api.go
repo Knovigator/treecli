@@ -682,7 +682,10 @@ func postMultipart(
 	}
 
 	if resp.StatusCode() != http.StatusOK {
-		return nil, fmt.Errorf("received status code %d: %s", resp.StatusCode(), SafeResponseBody(resp.Body()))
+		return nil, &HTTPError{
+			StatusCode: resp.StatusCode(),
+			Body:       SafeResponseBody(resp.Body()),
+		}
 	}
 
 	return resp, nil

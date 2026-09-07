@@ -51,7 +51,7 @@ func runNewClip(cmd *cobra.Command, args []string) error {
 
 	result, err := createClipQuest(profile, url, clipContent, clipAttachment, target, clipWriteID)
 	if err != nil {
-		return fmt.Errorf("creating clip: %w", err)
+		return writeErrorForOutput(fmt.Errorf("creating clip: %w", err), resolvedOutputFormat)
 	}
 
 	return printCreateQuestResult(profile, result, resolvedOutputFormat)

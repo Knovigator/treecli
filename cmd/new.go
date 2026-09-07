@@ -88,7 +88,7 @@ func runNewReply(cmd *cobra.Command, args []string) error {
 		},
 	)
 	if err != nil {
-		return fmt.Errorf("creating reply: %w", err)
+		return writeErrorForOutput(fmt.Errorf("creating reply: %w", err), resolvedOutputFormat)
 	}
 
 	return printCreateAnswerResult(profile, result, resolvedOutputFormat)
@@ -137,6 +137,20 @@ func createReply(profile profileConfig, options replyCreateOptions) (api.CreateA
 		},
 	)
 	if err != nil {
+		// GET responses cannot prove attachment bytes or action request settings match.
+		if len(uploads) == 0 && options.ActionRequestsJSON == "" && shouldReconcileWrite(err) {
+			if reconciled, ok := reconcileAnswerWrite(
+				profile,
+				answerID,
+				options.ReplyToQuestID,
+				spaceID,
+				options.Content,
+				deltaJSON,
+				options.MessageType,
+			); ok {
+				return reconciled, nil
+			}
+		}
 		return api.CreateAnswerResponse{}, withWriteID(answerID, err)
 	}
 

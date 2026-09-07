@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -152,6 +154,214 @@ func TestCreateRootThreadReturnsGeneratedIDWithPreflightError(t *testing.T) {
 	generatedID := writeIDFromTestError(err)
 	if !looksLikeUUID(generatedID) {
 		t.Fatalf("expected generated write id in preflight error, got %q (%v)", generatedID, err)
+	}
+}
+
+func TestCreateRootThreadReconcilesConflictWithMatchingWrite(t *testing.T) {
+	getCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		switch {
+		case request.Method == http.MethodPost && request.URL.Path == "/api/v1/quests":
+			writer.WriteHeader(http.StatusConflict)
+			_, _ = writer.Write([]byte(`{"error":"Thread already exists."}`))
+		case request.Method == http.MethodGet && request.URL.Path == "/api/v1/quests/"+testWriteID:
+			getCount++
+			_, _ = fmt.Fprintf(
+				writer,
+				`{"quest":{"id":%q,"space_id":"space-id","user_id":"user-id","private":true,"public":null,"is_clip":false,"parent":{"id":"root-answer-id","user_id":"user-id","content":"safe retry","delta_json":{"ops":[{"insert":"safe retry"}]}}}}`,
+				testWriteID,
+			)
+		default:
+			http.NotFound(writer, request)
+		}
+	}))
+	defer server.Close()
+
+	result, err := createRootThread(
+		profileConfig{
+			BackendURL:    server.URL,
+			AccessToken:   "token",
+			Client:        "client",
+			UID:           "uid",
+			CurrentUserID: "user-id",
+			ActiveSpaceID: "space-id",
+		},
+		rootThreadCreateOptions{
+			WriteID: testWriteID,
+			Content: "safe retry",
+			Private: boolPtr(true),
+		},
+	)
+	if err != nil {
+		t.Fatalf("expected matching conflict to reconcile, got %v", err)
+	}
+	if result.Quest.ID != testWriteID || getCount != 1 {
+		t.Fatalf("expected reconciled quest %q and one lookup, got id=%q lookups=%d", testWriteID, result.Quest.ID, getCount)
+	}
+}
+
+func TestCreateReplyReconcilesUnprocessableEntityWithMatchingWrite(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		switch {
+		case request.Method == http.MethodPost && request.URL.Path == "/api/v1/answers":
+			writer.WriteHeader(http.StatusUnprocessableEntity)
+			_, _ = writer.Write([]byte(`{"error":"Answer id has already been used."}`))
+		case request.Method == http.MethodGet && request.URL.Path == "/api/v1/answers/"+testWriteID:
+			_, _ = fmt.Fprintf(
+				writer,
+				`{"answer":{"id":%q,"quest_id":"thread-id","space_id":"space-id","user_id":"user-id","content":"safe retry","delta_json":{"ops":[{"insert":"safe retry"}]}}}`,
+				testWriteID,
+			)
+		default:
+			http.NotFound(writer, request)
+		}
+	}))
+	defer server.Close()
+
+	result, err := createReply(
+		profileConfig{
+			BackendURL:    server.URL,
+			AccessToken:   "token",
+			Client:        "client",
+			UID:           "uid",
+			CurrentUserID: "user-id",
+			ActiveSpaceID: "space-id",
+		},
+		replyCreateOptions{
+			WriteID:        testWriteID,
+			ReplyToQuestID: "thread-id",
+			Content:        "safe retry",
+		},
+	)
+	if err != nil {
+		t.Fatalf("expected matching conflict to reconcile, got %v", err)
+	}
+	if result.Answer.ID != testWriteID {
+		t.Fatalf("expected reconciled answer %q, got %q", testWriteID, result.Answer.ID)
+	}
+}
+
+func TestCreateReplyRejectsConflictWithDifferentDelta(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		if request.Method == http.MethodPost {
+			writer.WriteHeader(http.StatusConflict)
+			_, _ = writer.Write([]byte(`{"error":"Answer id has already been used."}`))
+			return
+		}
+		_, _ = fmt.Fprintf(
+			writer,
+			`{"answer":{"id":%q,"quest_id":"thread-id","space_id":"space-id","user_id":"user-id","content":"safe retry","delta_json":{"ops":[{"insert":"different delta"}]}}}`,
+			testWriteID,
+		)
+	}))
+	defer server.Close()
+
+	_, err := createReply(
+		profileConfig{
+			BackendURL:    server.URL,
+			AccessToken:   "token",
+			Client:        "client",
+			UID:           "uid",
+			CurrentUserID: "user-id",
+			ActiveSpaceID: "space-id",
+		},
+		replyCreateOptions{
+			WriteID:        testWriteID,
+			ReplyToQuestID: "thread-id",
+			Content:        "safe retry",
+		},
+	)
+	if err == nil {
+		t.Fatal("expected mismatched existing answer to remain an error")
+	}
+	if writeIDFromTestError(err) != testWriteID {
+		t.Fatalf("expected original write id on mismatch, got %v", err)
+	}
+}
+
+func TestCreateClipQuestReconcilesConflictAndPreservesClipJSONShape(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		switch {
+		case request.Method == http.MethodPost && request.URL.Path == "/plugin_new/clip":
+			writer.WriteHeader(http.StatusConflict)
+			_, _ = writer.Write([]byte(`{"error":"Post id has already been used."}`))
+		case request.Method == http.MethodGet && request.URL.Path == "/api/v1/quests/"+testWriteID:
+			_, _ = fmt.Fprintf(
+				writer,
+				`{"quest":{"id":%q,"space_id":"space-id","user_id":"user-id","private":true,"public":null,"is_clip":true,"parent":{"id":"root-answer-id","user_id":"user-id","content":"safe clip retry","delta_json":{"ops":[{"insert":"safe clip retry"}]},"url":{"address":"https://example.com"}}}}`,
+				testWriteID,
+			)
+		default:
+			http.NotFound(writer, request)
+		}
+	}))
+	defer server.Close()
+
+	result, err := createClipQuest(
+		profileConfig{
+			BackendURL:    server.URL,
+			AccessToken:   "token",
+			Client:        "client",
+			UID:           "uid",
+			CurrentUserID: "user-id",
+			ActiveSpaceID: "space-id",
+		},
+		"https://example.com",
+		"safe clip retry",
+		"",
+		streamTarget{Kind: "clips", ID: "PSEUDOSTREAM__CLIPS", Name: "Clips"},
+		testWriteID,
+	)
+	if err != nil {
+		t.Fatalf("expected matching clip conflict to reconcile, got %v", err)
+	}
+	if result.Quest.ID != testWriteID {
+		t.Fatalf("expected reconciled clip %q, got %q", testWriteID, result.Quest.ID)
+	}
+
+	var raw map[string]interface{}
+	if err := json.Unmarshal(result.Raw, &raw); err != nil {
+		t.Fatalf("decoding reconciled clip JSON: %v", err)
+	}
+	if raw["id"] != testWriteID || raw["quest"] != nil {
+		t.Fatalf("expected bare clip JSON response, got %#v", raw)
+	}
+}
+
+func TestWriteJSONUsesSameStructuredIDOnSuccessAndFailure(t *testing.T) {
+	successJSON, err := prettyWriteSuccessJSON(
+		json.RawMessage(`{"answer":{"id":"550e8400-e29b-41d4-a716-446655440000"}}`),
+		testWriteID,
+	)
+	if err != nil {
+		t.Fatalf("formatting success JSON: %v", err)
+	}
+	var successPayload map[string]interface{}
+	if err := json.Unmarshal([]byte(successJSON), &successPayload); err != nil {
+		t.Fatalf("decoding success JSON: %v", err)
+	}
+	if successPayload["write_id"] != testWriteID {
+		t.Fatalf("expected success write_id %q, got %#v", testWriteID, successPayload["write_id"])
+	}
+
+	writeErr := withWriteID(testWriteID, fmt.Errorf("request timed out"))
+	structuredErr := writeErrorForOutput(fmt.Errorf("creating post: %w", writeErr), "json")
+	var output bytes.Buffer
+	PrintError(&output, structuredErr)
+
+	var errorPayload map[string]interface{}
+	if err := json.Unmarshal(output.Bytes(), &errorPayload); err != nil {
+		t.Fatalf("decoding error JSON %q: %v", output.String(), err)
+	}
+	if errorPayload["status"] != "error" || errorPayload["write_id"] != testWriteID {
+		t.Fatalf("unexpected structured error: %#v", errorPayload)
+	}
+	if errorPayload["error"] != "creating post: request timed out" {
+		t.Fatalf("expected error without prose write-id parsing, got %#v", errorPayload["error"])
 	}
 }
 
