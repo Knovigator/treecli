@@ -168,7 +168,9 @@ func sameQuestDestination(quest api.Quest, target streamTarget, isClip bool) boo
 func sameWriteJSON(stored json.RawMessage, requested string) bool {
 	requested = strings.TrimSpace(requested)
 	if requested == "" {
-		return len(stored) == 0 || string(stored) == "null"
+		// With no client Delta, the backend owns rich-text conversion.
+		// Callers still require matching content, ownership, IDs, and destination.
+		return true
 	}
 
 	storedValue, storedOK := comparableJSON(stored)

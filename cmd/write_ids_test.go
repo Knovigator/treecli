@@ -169,7 +169,7 @@ func TestCreateRootThreadReconcilesConflictWithMatchingWrite(t *testing.T) {
 			getCount++
 			_, _ = fmt.Fprintf(
 				writer,
-				`{"quest":{"id":%q,"space_id":"space-id","user_id":"user-id","private":true,"public":null,"is_clip":false,"parent":{"id":"root-answer-id","user_id":"user-id","content":"safe retry","delta_json":{"ops":[{"insert":"safe retry"}]}}}}`,
+				`{"quest":{"id":%q,"space_id":"space-id","user_id":"user-id","private":true,"public":null,"is_clip":false,"parent":{"id":"root-answer-id","user_id":"user-id","content":"Hello @Treechat","delta_json":{"ops":[{"insert":"Hello "},{"insert":{"mention":{"id":"mentioned-user","value":"Treechat","content":"Treechat","denotationChar":"@"}}}]}}}}`,
 				testWriteID,
 			)
 		default:
@@ -189,7 +189,7 @@ func TestCreateRootThreadReconcilesConflictWithMatchingWrite(t *testing.T) {
 		},
 		rootThreadCreateOptions{
 			WriteID: testWriteID,
-			Content: "safe retry",
+			Content: "Hello @Treechat",
 			Private: boolPtr(true),
 		},
 	)
@@ -211,7 +211,7 @@ func TestCreateReplyReconcilesUnprocessableEntityWithMatchingWrite(t *testing.T)
 		case request.Method == http.MethodGet && request.URL.Path == "/api/v1/answers/"+testWriteID:
 			_, _ = fmt.Fprintf(
 				writer,
-				`{"answer":{"id":%q,"quest_id":"thread-id","space_id":"space-id","user_id":"user-id","content":"safe retry","delta_json":{"ops":[{"insert":"safe retry"}]}}}`,
+				`{"answer":{"id":%q,"quest_id":"thread-id","space_id":"space-id","user_id":"user-id","content":"Hello @Treechat","delta_json":{"ops":[{"insert":"Hello "},{"insert":{"mention":{"id":"mentioned-user","value":"Treechat","content":"Treechat","denotationChar":"@"}}}]}}}`,
 				testWriteID,
 			)
 		default:
@@ -232,7 +232,7 @@ func TestCreateReplyReconcilesUnprocessableEntityWithMatchingWrite(t *testing.T)
 		replyCreateOptions{
 			WriteID:        testWriteID,
 			ReplyToQuestID: "thread-id",
-			Content:        "safe retry",
+			Content:        "Hello @Treechat",
 		},
 	)
 	if err != nil {
@@ -272,6 +272,7 @@ func TestCreateReplyRejectsConflictWithDifferentDelta(t *testing.T) {
 			WriteID:        testWriteID,
 			ReplyToQuestID: "thread-id",
 			Content:        "safe retry",
+			DeltaJSON:      `{"ops":[{"insert":"safe retry"}]}`,
 		},
 	)
 	if err == nil {
