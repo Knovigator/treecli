@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/Knovigator/treecli/api"
 	"github.com/spf13/cobra"
@@ -110,13 +109,8 @@ func createReply(profile profileConfig, options replyCreateOptions) (api.CreateA
 		return api.CreateAnswerResponse{}, withWriteID(answerID, err)
 	}
 
-	deltaJSON, err := textToDeltaJSONString(options.Content)
-	if err != nil {
-		return api.CreateAnswerResponse{}, withWriteID(answerID, err)
-	}
-	if strings.TrimSpace(options.DeltaJSON) != "" {
-		deltaJSON = options.DeltaJSON
-	}
+	// Omit Delta for plain text so the backend can resolve user mentions.
+	deltaJSON := options.DeltaJSON
 
 	result, err := api.CreateAnswer(
 		profile.BackendURL,

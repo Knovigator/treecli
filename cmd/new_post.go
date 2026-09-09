@@ -450,13 +450,8 @@ func createRootThread(profile profileConfig, options rootThreadCreateOptions) (a
 		return api.CreateQuestResponse{}, withWriteID(questID, err)
 	}
 
-	deltaJSON, err := textToDeltaJSONString(options.Content)
-	if err != nil {
-		return api.CreateQuestResponse{}, withWriteID(questID, err)
-	}
-	if strings.TrimSpace(options.DeltaJSON) != "" {
-		deltaJSON = options.DeltaJSON
-	}
+	// Omit Delta for plain text so the backend can resolve user mentions.
+	deltaJSON := options.DeltaJSON
 
 	var publicValue *bool
 	var privateValue *bool
