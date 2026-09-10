@@ -290,6 +290,45 @@ a post they already created.
 it takes a **thread** ID and does not quote a post. Use the explicit commands
 above when starting from a **post** ID.
 
+## Recording Agent Sessions (MCP)
+
+`treecli mcp` makes treecli a plugin for the coding agents you already run —
+Claude Code, Codex, and Grok — so their sessions are recorded into
+[memdb](docs/agent-recording-architecture.md) (a local durable-memory store:
+SQLite + FTS5, optional Qdrant hybrid search) and, optionally, mirrored into a
+Treechat stream. The same binary serves the memories back over MCP.
+
+```sh
+treecli mcp install --claude --codex --grok     # register the MCP server + hooks
+treecli mcp backfill --claude --codex --since 30d   # ingest transcripts you already have
+treecli mcp status
+```
+
+After `install`, each agent launches `treecli mcp serve` as a stdio MCP server
+(tools: `memory_recall`, `memory_search`, `memory_learn`, `session_note`,
+`treechat_post`, `session_info`) and runs `treecli mcp hook` on
+`SessionStart` / `UserPromptSubmit` / `Stop` / `SessionEnd`. Hooks convert the
+host transcript into memdb's ingest format and inject context: recent
+exchanges from earlier sessions in the same project at session start, and
+matching learned memories on each prompt. Codex asks you to trust the new
+hooks once (`/hooks`); the Grok Bot desktop app needs the server added in its
+own MCP settings (the installer prints the snippet).
+
+Treechat recording is off until you choose a stream:
+
+```sh
+treecli mcp config --treechat-mode session --treechat-team <stream id or link>
+treecli mcp config --treechat-mode turns    # also one reply per turn
+```
+
+`session` posts an opening post and a closing summary per session; `turns`
+adds one reply per turn (prompt, final reply, tool summary). Posts use
+deterministic ids, so retries never duplicate. Backfills never post.
+
+memdb-rust is found on `PATH`, at `~/src/memdb-rust/target/release/memdb-rust`,
+or wherever `treecli mcp config --memdb-bin` points; the database defaults to
+`memdb.sqlite3` in treecli's data directory (`treecli mcp status` shows it).
+
 ## Development
 
 ```sh
