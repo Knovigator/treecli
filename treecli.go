@@ -94,6 +94,7 @@ func init() {
 	rootCmd.AddCommand(cmd.ProfileCmd)
 	rootCmd.AddCommand(cmd.OnboardCmd)
 	rootCmd.AddCommand(cmd.SkillsCmd)
+	rootCmd.AddCommand(cmd.McpCmd)
 	rootCmd.AddCommand(cmd.UpdateCmd)
 	rootCmd.InitDefaultCompletionCmd()
 	configureCompletionHelp()
