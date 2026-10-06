@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Knovigator/treecli/api"
+	"github.com/spf13/viper"
 )
 
 func withGenerateGlobals(t *testing.T) {
@@ -545,4 +547,74 @@ func hasSetting(settings []settingHelp, name string) bool {
 		}
 	}
 	return false
+}
+
+// A quote must price the request that would actually run: a reference image can switch the
+// backend to a different (pricier) model, e.g. grokvideo with a start image runs image-to-video.
+func TestRunGenerateQuoteSendsResolvedReference(t *testing.T) {
+	withGenerateGlobals(t)
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+	oldEnv, oldAccount, oldBackend, oldHost := SelectedEnvironment, SelectedAccount, BackendURLOverride, AppHostOverride
+	t.Cleanup(func() {
+		SelectedEnvironment, SelectedAccount, BackendURLOverride, AppHostOverride = oldEnv, oldAccount, oldBackend, oldHost
+	})
+	SelectedEnvironment, SelectedAccount, AppHostOverride = "", "", ""
+	for _, name := range []string{"TREECLI_ENV", "TREECLI_ACCOUNT", "TREECLI_BACKEND_URL", "TREECTL_BACKEND_URL", "TREECLI_APP_HOST", "TREECTL_APP_HOST", "TREECLI_PROFILE", "TREECTL_PROFILE"} {
+		t.Setenv(name, "")
+	}
+	t.Setenv("TREECLI_ALLOW_INSECURE_HTTP", "1")
+
+	var quotedSettings map[string]interface{}
+	quoteRequests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v1/ai/generations/references/direct_upload":
+			http.NotFound(w, r)
+		case "/api/v1/ai/generations/references":
+			_, _ = w.Write([]byte(`{"id":"ref-1","url":"https://cdn.example.test/frame.png","content_type":"image/png","kind":"image"}`))
+		case "/api/v1/ai/generations":
+			var body map[string]interface{}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Fatalf("decoding generation body: %v", err)
+			}
+			if body["quote"] != true {
+				t.Fatalf("expected a quote request, got %#v", body["quote"])
+			}
+			quoteRequests++
+			quotedSettings, _ = body["settings"].(map[string]interface{})
+			_, _ = w.Write([]byte(`{"action":"grokvideo","quote":{"amount_sats":5400000,"amount_usd":1.08},"provider":"xai"}`))
+		default:
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	BackendURLOverride = server.URL
+	viper.Set("active_profile", "prod")
+	viper.Set("profiles.prod.backend_url", server.URL)
+	viper.Set("profiles.prod.access_token", "token")
+	viper.Set("profiles.prod.client", "client")
+	viper.Set("profiles.prod.uid", "uid")
+
+	referenceFile := t.TempDir() + "/frame.png"
+	if err := os.WriteFile(referenceFile, []byte("\x89PNG\r\n\x1a\n"), 0o644); err != nil {
+		t.Fatalf("writing temp reference: %v", err)
+	}
+	generateQuote = true
+	generateReference = "@" + referenceFile
+	generateDuration = 6
+	generatePollInterval = time.Second
+	generateTimeout = time.Minute
+
+	if err := runGenerate(GenerateCmd, []string{"grokvideo", "slow push-in"}); err != nil {
+		t.Fatalf("runGenerate returned error: %v", err)
+	}
+	if quoteRequests != 1 {
+		t.Fatalf("expected one quote request, got %d", quoteRequests)
+	}
+	if quotedSettings["reference_url"] != "https://cdn.example.test/frame.png" {
+		t.Fatalf("expected the quote to carry the resolved reference, got %#v", quotedSettings)
+	}
 }
