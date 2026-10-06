@@ -125,18 +125,6 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Quote-only: ask the backend for the price and stop.
-	if generateQuote {
-		res, err := api.CreateGeneration(
-			profile.BackendURL, profile.AccessToken, profile.Client, profile.UID,
-			action, prompt, settings, paymentMode, true, generateTimeout,
-		)
-		if err != nil {
-			return err
-		}
-		return printQuote(action, res)
-	}
-
 	if err := resolveFileInputSettings(profile, settings); err != nil {
 		return err
 	}
@@ -146,6 +134,19 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 			return err
 		}
 		applyReferenceSettings(settings, ref)
+	}
+
+	// Quote-only: ask the backend for the price and stop. References are resolved first so the
+	// quote prices the request that would run (an image input can select a pricier model).
+	if generateQuote {
+		res, err := api.CreateGeneration(
+			profile.BackendURL, profile.AccessToken, profile.Client, profile.UID,
+			action, prompt, settings, paymentMode, true, generateTimeout,
+		)
+		if err != nil {
+			return err
+		}
+		return printQuote(action, res)
 	}
 
 	result, err := api.CreateGeneration(

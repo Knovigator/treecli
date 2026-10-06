@@ -61,7 +61,10 @@ The minimum blocking journey is:
 3. Read a thread in JSON form.
 4. Create a private post and read it back.
 5. Read upvalue history when that command is present.
-6. Receive a backend error without leaking credentials or identity data.
+6. Quote a generation with a local `@file` reference: the file is uploaded and
+   the quote request carries the resolved reference, so the price matches the
+   model the run would use.
+7. Receive a backend error without leaking credentials or identity data.
 
 ### 3. Installer and release-artifact tests
 

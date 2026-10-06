@@ -26,6 +26,7 @@ const (
 type fakeBackendState struct {
 	mu             sync.Mutex
 	createdQuestID string
+	quoteSettings  map[string]interface{}
 }
 
 func TestCompiledCLIUserBoundary(t *testing.T) {
@@ -143,6 +144,35 @@ func TestCompiledCLIUserBoundary(t *testing.T) {
 		}
 		if payload.Page != 2 || payload.PerPage != 25 || !payload.HasMore {
 			t.Fatalf("unexpected upvalue pagination: %#v", payload)
+		}
+	})
+
+	t.Run("generation quote prices the resolved reference", func(t *testing.T) {
+		reference := filepath.Join(t.TempDir(), "frame.png")
+		if err := os.WriteFile(reference, []byte("\x89PNG\r\n\x1a\n"), 0o600); err != nil {
+			t.Fatalf("write reference: %v", err)
+		}
+		stdout, stderr, err := runCLI(t, binaryPath, configHome, "", append(baseArgs,
+			"generate", "grokvideo", "slow push-in", "--duration", "6", "--reference", "@"+reference, "--quote", "--json",
+		)...)
+		if err != nil {
+			t.Fatalf("generate --quote failed: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
+		}
+		var payload struct {
+			Quote     bool    `json:"quote"`
+			AmountUSD float64 `json:"amount_usd"`
+		}
+		if err := json.Unmarshal([]byte(stdout), &payload); err != nil {
+			t.Fatalf("quote output is not JSON: %v\n%s", err, stdout)
+		}
+		state.mu.Lock()
+		settings := state.quoteSettings
+		state.mu.Unlock()
+		if settings["reference_url"] != "https://cdn.example.test/frame.png" {
+			t.Fatalf("quote request did not carry the uploaded reference: %#v", settings)
+		}
+		if !payload.Quote || payload.AmountUSD != 1.08 {
+			t.Fatalf("expected the image-to-video quote, got %s", stdout)
 		}
 	})
 
@@ -285,6 +315,48 @@ func fakeTreechatHandler(t *testing.T, state *fakeBackendState) http.Handler {
 				"page":     2,
 				"per_page": 25,
 				"has_more": true,
+			})
+
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/ai/generations/references/direct_upload":
+			http.NotFound(w, r)
+
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/ai/generations/references":
+			if !hasIntegrationAuth(r) {
+				http.Error(w, "missing auth", http.StatusUnauthorized)
+				return
+			}
+			writeJSON(t, w, map[string]interface{}{
+				"id": "ref-1", "url": "https://cdn.example.test/frame.png", "content_type": "image/png", "kind": "image",
+			})
+
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/ai/generations":
+			if !hasIntegrationAuth(r) {
+				http.Error(w, "missing auth", http.StatusUnauthorized)
+				return
+			}
+			var body map[string]interface{}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Errorf("decode generation body: %v", err)
+				http.Error(w, "invalid body", http.StatusBadRequest)
+				return
+			}
+			if body["quote"] != true {
+				t.Errorf("integration journey only quotes; got %#v", body["quote"])
+				http.Error(w, "unexpected generation", http.StatusBadRequest)
+				return
+			}
+			settings, _ := body["settings"].(map[string]interface{})
+			state.mu.Lock()
+			state.quoteSettings = settings
+			state.mu.Unlock()
+			// Mirror the backend: an image input runs grokvideo as image-to-video at twice the price.
+			usd := 0.54
+			if settings["reference_url"] != nil {
+				usd = 1.08
+			}
+			writeJSON(t, w, map[string]interface{}{
+				"action": "grokvideo", "provider": "xai",
+				"quote": map[string]interface{}{"amount_sats": int(usd * 5000000), "amount_usd": usd},
 			})
 
 		default:
