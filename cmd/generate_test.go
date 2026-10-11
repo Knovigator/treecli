@@ -92,6 +92,49 @@ func TestRunGenerateRejectsLegacyReferenceActionsBeforeAuth(t *testing.T) {
 	}
 }
 
+func TestRunGenerateRequiresPromptUnlessReferenceGiven(t *testing.T) {
+	withGenerateGlobals(t)
+	generateOut = "photo-4x.png"
+	generatePollInterval = time.Second
+	generateTimeout = time.Minute
+
+	err := runGenerate(nil, []string{"flux"})
+	if err == nil || !strings.Contains(err.Error(), "a prompt is required") {
+		t.Fatalf("expected prompt error without a reference, got %v", err)
+	}
+
+	action, prompt, err := parseGenerateInvocation([]string{"!topazimg"})
+	if err != nil || action != "topazimg" || prompt != "" {
+		t.Fatalf("expected a prompt-less upscaler invocation, got %q %q %v", action, prompt, err)
+	}
+}
+
+func TestPromptOptionalDirectGenerationHelpOmitsPrompt(t *testing.T) {
+	row := enrichGenerationActionRow(generationActionRow{
+		Action:            "topazvid",
+		Provider:          "replicate",
+		Kind:              "video",
+		DirectGeneration:  true,
+		AcceptsReference:  true,
+		RequiresReference: true,
+		PromptOptional:    true,
+		ReferenceKinds:    []string{"video"},
+	})
+
+	want := []string{
+		"treecli generate topazvid --reference @clip.mp4 --out output.mp4",
+		"treecli generate topazvid --reference @clip.mp4 --quote",
+	}
+	if strings.Join(row.Examples, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("expected prompt-less upscaler examples, got %#v", row.Examples)
+	}
+	for _, setting := range row.Settings {
+		if setting.Name == "prompt" && !strings.HasPrefix(setting.Description, "Optional") {
+			t.Fatalf("expected optional prompt help, got %#v", setting)
+		}
+	}
+}
+
 func TestParseGenerateInvocationCanonicalizesReplicateIntegrationAliases(t *testing.T) {
 	tests := []struct {
 		name           string
