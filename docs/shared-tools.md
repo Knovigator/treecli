@@ -63,12 +63,13 @@ argument names and bounds.
 ## CLI syntax and structured arguments
 
 Commands such as `action status`, `new post --reply-to`, `branch-reply`, and
-`quote-reply` accept Treechat links as a CLI convenience. The shared tool surface
-uses the corresponding UUID explicitly: `id` for a thread/post read, `answer`
-for answer-based action status, `quest_id` for an in-thread reply, and
-`source_post_id` for branch/quote replies. Use the relevant thread or post UUID
-from the link; do not pass an entire URL in an ID field. Returned API objects also
-provide these IDs, avoiding link parsing entirely.
+`quote-reply` accept Treechat links. Shared tools now normalize those links too:
+`id` for thread/post reads, `answer` for answer-based action status, `quest_id`
+(or `reply_to`/`thread`) for in-thread replies, and `source_post_id` for branch/quote
+replies. Bulk `messages.ids` also accepts post links. UUIDs remain valid directly.
+Thread links must identify a `/quest/UUID`; post links must identify a post and
+cannot be thread links. Ambiguous links containing different target UUIDs are
+rejected. Parsing never fetches the URL or changes the authenticated backend.
 
 Model discovery and `describe_action` return the backend's settings, defaults,
 reference capabilities, descriptions and aliases. The CLI's additional handcrafted
@@ -81,3 +82,17 @@ and MCP adapter share one backend-owned catalog and executor. Authorization,
 pricing, billing, generation dispatch and persistence remain shared backend
 business logic. This change does not claim to have replaced every legacy CLI
 parser with the new tool interface.
+
+## Remaining consolidation work
+
+The shared catalog/executor is used by `tools list/call`, stdio `mcp serve`, and
+hosted MCP. Existing named CLI commands still keep Go-side alias, stream/branch,
+reference and catalog normalization before calling their original HTTP routes.
+Thus this is a shared authoritative backend, not yet a full migration of every
+legacy CLI workflow to one executor.
+
+Hosted skills list/emit, onboarding guide/agents text, completion-script emission
+and update-check metadata are not implemented tools yet. These pure text/read
+helpers could be remote; only their installation, client filesystem inspection,
+binary replacement and private wallet-store operations inherently need the client.
+See the backend [parity audit](https://github.com/Knovigator/knovigator/blob/codex/mcp-treecli-parity/docs/treecli-mcp-parity.md) for exact mappings and CI limitations.
