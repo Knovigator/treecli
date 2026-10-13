@@ -89,22 +89,46 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 	}
 
 	client := &http.Client{Timeout: 60 * time.Second}
-	tag, err := resolveUpdateTag(client, githubAPIBaseURL, repo, version)
+	var tag string
+	var updateAvailable bool
+	var err error
+	if updateOptions.check {
+		profile, authErr := requireAuthenticatedProfile()
+		if authErr != nil {
+			return authErr
+		}
+		var metadata struct {
+			LatestVersion   string `json:"latest_version"`
+			UpdateAvailable bool   `json:"update_available"`
+		}
+		err = sharedCall(profile, "treecli_reference", map[string]interface{}{
+			"operation": "update_check", "arguments": map[string]interface{}{"current_version": CurrentVersion, "repo": repo, "version": version},
+		}, &metadata)
+		tag, updateAvailable = metadata.LatestVersion, metadata.UpdateAvailable
+		if err == nil && tag == "" {
+			return fmt.Errorf("backend omitted release version")
+		}
+	} else {
+		// Bootstrapping/replacing the executable must work without an account.
+		tag, err = resolveUpdateTag(client, githubAPIBaseURL, repo, version)
+		updateAvailable = !versionsEqual(CurrentVersion, tag)
+	}
 	if err != nil {
 		return err
 	}
 
-	assetName, err := releaseAssetName(tag, runtime.GOOS, runtime.GOARCH)
-	if err != nil {
-		return err
+	assetName, installPath := "", ""
+	if !updateOptions.check {
+		assetName, err = releaseAssetName(tag, runtime.GOOS, runtime.GOARCH)
+		if err != nil {
+			return err
+		}
+		installPath, err = updateInstallPath(updateOptions.installDir)
+		if err != nil {
+			return err
+		}
 	}
 
-	installPath, err := updateInstallPath(updateOptions.installDir)
-	if err != nil {
-		return err
-	}
-
-	updateAvailable := !versionsEqual(CurrentVersion, tag)
 	result := updateResult{
 		CurrentVersion:  CurrentVersion,
 		LatestVersion:   tag,

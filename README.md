@@ -104,7 +104,7 @@ treecli new post --reply-to <quest-id> "reply text"
 
 ## AI Actions And Media
 
-Remote commands use the same operation catalog and executor as hosted MCP and `treecli mcp serve`. The matching backend must be available; there is no fallback to legacy writes.
+Remote commands use the same operation catalog and executor as hosted MCP and `treecli mcp serve`. The matching backend must be available; there is no fallback to legacy writes. `update --check` uses the authenticated shared release helper; actual binary installation keeps its local bootstrap path so upgrading does not depend on an account.
 
 Generation and action commands require an explicit `--max-price-cents` authorization. Examples below use a 100-cent ceiling; choose the ceiling you approve. Direct generation prints the reviewed quote and retry identifiers. Reuse both `--quote-id` and `--id` after an uncertain result; native writes reuse `--id`. Plain posts use a zero generation-fee cap. BSV network fees are separate.
 
