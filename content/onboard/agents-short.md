@@ -12,13 +12,13 @@
 - Replies support `--json` and `--id UUID` for retries. If the backend does not confirm the destination or quote, inspect the reported write ID before retrying; a post may already exist.
 - Root posts default to private; use `--stream` only on root posts and root actions.
 - Discover AI actions with `treecli action actions`.
-- Submit action work with `treecli action <action> "prompt"` or `treecli action --reply-to <quest-id> <action> "prompt"`.
+- Submit action work with `treecli action <action> "prompt" --max-price-cents 100` or `treecli action --reply-to <quest-id> <action> "prompt" --max-price-cents 100`.
 - Use `tts`/`chatterbox` or `eleven_tts` for text-to-speech, `clone` for Chatterbox voice cloning with an audio reference, and `video_sfx` for video sound effects; CLI aliases include `chatterbox`, `eleven`, `elevenlabs`, `11`, `sfx`, `mmaudio`, and `foley`.
 - Use plain AI actions for new assets. For post-backed actions, `animate_*` animates an existing image and `edit_*` edits an existing image. For direct `generate`, use the base model action with `--reference @image.png` instead of `animate_*` or `edit_*`.
 - If the goal is to animate or edit a previous image, do not use a plain generation action.
 - Use `--payment usd` for Stripe metered AI billing or `--payment bsv` / `--payment bitcoinsv` for Bitcoin SV; omit it to use the account default.
 - For post-less local media generation, inspect support with `treecli generate actions --direct-only`; use `treecli generate actions --verbose` or `treecli generate describe <action>` for descriptions, inputs, settings, reference behavior, and examples.
-- Generate local media with `treecli generate <action> "prompt" --out <file>` and pass settings with `--input key=value`, `--settings '{...}'`, `--duration`, `--instrumental`, `--reference`, or `--payment` as described by the action and billing intent. Examples: `treecli generate kling2 "slow push-in" --reference @image.png --out animated.mp4`; `treecli generate qwen "replace the sky with stars" --reference @image.png --out edited.png`.
+- Generate local media with `treecli generate <action> "prompt" --out <file> --max-price-cents 100` and pass settings with `--input key=value`, `--settings '{...}'`, `--duration`, `--instrumental`, `--reference`, or `--payment` as described by the action and billing intent. Examples: `treecli generate kling2 "slow push-in" --reference @image.png --out animated.mp4 --max-price-cents 100`; `treecli generate qwen "replace the sky with stars" --reference @image.png --out edited.png --max-price-cents 100`.
 - Use `treecli action --no-wait` plus `treecli action status --answer ...` or `--thread ...` for async flows.
 - Human-readable output is the default. Use `--json` when you need structured output.
 - Install packaged skills with `treecli skills list` and `treecli skills install ...`.

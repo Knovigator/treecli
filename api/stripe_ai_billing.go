@@ -2,8 +2,6 @@ package api
 
 import (
 	"encoding/json"
-	"fmt"
-	"net/http"
 )
 
 // StripeAiBillingCheckoutResponse is returned by POST /api/v1/stripe_ai_billing/checkout.
@@ -58,91 +56,41 @@ type StripeAiBillingSyncResponse struct {
 }
 
 func CreateStripeAiBillingCheckoutSession(backendURL, accessToken, client, uid string) (StripeAiBillingCheckoutResponse, error) {
-	resp, err := newRequest(accessToken, client, uid).
-		SetHeader("accept", "application/json").
-		Post(fmt.Sprintf("%s/api/v1/stripe_ai_billing/checkout", backendURL))
-	if err != nil {
-		return StripeAiBillingCheckoutResponse{}, fmt.Errorf("error making request: %v", err)
+	var out StripeAiBillingCheckoutResponse
+	raw, err := SharedOperation(backendURL, accessToken, client, uid, "treechat_billing", map[string]interface{}{"operation": "checkout", "arguments": map[string]interface{}{}})
+	if err == nil {
+		err = json.Unmarshal(raw, &out)
 	}
-
-	if resp.StatusCode() != http.StatusOK {
-		return StripeAiBillingCheckoutResponse{}, fmt.Errorf("received status code %d: %s", resp.StatusCode(), SafeResponseBody(resp.Body()))
-	}
-
-	var checkout StripeAiBillingCheckoutResponse
-	if err := json.Unmarshal(resp.Body(), &checkout); err != nil {
-		return StripeAiBillingCheckoutResponse{}, fmt.Errorf("error parsing response: %v", err)
-	}
-	checkout.Raw = append(checkout.Raw[:0], resp.Body()...)
-
-	return checkout, nil
+	out.Raw = raw
+	return out, err
 }
 
 func GetStripeAiBillingStatus(backendURL, accessToken, client, uid string, refresh bool) (StripeAiBillingStatusResponse, error) {
-	request := newRequest(accessToken, client, uid).
-		SetHeader("accept", "application/json")
-	if refresh {
-		request.SetQueryParam("refresh", "true")
+	var out StripeAiBillingStatusResponse
+	raw, err := SharedOperation(backendURL, accessToken, client, uid, "treechat_billing", map[string]interface{}{"operation": "status", "arguments": map[string]interface{}{"refresh": refresh}})
+	if err == nil {
+		err = json.Unmarshal(raw, &out)
 	}
-
-	resp, err := request.Get(fmt.Sprintf("%s/api/v1/stripe_ai_billing/status", backendURL))
-	if err != nil {
-		return StripeAiBillingStatusResponse{}, fmt.Errorf("error making request: %v", err)
-	}
-
-	if resp.StatusCode() != http.StatusOK {
-		return StripeAiBillingStatusResponse{}, fmt.Errorf("received status code %d: %s", resp.StatusCode(), SafeResponseBody(resp.Body()))
-	}
-
-	var status StripeAiBillingStatusResponse
-	if err := json.Unmarshal(resp.Body(), &status); err != nil {
-		return StripeAiBillingStatusResponse{}, fmt.Errorf("error parsing response: %v", err)
-	}
-	status.Raw = append(status.Raw[:0], resp.Body()...)
-
-	return status, nil
+	out.Raw = raw
+	return out, err
 }
 
 func SetStripeAiPaymentMode(backendURL, accessToken, client, uid, mode string) (StripeAiPaymentModeResponse, error) {
-	resp, err := newRequest(accessToken, client, uid).
-		SetHeader("accept", "application/json").
-		SetFormData(map[string]string{"mode": mode}).
-		Post(fmt.Sprintf("%s/api/v1/stripe_ai_billing/mode", backendURL))
-	if err != nil {
-		return StripeAiPaymentModeResponse{}, fmt.Errorf("error making request: %v", err)
+	var out StripeAiPaymentModeResponse
+	raw, err := SharedOperation(backendURL, accessToken, client, uid, "treechat_billing", map[string]interface{}{"operation": "mode", "arguments": map[string]interface{}{"mode": mode}})
+	if err == nil {
+		err = json.Unmarshal(raw, &out)
 	}
-
-	if resp.StatusCode() != http.StatusOK {
-		return StripeAiPaymentModeResponse{}, fmt.Errorf("received status code %d: %s", resp.StatusCode(), SafeResponseBody(resp.Body()))
-	}
-
-	var result StripeAiPaymentModeResponse
-	if err := json.Unmarshal(resp.Body(), &result); err != nil {
-		return StripeAiPaymentModeResponse{}, fmt.Errorf("error parsing response: %v", err)
-	}
-	result.Raw = append(result.Raw[:0], resp.Body()...)
-
-	return result, nil
+	out.Raw = raw
+	return out, err
 }
 
 func SyncStripeAiBillingCheckoutSession(backendURL, accessToken, client, uid, sessionID string) (StripeAiBillingSyncResponse, error) {
-	resp, err := newRequest(accessToken, client, uid).
-		SetHeader("accept", "application/json").
-		SetQueryParam("session_id", sessionID).
-		Get(fmt.Sprintf("%s/api/v1/stripe_ai_billing/sync", backendURL))
-	if err != nil {
-		return StripeAiBillingSyncResponse{}, fmt.Errorf("error making request: %v", err)
+	var out StripeAiBillingSyncResponse
+	raw, err := SharedOperation(backendURL, accessToken, client, uid, "treechat_billing", map[string]interface{}{"operation": "sync", "arguments": map[string]interface{}{"session_id": sessionID}})
+	if err == nil {
+		err = json.Unmarshal(raw, &out)
 	}
-
-	if resp.StatusCode() != http.StatusOK {
-		return StripeAiBillingSyncResponse{}, fmt.Errorf("received status code %d: %s", resp.StatusCode(), SafeResponseBody(resp.Body()))
-	}
-
-	var result StripeAiBillingSyncResponse
-	if err := json.Unmarshal(resp.Body(), &result); err != nil {
-		return StripeAiBillingSyncResponse{}, fmt.Errorf("error parsing response: %v", err)
-	}
-	result.Raw = append(result.Raw[:0], resp.Body()...)
-
-	return result, nil
+	out.Raw = raw
+	return out, err
 }

@@ -1,153 +1,68 @@
 package api
 
 import (
-	"fmt"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 )
 
-func TestListThreadsContract(t *testing.T) {
-	var resolved, listed int
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "GET" || r.Header.Get("access-token") != "token" || r.Header.Get("client") != "client" || r.Header.Get("uid") != "uid" {
-			t.Errorf("incorrect authenticated request: %s %s", r.Method, r.URL)
-		}
-		switch r.URL.Path {
-		case "/api/v1/users/name/alice":
-			resolved++
-			fmt.Fprint(w, `{"user":{"id":"123"}}`)
-		case "/api/v1/quests":
-			listed++
-			q := r.URL.Query()
-			for key, want := range map[string]string{"authored": "true", "user": "123", "thread_scope": "root", "page": "2", "limit": "1"} {
-				if q.Get(key) != want {
-					t.Errorf("%s = %q, want %q", key, q.Get(key), want)
-				}
-			}
-			fmt.Fprint(w, `{"threads":[{"id":"q1","future_field":true}],"pagination":{"page":2,"limit":1,"next_page":3,"has_more":true}}`)
-		default:
-			t.Errorf("unexpected path %s", r.URL)
-			http.NotFound(w, r)
-		}
-	}))
-	defer server.Close()
-	for _, user := range []string{"alice", "@alice", "123"} {
-		result, err := ListThreads(server.URL, "token", "client", "uid", ThreadListOptions{User: user, Scope: "root", Page: 2, Limit: 1})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(result.Threads) != 1 || result.Threads[0].ID != "q1" || !result.Pagination.HasMore || *result.Pagination.NextPage != 3 || !strings.Contains(string(result.Raw), "future_field") {
-			t.Fatalf("unexpected result %#v", result)
-		}
-	}
-	if resolved != 2 || listed != 3 {
-		t.Fatalf("requests resolved=%d listed=%d", resolved, listed)
-	}
-}
-
-func TestListThreadsErrorsAndEmpty(t *testing.T) {
-	for _, tc := range []struct {
-		name, body string
-		status     int
-		want       string
-	}{
-		{"old backend", `{"quests":[]}`, 200, "backend does not support"},
-		{"malformed", `{`, 200, "parsing threads"},
-		{"forbidden", `{"error":"denied"}`, 403, "403"},
-		{"empty", `{"threads":[],"pagination":{"page":1,"limit":20,"next_page":null,"has_more":false}}`, 200, ""},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
+// Resolution, visibility and child de-duplication are backend contracts. These
+// adapter tests require a single RPC and preserve its complete response.
+func TestThreadsSharedContract(t *testing.T) {
+	for _, answer := range []bool{false, true} {
+		t.Run(map[bool]string{false: "user", true: "answer"}[answer], func(t *testing.T) {
+			calls := 0
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.URL.Query().Get("user") != "me" {
-					t.Errorf("me not passed to server")
+				calls++
+				if r.Method != "POST" || r.URL.Path != "/api/v1/treecli/call" || r.Header.Get("access-token") != "t" {
+					t.Errorf("incorrect RPC: %s %s", r.Method, r.URL)
 				}
-				w.WriteHeader(tc.status)
-				fmt.Fprint(w, tc.body)
+				var call struct {
+					Name      string `json:"name"`
+					Arguments struct {
+						Operation string                 `json:"operation"`
+						Arguments map[string]interface{} `json:"arguments"`
+					} `json:"arguments"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&call); err != nil {
+					t.Fatal(err)
+				}
+				if call.Name != "treechat_read" || call.Arguments.Operation != "threads" {
+					t.Fatalf("unexpected call %#v", call)
+				}
+				args := call.Arguments.Arguments
+				if answer {
+					if args["answer"] != "https://app.example/answer/A" {
+						t.Errorf("lost answer reference: %#v", args)
+					}
+				} else if args["user"] != "@alice" || args["thread_scope"] != "root" || args["page"] != float64(2) || args["limit"] != float64(1) {
+					t.Errorf("lost options: %#v", args)
+				}
+				json.NewEncoder(w).Encode(map[string]interface{}{"structuredContent": map[string]interface{}{"status": 200, "body": json.RawMessage(`{"threads":[{"id":"q1","future_field":true}],"pagination":{"page":2,"limit":1,"next_page":3,"has_more":true}}`)}})
 			}))
 			defer server.Close()
-			result, err := ListThreads(server.URL, "t", "c", "u", ThreadListOptions{User: "me", Scope: "all", Page: 1, Limit: 20})
-			if tc.want != "" {
-				if err == nil || !strings.Contains(err.Error(), tc.want) {
-					t.Fatalf("got %v", err)
-				}
-			} else if err != nil || result.Threads == nil {
-				t.Fatalf("empty list: %#v %v", result, err)
+			var result ThreadsResponse
+			var err error
+			if answer {
+				result, err = ThreadsForAnswer(server.URL, "t", "c", "u", "https://app.example/answer/A")
+			} else {
+				result, err = ListThreads(server.URL, "t", "c", "u", ThreadListOptions{User: "@alice", Scope: "root", Page: 2, Limit: 1})
+			}
+			if err != nil || calls != 1 || len(result.Threads) != 1 || !strings.Contains(string(result.Raw), "future_field") {
+				t.Fatalf("result=%#v calls=%d err=%v", result, calls, err)
 			}
 		})
 	}
 }
-
-func TestThreadsForAnswer(t *testing.T) {
-	calls := map[string]int{}
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		calls[r.URL.Path]++
-		switch r.URL.Path {
-		case "/api/v1/answers/a1":
-			fmt.Fprint(w, `{"answer":{"id":"a1","child_quests":[{"id":"q1"},{"id":"q1"},{"id":"hidden"},{"id":"gone"},{"id":"q2"}]}}`)
-		case "/api/v1/answers/empty":
-			fmt.Fprint(w, `{"answer":{"id":"empty","child_quests":[]}}`)
-		case "/api/v1/quests/q1", "/api/v1/quests/q2":
-			fmt.Fprintf(w, `{"quest":{"id":%q,"future_field":"preserved"}}`, strings.TrimPrefix(r.URL.Path, "/api/v1/quests/"))
-		case "/api/v1/quests/hidden":
-			w.WriteHeader(403)
-		case "/api/v1/quests/gone":
-			w.WriteHeader(404)
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer server.Close()
-	result, err := ThreadsForAnswer(server.URL, "t", "c", "u", "a1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(result.Threads) != 2 || calls["/api/v1/quests/q1"] != 1 || !strings.Contains(string(result.Raw), "future_field") {
-		t.Fatalf("unexpected children %s", result.Raw)
-	}
-	result, err = ThreadsForAnswer(server.URL, "t", "c", "u", "empty")
-	if err != nil || string(result.Raw) != `{"threads":[]}` {
-		t.Fatalf("empty: %s %v", result.Raw, err)
-	}
-}
-
-func TestThreadUserResolutionErrors(t *testing.T) {
-	for _, body := range []string{`{`, `{"user":{}}`} {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, body) }))
-		_, err := ResolveThreadUser(server.URL, "t", "c", "u", "alice")
+func TestThreadsPropagatesSharedErrors(t *testing.T) {
+	for _, body := range []string{`{"isError":true,"structuredContent":{"status":403,"body":{"error":"denied"}}}`, `{"structuredContent":{"status":200,"body":"invalid threads"}}`, `{`} {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte(body)) }))
+		_, err := ListThreads(server.URL, "t", "c", "u", ThreadListOptions{User: "me"})
 		server.Close()
 		if err == nil {
-			t.Fatalf("accepted %s", body)
+			t.Fatalf("accepted invalid shared result %s", body)
 		}
-	}
-}
-
-func TestThreadsForAnswerRejectsFailedOrMalformedChildren(t *testing.T) {
-	for _, tc := range []struct {
-		name, answer, child string
-		status              int
-		want                string
-	}{
-		{"missing answer", `{}`, ``, 200, "answer response is missing"},
-		{"failed child", `{"answer":{"id":"a","child_quests":[{"id":"q"}]}}`, `server error`, 500, "500"},
-		{"malformed child", `{"answer":{"id":"a","child_quests":[{"id":"q"}]}}`, `{`, 200, "parsing child"},
-		{"missing child", `{"answer":{"id":"a","child_quests":[{"id":"q"}]}}`, `{"quest":{}}`, 200, "missing an ID"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if strings.HasPrefix(r.URL.Path, "/api/v1/answers/") {
-					fmt.Fprint(w, tc.answer)
-					return
-				}
-				w.WriteHeader(tc.status)
-				fmt.Fprint(w, tc.child)
-			}))
-			defer server.Close()
-			_, err := ThreadsForAnswer(server.URL, "t", "c", "u", "a")
-			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("expected %q, got %v", tc.want, err)
-			}
-		})
 	}
 }

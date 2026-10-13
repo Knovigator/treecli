@@ -21,17 +21,23 @@ func TestCompiledWhoami(t *testing.T) {
 	defer trap.Close()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
-		if r.Method != "GET" || r.URL.Path != "/api/v1/gon" {
+		if r.Method != "POST" || r.URL.Path != "/api/v1/treecli/call" {
 			t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
 		}
 		if r.Header.Get("access-token") != "whoami-secret-token" || r.Header.Get("client") != "whoami-secret-client" || r.Header.Get("uid") != "bot@example.test" {
 			t.Error("missing authentication headers")
 		}
+		var call struct {
+			Name string `json:"name"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&call); err != nil || call.Name != "treechat_account" {
+			t.Errorf("wrong RPC: %#v %v", call, err)
+		}
 		switch mode.Load().(string) {
 		case "success":
-			fmt.Fprint(w, `{"currentUser":{"id":"live-user-id","name":"Brooz_GM_Tip_Bot","email":"private@example.test","tokens":"secret-server-data"}}`)
+			fmt.Fprint(w, `{"structuredContent":{"id":"live-user-id","username":"Brooz_GM_Tip_Bot","email":"private@example.test","tokens":"secret-server-data"}}`)
 		case "changed":
-			fmt.Fprint(w, `{"currentUser":{"id":"different-live-id","name":"DifferentUser"}}`)
+			fmt.Fprint(w, `{"structuredContent":{"id":"different-live-id","username":"DifferentUser"}}`)
 		case "unauthorized":
 			http.Error(w, "whoami-secret-token", 401)
 		case "forbidden":
@@ -39,11 +45,11 @@ func TestCompiledWhoami(t *testing.T) {
 		case "server-error":
 			http.Error(w, "whoami-secret-token", 500)
 		case "anonymous":
-			fmt.Fprint(w, `{"currentUser":null}`)
+			fmt.Fprint(w, `{"structuredContent":{}}`)
 		case "missing-name":
-			fmt.Fprint(w, `{"currentUser":{"id":"live-user-id"}}`)
+			fmt.Fprint(w, `{"structuredContent":{"id":"live-user-id"}}`)
 		case "missing-id":
-			fmt.Fprint(w, `{"currentUser":{"name":"Name"}}`)
+			fmt.Fprint(w, `{"structuredContent":{"username":"Name"}}`)
 		case "malformed":
 			fmt.Fprint(w, `{"currentUser":`)
 		case "redirect":

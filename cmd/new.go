@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/Knovigator/treecli/api"
 	"github.com/spf13/cobra"
@@ -70,9 +71,9 @@ func runNewReply(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	replyToQuestID, err := normalizeReplyTarget(replyThreadID)
-	if err != nil {
-		return err
+	replyToQuestID := strings.TrimSpace(replyThreadID)
+	if replyToQuestID == "" {
+		return fmt.Errorf("missing --reply-to value")
 	}
 
 	result, err := createReply(
@@ -94,59 +95,13 @@ func runNewReply(cmd *cobra.Command, args []string) error {
 }
 
 func createReply(profile profileConfig, options replyCreateOptions) (api.CreateAnswerResponse, error) {
-	answerID, err := resolveWriteID(options.WriteID)
-	if err != nil {
-		return api.CreateAnswerResponse{}, err
-	}
-
-	spaceID, err := resolveSpaceID(profile, options.SpaceID)
-	if err != nil {
-		return api.CreateAnswerResponse{}, withWriteID(answerID, err)
-	}
-
-	uploads, err := prepareAttachmentUploads(options.Attachment, "images[]", "recording", "files[]")
-	if err != nil {
-		return api.CreateAnswerResponse{}, withWriteID(answerID, err)
-	}
-
-	// Omit Delta for plain text so the backend can resolve user mentions.
-	deltaJSON := options.DeltaJSON
-
-	result, err := api.CreateAnswer(
-		profile.BackendURL,
-		profile.AccessToken,
-		profile.Client,
-		profile.UID,
-		api.CreateAnswerRequest{
-			AnswerID:           answerID,
-			ReplyToAnswerID:    options.ReplyToAnswerID,
-			QuestID:            options.ReplyToQuestID,
-			SpaceID:            spaceID,
-			UserID:             profile.CurrentUserID,
-			Content:            options.Content,
-			DeltaJSON:          deltaJSON,
-			ActionRequestsJSON: options.ActionRequestsJSON,
-			MessageType:        options.MessageType,
-			Uploads:            uploads,
-		},
-	)
-	if err != nil {
-		// GET responses cannot prove attachment bytes or action request settings match.
-		if len(uploads) == 0 && options.ActionRequestsJSON == "" && shouldReconcileWrite(err) {
-			if reconciled, ok := reconcileAnswerWrite(
-				profile,
-				answerID,
-				options.ReplyToQuestID,
-				spaceID,
-				options.Content,
-				deltaJSON,
-				options.MessageType,
-			); ok {
-				return reconciled, nil
-			}
-		}
-		return api.CreateAnswerResponse{}, withWriteID(answerID, err)
-	}
-
-	return result, nil
+	args := map[string]interface{}{"id": options.WriteID, "content": options.Content, "quest_id": options.ReplyToQuestID}
+	optional(args, "space_id", options.SpaceID)
+	optional(args, "message_type", options.MessageType)
+	optional(args, "reply_to_answer_id", options.ReplyToAnswerID)
+	optional(args, "delta_json", options.DeltaJSON)
+	optional(args, "action_requests", options.ActionRequestsJSON)
+	var out api.CreateAnswerResponse
+	err := sharedNativeWrite(profile, "reply", args, options.Attachment, 0, &out)
+	return out, err
 }

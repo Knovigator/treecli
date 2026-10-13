@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"net/url"
 
 	"github.com/Knovigator/treecli/api"
 	"github.com/spf13/cobra"
@@ -43,7 +42,7 @@ func fetchAndPrintThread(cmd *cobra.Command, id, format string) error {
 	if err != nil {
 		return err
 	}
-	thread, err := api.GetThread(profile.BackendURL, url.PathEscape(id), profile.AccessToken, profile.Client, profile.UID)
+	thread, err := api.GetThread(profile.BackendURL, id, profile.AccessToken, profile.Client, profile.UID)
 	if err != nil {
 		return err
 	}

@@ -46,7 +46,7 @@ Important Treechat action model:
 - If the task is "animate this previous image" or "edit this previous image", do not pick a plain generation action.
 - Use `--payment usd` for Stripe metered AI billing or `--payment bsv` / `--payment bitcoinsv` for Bitcoin SV; omit it to use the account default.
 - For post-less local media generation, inspect support with `treecli generate actions --direct-only`; use `treecli generate actions --verbose` or `treecli generate describe <action>` for model descriptions, inputs, settings, reference behavior, and examples.
-- Generate local media with `treecli generate <action> "prompt" --out <file>` and pass settings with `--input key=value`, `--settings '{...}'`, `--duration`, `--instrumental`, `--reference`, or `--payment` as described by the action and billing intent.
+- Generate local media with `treecli generate <action> "prompt" --out <file> --max-price-cents 100` and pass settings with `--input key=value`, `--settings '{...}'`, `--duration`, `--instrumental`, `--reference`, or `--payment` as described by the action and billing intent.
 - Check for a newer CLI release with `treecli update --check`; install it with `treecli update`. Use `--json` for machine-readable update status.
 
 Turn on live shell completion immediately in bash or zsh:

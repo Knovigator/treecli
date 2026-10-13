@@ -145,3 +145,15 @@ func isSensitiveJSONField(key string) bool {
 func redactSensitiveText(value string) string {
 	return emailTextPattern.ReplaceAllString(value, redactedValue)
 }
+
+// SafeCredentialResponseBody also removes active credential values from freeform
+// upstream errors, where key-based JSON redaction cannot identify them.
+func SafeCredentialResponseBody(raw []byte, credentials ...string) string {
+	result := SafeResponseBody(raw)
+	for _, credential := range credentials {
+		if credential != "" {
+			result = strings.ReplaceAll(result, credential, redactedValue)
+		}
+	}
+	return result
+}

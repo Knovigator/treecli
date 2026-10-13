@@ -148,7 +148,10 @@ type actionSubmission struct {
 	Answer   api.Answer
 }
 
+var actionMaxPriceCents int
+
 func init() {
+	ActionCmd.Flags().IntVar(&actionMaxPriceCents, "max-price-cents", 0, "Maximum aggregate generation fee in USD cents; required explicit authorization")
 	newPostCmd.Flags().StringVarP(&postUrl, "url", "u", "", "Optional URL for the post")
 	newPostCmd.Flags().StringVarP(&postAttachment, "attachment", "f", "", "Path to the file to attach")
 	newPostCmd.Flags().StringVar(&postStream, "stream", "", "Target stream name or UUID. Defaults to private.")
@@ -214,10 +217,7 @@ func runNewPost(cmd *cobra.Command, args []string) error {
 	}
 
 	if strings.TrimSpace(postReplyTo) != "" {
-		replyToQuestID, err := normalizeReplyTarget(postReplyTo)
-		if err != nil {
-			return err
-		}
+		replyToQuestID := strings.TrimSpace(postReplyTo)
 
 		err = rejectRootOnlyPostFlags(cmd, postReplyTo)
 		if err != nil {
@@ -279,6 +279,9 @@ func runNewPost(cmd *cobra.Command, args []string) error {
 }
 
 func runAction(cmd *cobra.Command, args []string) error {
+	if (cmd == nil || !cmd.Flags().Changed("max-price-cents")) || actionMaxPriceCents < 0 {
+		return fmt.Errorf("--max-price-cents is required and must be nonnegative")
+	}
 	invocation, err := parseActionInvocation(args)
 	if err != nil {
 		return err
@@ -302,15 +305,6 @@ func runAction(cmd *cobra.Command, args []string) error {
 	profile, err := requireAuthenticatedProfile()
 	if err != nil {
 		return err
-	}
-
-	validTags, err := fetchKnownActionTags(profile)
-	if err != nil {
-		return fmt.Errorf("loading AI actions: %w", err)
-	}
-
-	if !validTags[strings.ToLower(invocation.Tag)] && !actionAllowUnknownTag {
-		return fmt.Errorf("unknown AI action %q; run `treecli action actions` to inspect the current model-backed actions, or pass --allow-unknown-action to submit anyway", invocation.Tag)
 	}
 
 	var publicValue *bool
@@ -367,23 +361,7 @@ func runActionStatus(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	normalizedThreadTarget := ""
-	if strings.TrimSpace(threadTarget) != "" {
-		normalizedThreadTarget, err = normalizeThreadTarget(threadTarget)
-		if err != nil {
-			return err
-		}
-	}
-
-	normalizedAnswerTarget := ""
-	if strings.TrimSpace(actionStatusAnswerID) != "" {
-		normalizedAnswerTarget, err = normalizeAnswerTarget(actionStatusAnswerID)
-		if err != nil {
-			return err
-		}
-	}
-
-	result, err := fetchActionStatus(profile, normalizedThreadTarget, normalizedAnswerTarget)
+	result, err := fetchActionStatus(profile, threadTarget, actionStatusAnswerID)
 	if err != nil {
 		return err
 	}
@@ -406,108 +384,20 @@ func runActionStatus(cmd *cobra.Command, args []string) error {
 }
 
 func createRootThread(profile profileConfig, options rootThreadCreateOptions) (api.CreateQuestResponse, error) {
-	questID, err := resolveWriteID(options.WriteID)
-	if err != nil {
-		return api.CreateQuestResponse{}, err
-	}
-
-	spaceID, err := resolveSpaceID(profile, options.SpaceID)
-	if err != nil {
-		return api.CreateQuestResponse{}, withWriteID(questID, err)
-	}
-
-	resolvedTarget, err := resolveRootThreadTarget(profile, options)
-	if err != nil {
-		return api.CreateQuestResponse{}, withWriteID(questID, err)
-	}
-
-	if options.URL != "" || resolvedTarget.Kind == "clips" {
-		return createClipQuest(
-			profile,
-			options.URL,
-			options.Content,
-			options.Attachment,
-			resolvedTarget,
-			questID,
-		)
-	}
-
-	parentAnswerID, err := newUUID()
-	if err != nil {
-		return api.CreateQuestResponse{}, withWriteID(
-			questID,
-			fmt.Errorf("error generating answer id: %w", err),
-		)
-	}
-
-	uploads, err := prepareAttachmentUploads(
-		options.Attachment,
-		"parent_attributes[answer_image]",
-		"parent_attributes[recording]",
-		"parent_attributes[files][]",
-	)
-	if err != nil {
-		return api.CreateQuestResponse{}, withWriteID(questID, err)
-	}
-
-	// Omit Delta for plain text so the backend can resolve user mentions.
-	deltaJSON := options.DeltaJSON
-
-	var publicValue *bool
-	var privateValue *bool
-	teamID := ""
-
-	switch resolvedTarget.Kind {
-	case "public":
-		publicValue = boolPtr(true)
-	case "private":
-		privateValue = boolPtr(true)
-	case "team":
-		teamID = resolvedTarget.ID
-	}
-
-	result, err := api.CreateQuest(
-		profile.BackendURL,
-		profile.AccessToken,
-		profile.Client,
-		profile.UID,
-		api.CreateQuestRequest{
-			QuestID:            questID,
-			ParentAnswerID:     parentAnswerID,
-			SpaceID:            spaceID,
-			Content:            options.Content,
-			DeltaJSON:          deltaJSON,
-			ActionRequestsJSON: options.ActionRequestsJSON,
-			MessageType:        options.MessageType,
-			ThreadType:         options.ThreadType,
-			TeamID:             teamID,
-			Public:             publicValue,
-			Private:            privateValue,
-			Uploads:            uploads,
-		},
-	)
-	if err != nil {
-		// GET responses cannot prove attachment bytes or action request settings match.
-		if len(uploads) == 0 && options.ActionRequestsJSON == "" && shouldReconcileWrite(err) {
-			if reconciled, ok := reconcileQuestWrite(
-				profile,
-				questID,
-				spaceID,
-				options.Content,
-				deltaJSON,
-				"",
-				false,
-				resolvedTarget,
-				options.ThreadType,
-				options.MessageType,
-			); ok {
-				return reconciled, nil
-			}
-		}
-		return api.CreateQuestResponse{}, withWriteID(questID, err)
-	}
-
-	return result, nil
+	args := map[string]interface{}{"id": options.WriteID, "content": options.Content}
+	optional(args, "space_id", options.SpaceID)
+	optional(args, "stream", options.Stream)
+	optional(args, "team_id", options.TeamID)
+	optional(args, "thread_type", options.ThreadType)
+	optional(args, "message_type", options.MessageType)
+	optional(args, "url", options.URL)
+	optional(args, "delta_json", options.DeltaJSON)
+	optional(args, "action_requests", options.ActionRequestsJSON)
+	optionalBool(args, "public", options.Public)
+	optionalBool(args, "private", options.Private)
+	var out api.CreateQuestResponse
+	err := sharedNativeWrite(profile, "post", args, options.Attachment, 0, &out)
+	return out, err
 }
 
 func waitForGeneratedMedia(
@@ -540,43 +430,6 @@ func waitForGeneratedMedia(
 
 		time.Sleep(pollInterval)
 	}
-}
-
-func resolveRootThreadTarget(profile profileConfig, options rootThreadCreateOptions) (streamTarget, error) {
-	placementFlags := []string{}
-	if strings.TrimSpace(options.Stream) != "" {
-		placementFlags = append(placementFlags, "--stream")
-	}
-	if strings.TrimSpace(options.TeamID) != "" {
-		placementFlags = append(placementFlags, "--team-id")
-	}
-	if options.Public != nil && *options.Public {
-		placementFlags = append(placementFlags, "--public")
-	}
-	if options.Private != nil && *options.Private {
-		placementFlags = append(placementFlags, "--private")
-	}
-	if len(placementFlags) > 1 {
-		return streamTarget{}, fmt.Errorf("conflicting stream flags: %s", strings.Join(placementFlags, ", "))
-	}
-
-	if strings.TrimSpace(options.Stream) != "" {
-		return resolveStreamTarget(profile, options.Stream, defaultPrivateStreamTarget())
-	}
-
-	if strings.TrimSpace(options.TeamID) != "" {
-		return resolveStreamTarget(profile, options.TeamID, defaultPrivateStreamTarget())
-	}
-
-	if options.Public != nil && *options.Public {
-		return resolveStreamTarget(profile, "public", defaultPrivateStreamTarget())
-	}
-
-	if options.Private != nil && *options.Private {
-		return resolveStreamTarget(profile, "private", defaultPrivateStreamTarget())
-	}
-
-	return defaultPrivateStreamTarget(), nil
 }
 
 func boolPtr(value bool) *bool {
@@ -626,71 +479,47 @@ func runActionActions(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-
-	models, err := fetchVisibleActionModels(profile)
+	rows, err := fetchActionCatalog(profile, false)
 	if err != nil {
 		return fmt.Errorf("loading AI actions: %w", err)
 	}
-
-	groupedModels := map[string][]api.AIModelRef{}
-	for _, model := range models {
-		tagName := strings.TrimSpace(model.ActionTagName)
-		if tagName == "" {
-			continue
+	grouped := map[string][]generationActionRow{}
+	for _, row := range rows {
+		kind := row.Kind
+		if kind == "" {
+			kind = "other"
 		}
-
-		groupKey := strings.TrimSpace(model.ModelType)
-		if groupKey == "" {
-			groupKey = "other"
-		}
-		groupedModels[groupKey] = append(groupedModels[groupKey], model)
+		grouped[kind] = append(grouped[kind], row)
 	}
-
-	groupNames := make([]string, 0, len(groupedModels))
-	for groupName := range groupedModels {
-		groupNames = append(groupNames, groupName)
+	kinds := make([]string, 0, len(grouped))
+	for kind := range grouped {
+		kinds = append(kinds, kind)
 	}
-	sort.Strings(groupNames)
-
-	for groupIndex, groupName := range groupNames {
-		if groupIndex > 0 {
+	sort.Strings(kinds)
+	for index, kind := range kinds {
+		if index > 0 {
 			fmt.Println()
 		}
-		fmt.Printf("%s\n", strings.ToUpper(groupName))
-
-		modelsInGroup := groupedModels[groupName]
-		sort.Slice(modelsInGroup, func(left int, right int) bool {
-			return strings.ToLower(modelsInGroup[left].ActionTagName) < strings.ToLower(modelsInGroup[right].ActionTagName)
-		})
-
-		for _, model := range modelsInGroup {
-			displayName := strings.TrimSpace(model.HumanName)
-			if displayName == "" {
-				displayName = strings.TrimSpace(model.Name)
+		fmt.Println(strings.ToUpper(kind))
+		entries := grouped[kind]
+		sort.Slice(entries, func(i, j int) bool { return strings.ToLower(entries[i].Action) < strings.ToLower(entries[j].Action) })
+		for _, row := range entries {
+			fmt.Printf("  !%s", row.Action)
+			if row.Name != "" {
+				fmt.Printf("  %s", row.Name)
 			}
-			description := strings.TrimSpace(model.DescriptionShort)
-			if description == "" {
-				description = strings.TrimSpace(model.Description)
-			}
-
-			fmt.Printf("  !%s", model.ActionTagName)
-			if displayName != "" {
-				fmt.Printf("  %s", displayName)
-			}
-			if strings.TrimSpace(model.Provider) != "" {
-				fmt.Printf("  [%s]", model.Provider)
+			if row.Provider != "" {
+				fmt.Printf("  [%s]", row.Provider)
 			}
 			fmt.Println()
-			aliases := aiActionAliasesForCanonicalAction(model.ActionTagName)
-			if len(aliases) > 0 {
-				fmt.Printf("    aliases: %s\n", strings.Join(prefixAIActionNames(aliases, true), ", "))
+			if len(row.Aliases) > 0 {
+				fmt.Printf("    aliases: %s\n", strings.Join(prefixAIActionNames(row.Aliases, true), ", "))
 			}
-			if description != "" {
-				fmt.Printf("    %s\n", description)
+			if row.Description != "" {
+				fmt.Printf("    %s\n", row.Description)
 			}
 		}
 	}
-
 	return nil
 }
 
@@ -736,7 +565,6 @@ func parseActionInvocation(args []string) (actionInvocation, error) {
 	if normalizedTag == "" {
 		return actionInvocation{}, fmt.Errorf("an AI action is required")
 	}
-	normalizedTag = canonicalAIActionName(normalizedTag)
 
 	promptFields := fields[1:]
 	normalizedContent := "!" + normalizedTag
@@ -754,50 +582,6 @@ func parseActionInvocation(args []string) (actionInvocation, error) {
 	}, nil
 }
 
-func fetchKnownActionTags(profile profileConfig) (map[string]bool, error) {
-	models, err := fetchVisibleActionModels(profile)
-	if err != nil {
-		return nil, err
-	}
-
-	knownTags := map[string]bool{}
-	for _, model := range models {
-		tagName := strings.ToLower(strings.TrimSpace(model.ActionTagName))
-		if tagName == "" {
-			continue
-		}
-		knownTags[tagName] = true
-	}
-
-	return knownTags, nil
-}
-
-func fetchVisibleActionModels(profile profileConfig) ([]api.AIModelRef, error) {
-	models, err := api.ListAIModels(profile.BackendURL, profile.AccessToken, profile.Client, profile.UID)
-	if err != nil {
-		return nil, err
-	}
-
-	visibleModels := make([]api.AIModelRef, 0, len(models))
-	for _, model := range models {
-		if shouldHideActionModel(model) {
-			continue
-		}
-		visibleModels = append(visibleModels, model)
-	}
-
-	return visibleModels, nil
-}
-
-func shouldHideActionModel(model api.AIModelRef) bool {
-	if strings.EqualFold(strings.TrimSpace(model.Provider), "openclaw") {
-		return true
-	}
-
-	tagName := strings.ToLower(strings.TrimSpace(model.ActionTagName))
-	return strings.HasPrefix(tagName, "openclaw")
-}
-
 func completeActionArgs(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	if len(args) > 0 {
 		return nil, cobra.ShellCompDirectiveNoFileComp
@@ -807,47 +591,7 @@ func completeActionArgs(cmd *cobra.Command, args []string, toComplete string) ([
 }
 
 func completeAIActionNames(toComplete string) ([]string, cobra.ShellCompDirective) {
-	profile, err := requireAuthenticatedProfile()
-	if err != nil {
-		return nil, cobra.ShellCompDirectiveNoFileComp
-	}
-
-	models, err := fetchVisibleActionModels(profile)
-	if err != nil {
-		return nil, cobra.ShellCompDirectiveNoFileComp
-	}
-
-	normalizedPrefix := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(toComplete, "!")))
-	wantBangPrefix := strings.HasPrefix(strings.TrimSpace(toComplete), "!")
-	completions := []string{}
-	seenTags := map[string]bool{}
-
-	for _, model := range models {
-		tagName := strings.TrimSpace(model.ActionTagName)
-		if tagName == "" {
-			continue
-		}
-
-		for _, candidate := range aiActionCompletionCandidates(tagName) {
-			normalizedTag := strings.ToLower(candidate)
-			if normalizedPrefix != "" && !strings.HasPrefix(normalizedTag, normalizedPrefix) {
-				continue
-			}
-			if seenTags[normalizedTag] {
-				continue
-			}
-			seenTags[normalizedTag] = true
-
-			completionTag := candidate
-			if wantBangPrefix {
-				completionTag = "!" + candidate
-			}
-			completions = append(completions, completionTag)
-		}
-	}
-
-	sort.Strings(completions)
-	return completions, cobra.ShellCompDirectiveNoFileComp
+	return completeGenerationActionNames(toComplete, false)
 }
 
 func createAndMaybePollAction(
@@ -893,119 +637,34 @@ func createActionSubmission(
 	privateValue *bool,
 	paymentMode string,
 ) (actionSubmission, error) {
-	actionDeltaJSON, err := actionTextToDeltaJSONString(invocation.NormalizedContent)
-	if err != nil {
-		return actionSubmission{}, fmt.Errorf("building action delta_json: %w", err)
+	arguments := map[string]interface{}{"id": actionWriteID, "action": invocation.Tag, "prompt": invocation.Prompt, "allow_unknown_action": actionAllowUnknownTag}
+	optional(arguments, "payment_mode", paymentMode)
+	optional(arguments, "quest_id", actionReplyTo)
+	optional(arguments, "space_id", actionSpaceID)
+	optional(arguments, "stream", actionStream)
+	optional(arguments, "team_id", actionTeamID)
+	optional(arguments, "thread_type", actionThreadType)
+	optional(arguments, "message_type", actionMessageType)
+	optionalBool(arguments, "public", publicValue)
+	optionalBool(arguments, "private", privateValue)
+	if actionDuration > 0 {
+		arguments["duration_seconds"] = actionDuration
 	}
-	actionRequestsJSON, err := actionRequestsJSONString(invocation, actionDuration, paymentMode)
-	if err != nil {
-		return actionSubmission{}, fmt.Errorf("building action_requests: %w", err)
-	}
-
-	if strings.TrimSpace(actionReplyTo) != "" {
-		replyToQuestID, err := normalizeReplyTarget(actionReplyTo)
-		if err != nil {
+	if actionReplyTo != "" {
+		var out api.CreateAnswerResponse
+		if err := sharedNativeWrite(profile, "action", arguments, actionAttachment, actionMaxPriceCents, &out); err != nil {
 			return actionSubmission{}, err
 		}
-
-		err = rejectRootOnlyPostFlags(cmd, actionReplyTo)
-		if err != nil {
-			return actionSubmission{}, err
-		}
-
-		replyResult, err := createReply(
-			profile,
-			replyCreateOptions{
-				WriteID:            actionWriteID,
-				ReplyToQuestID:     replyToQuestID,
-				Content:            invocation.NormalizedContent,
-				DeltaJSON:          actionDeltaJSON,
-				ActionRequestsJSON: actionRequestsJSON,
-				Attachment:         actionAttachment,
-				SpaceID:            actionSpaceID,
-				MessageType:        actionMessageType,
-			},
-		)
-		if err != nil {
-			return actionSubmission{}, fmt.Errorf("creating action reply: %w", err)
-		}
-
-		threadID := replyResult.Answer.QuestID
-		if threadID == "" && replyResult.Quest != nil {
-			threadID = replyResult.Quest.ID
-		}
-
-		return actionSubmission{
-			ThreadID: threadID,
-			WriteID:  replyResult.Answer.ID,
-			Answer:   replyResult.Answer,
-		}, nil
+		return actionSubmission{ThreadID: out.Answer.QuestID, WriteID: out.Answer.ID, Answer: out.Answer}, nil
 	}
-
-	createResult, err := createRootThread(
-		profile,
-		rootThreadCreateOptions{
-			WriteID:            actionWriteID,
-			Content:            invocation.NormalizedContent,
-			DeltaJSON:          actionDeltaJSON,
-			ActionRequestsJSON: actionRequestsJSON,
-			Stream:             actionStream,
-			Attachment:         actionAttachment,
-			SpaceID:            actionSpaceID,
-			ThreadType:         actionThreadType,
-			MessageType:        actionMessageType,
-			TeamID:             actionTeamID,
-			Public:             publicValue,
-			Private:            privateValue,
-		},
-	)
-	if err != nil {
-		return actionSubmission{}, fmt.Errorf("creating action thread: %w", err)
+	var out api.CreateQuestResponse
+	if err := sharedNativeWrite(profile, "action", arguments, actionAttachment, actionMaxPriceCents, &out); err != nil {
+		return actionSubmission{}, err
 	}
-
-	if createResult.Quest.Parent == nil || createResult.Quest.Parent.ID == "" {
-		return actionSubmission{}, fmt.Errorf("action thread was created without a root answer id")
+	if out.Quest.Parent == nil {
+		return actionSubmission{}, fmt.Errorf("backend omitted action root post")
 	}
-
-	return actionSubmission{
-		ThreadID: createResult.Quest.ID,
-		WriteID:  createResult.Quest.ID,
-		Answer:   *createResult.Quest.Parent,
-	}, nil
-}
-
-func actionRequestsJSONString(invocation actionInvocation, durationSeconds int, paymentMode string) (string, error) {
-	actionID, err := newUUID()
-	if err != nil {
-		return "", fmt.Errorf("error generating action request id: %w", err)
-	}
-
-	request := map[string]interface{}{
-		"id":               actionID,
-		"client_id":        actionID,
-		"tag":              invocation.Tag,
-		"prompt":           invocation.Prompt,
-		"kind":             "model",
-		"generation_count": 1,
-	}
-
-	if durationSeconds > 0 {
-		request["settings"] = map[string]interface{}{
-			"duration_seconds": durationSeconds,
-		}
-	}
-	if strings.TrimSpace(paymentMode) != "" {
-		request["payment_mode"] = paymentMode
-	}
-
-	payload := []map[string]interface{}{request}
-
-	encoded, err := json.Marshal(payload)
-	if err != nil {
-		return "", err
-	}
-
-	return string(encoded), nil
+	return actionSubmission{ThreadID: out.Quest.ID, WriteID: out.Quest.ID, Answer: *out.Quest.Parent}, nil
 }
 
 func pollActionResult(

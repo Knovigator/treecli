@@ -3,11 +3,8 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"strings"
-	"time"
 
-	"github.com/go-resty/resty/v2"
 	"github.com/spf13/cobra"
 )
 
@@ -59,32 +56,17 @@ func newWhoamiCommand() *cobra.Command {
 }
 
 func fetchIdentity(profile profileConfig) (identityResult, error) {
-	client := resty.New().SetTimeout(10 * time.Second).SetRedirectPolicy(resty.NoRedirectPolicy())
-	response, err := client.R().SetHeader("accept", "application/json").
-		SetHeader("access-token", profile.AccessToken).SetHeader("client", profile.Client).SetHeader("uid", profile.UID).
-		Get(profile.BackendURL + "/api/v1/gon")
-	if err != nil {
+	var result struct {
+		ID       string `json:"id"`
+		Username string `json:"username"`
+	}
+	if err := sharedCall(profile, "treechat_account", map[string]interface{}{}, &result); err != nil {
 		return identityResult{}, fmt.Errorf("could not verify identity: %w", err)
 	}
-	if response.StatusCode() == http.StatusUnauthorized || response.StatusCode() == http.StatusForbidden {
-		return identityResult{}, fmt.Errorf("identity verification rejected (HTTP %d); log in again for the selected account", response.StatusCode())
-	}
-	if response.StatusCode() != http.StatusOK {
-		return identityResult{}, fmt.Errorf("could not verify identity: server returned HTTP %d", response.StatusCode())
-	}
-	var result struct {
-		CurrentUser *struct {
-			ID   string `json:"id"`
-			Name string `json:"name"`
-		} `json:"currentUser"`
-	}
-	if err := json.Unmarshal(response.Body(), &result); err != nil {
-		return identityResult{}, fmt.Errorf("could not verify identity: invalid server response")
-	}
-	if result.CurrentUser == nil || strings.TrimSpace(result.CurrentUser.ID) == "" || strings.TrimSpace(result.CurrentUser.Name) == "" {
+	if strings.TrimSpace(result.ID) == "" || strings.TrimSpace(result.Username) == "" {
 		return identityResult{}, fmt.Errorf("could not verify identity: server did not return an authenticated user ID and username; log in again if your session expired")
 	}
-	identity := identityResult{Environment: profile.Environment, Account: profile.Account, BackendURL: profile.BackendURL, Username: result.CurrentUser.Name, UserID: result.CurrentUser.ID}
+	identity := identityResult{Environment: profile.Environment, Account: profile.Account, BackendURL: profile.BackendURL, Username: result.Username, UserID: result.ID}
 	if profile.Environment == "" {
 		identity.LegacyProfile = profile.Name
 	}

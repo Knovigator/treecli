@@ -1,6 +1,7 @@
 package integration_test
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -14,31 +15,35 @@ func TestCompiledCLIPlainTextPostsOmitDelta(t *testing.T) {
 	var writes atomic.Int32
 	authHandler := fakeTreechatHandler(t, &fakeBackendState{})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || (r.URL.Path != "/api/v1/quests" && r.URL.Path != "/api/v1/answers") {
+		if r.URL.Path != "/api/v1/treecli/call" {
 			authHandler.ServeHTTP(w, r)
 			return
 		}
-		writes.Add(1)
 		if !hasIntegrationAuth(r) {
-			t.Error("post is missing authentication")
+			t.Error("missing authentication")
 		}
-		if err := r.ParseForm(); err != nil {
-			t.Errorf("parse post form: %v", err)
+		var call struct {
+			Name      string                 `json:"name"`
+			Arguments map[string]interface{} `json:"arguments"`
 		}
-		contentKey, deltaKey := "parent_attributes[content]", "parent_attributes[delta_json]"
-		if r.URL.Path == "/api/v1/answers" {
-			contentKey, deltaKey = "content", "delta_json"
-			if r.FormValue("quest_id") != threadID {
-				t.Errorf("reply target = %q", r.FormValue("quest_id"))
+		if err := json.NewDecoder(r.Body).Decode(&call); err != nil {
+			t.Error(err)
+			return
+		}
+		if call.Name == "quote_treechat_write" {
+			a, _ := call.Arguments["arguments"].(map[string]interface{})
+			if a["content"] != content || a["delta_json"] != nil {
+				t.Errorf("text must remain unchanged without local Delta: %#v", a)
 			}
+			writeJSON(t, w, map[string]interface{}{"structuredContent": map[string]interface{}{"quote_id": "plain-quote"}})
+		} else if call.Name == "create_treechat_write" {
+			writes.Add(1)
+			writeJSON(t, w, map[string]interface{}{"structuredContent": map[string]interface{}{"operation_id": "plain-quote", "state": "completed", "result": map[string]interface{}{"status": 200, "body": map[string]interface{}{"quest": map[string]string{"id": threadID}, "answer": map[string]string{"id": "answer-1", "quest_id": threadID}}}}})
+		} else {
+			t.Errorf("unexpected RPC %s", call.Name)
+			http.Error(w, "unexpected RPC", 500)
 		}
-		if r.FormValue(contentKey) != content || r.PostForm.Has(deltaKey) {
-			t.Errorf("expected unchanged text and omitted Delta, got %#v", r.PostForm)
-		}
-		writeJSON(t, w, map[string]interface{}{
-			"quest":  map[string]string{"id": threadID},
-			"answer": map[string]string{"id": "answer-1", "quest_id": threadID},
-		})
+
 	}))
 	defer server.Close()
 	binary := buildCLI(t, repositoryRoot(t))

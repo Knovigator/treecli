@@ -104,16 +104,20 @@ treecli new post --reply-to <quest-id> "reply text"
 
 ## AI Actions And Media
 
+Remote commands use the same operation catalog and executor as hosted MCP and `treecli mcp serve`. The matching backend must be available; there is no fallback to legacy writes.
+
+Generation and action commands require an explicit `--max-price-cents` authorization. Examples below use a 100-cent ceiling; choose the ceiling you approve. Direct generation prints the reviewed quote and retry identifiers. Reuse both `--quote-id` and `--id` after an uncertain result; native writes reuse `--id`. Plain posts use a zero generation-fee cap. BSV network fees are separate.
+
 Use action requests for Treechat-posted AI work:
 
 ```sh
 treecli action actions
-treecli action flux "a glass cathedral in the rain"
-treecli action flux "a glass cathedral in the rain" --payment usd
-treecli action tts "Abigail read this in a crisp narration voice"
-treecli action eleven_tts "read this in a crisp narration voice"
-treecli action sfx "rain, tires on wet asphalt, distant thunder"
-treecli action --reply-to <quest-id> animate_kling "animate this still"
+treecli action flux "a glass cathedral in the rain" --max-price-cents 100
+treecli action flux "a glass cathedral in the rain" --payment usd --max-price-cents 100
+treecli action tts "Abigail read this in a crisp narration voice" --max-price-cents 100
+treecli action eleven_tts "read this in a crisp narration voice" --max-price-cents 100
+treecli action sfx "rain, tires on wet asphalt, distant thunder" --max-price-cents 100
+treecli action --reply-to <quest-id> animate_kling "animate this still" --max-price-cents 100
 treecli action status --answer <answer-id> --watch
 ```
 
@@ -123,15 +127,15 @@ Use direct generation when an agent or script needs local media files without cr
 treecli generate actions --direct-only
 treecli generate actions --verbose
 treecli generate describe flux2
-treecli generate flux2 "wide cinematic hero banner" --out banner.webp --input aspect_ratio=3:1
-treecli generate flux2 "wide cinematic hero banner" --out banner.webp --payment bsv
-treecli generate kling2 "slow handheld push-in" --reference @image.png --out animated.mp4
-treecli generate qwen "replace the sky with stars" --reference @image.png --out edited.png
-treecli generate tts "Abigail read this in a crisp narration voice" --out chatterbox.mp3
-treecli generate clone "read this in the sampled voice" --reference @voice.mp3 --out clone.mp3
-treecli generate eleven_tts "read this in a crisp narration voice" --out narration.mp3
-treecli generate sfx "rain, tires on wet asphalt, distant thunder" --reference @clip.mp4 --out sfx.mp3
-treecli generate suno "warm ambient build, 122 BPM" --duration 20 --out sketch.mp3
+treecli generate flux2 "wide cinematic hero banner" --out banner.webp --input aspect_ratio=3:1 --max-price-cents 100
+treecli generate flux2 "wide cinematic hero banner" --out banner.webp --payment bsv --max-price-cents 100
+treecli generate kling2 "slow handheld push-in" --reference @image.png --out animated.mp4 --max-price-cents 100
+treecli generate qwen "replace the sky with stars" --reference @image.png --out edited.png --max-price-cents 100
+treecli generate tts "Abigail read this in a crisp narration voice" --out chatterbox.mp3 --max-price-cents 100
+treecli generate clone "read this in the sampled voice" --reference @voice.mp3 --out clone.mp3 --max-price-cents 100
+treecli generate eleven_tts "read this in a crisp narration voice" --out narration.mp3 --max-price-cents 100
+treecli generate sfx "rain, tires on wet asphalt, distant thunder" --reference @clip.mp4 --out sfx.mp3 --max-price-cents 100
+treecli generate suno "warm ambient build, 122 BPM" --duration 20 --out sketch.mp3 --max-price-cents 100
 ```
 
 `treecli action` and `treecli generate` accept `--payment usd` for Stripe metered AI billing or `--payment bsv` / `--payment bitcoinsv` for Bitcoin SV. Omit `--payment` to use the account default.
