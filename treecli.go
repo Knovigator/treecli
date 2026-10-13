@@ -95,6 +95,8 @@ func init() {
 	rootCmd.AddCommand(cmd.OnboardCmd)
 	rootCmd.AddCommand(cmd.SkillsCmd)
 	rootCmd.AddCommand(cmd.UpdateCmd)
+	rootCmd.AddCommand(cmd.ToolsCmd)
+	rootCmd.AddCommand(cmd.MCPCmd)
 	rootCmd.InitDefaultCompletionCmd()
 	configureCompletionHelp()
 }
@@ -102,7 +104,7 @@ func init() {
 func initConfig() {
 	configPath, err := resolveConfigPath()
 	if err != nil {
-		fmt.Println("Error getting config file path:", err)
+		fmt.Fprintln(os.Stderr, "Error getting config file path:", err)
 		return
 	}
 
@@ -115,7 +117,7 @@ func initConfig() {
 	if err := viper.ReadInConfig(); err != nil {
 		_, isConfigMissing := err.(viper.ConfigFileNotFoundError)
 		if !isConfigMissing && !os.IsNotExist(err) {
-			fmt.Println("Error reading config file:", err)
+			fmt.Fprintln(os.Stderr, "Error reading config file:", err)
 		}
 	}
 }

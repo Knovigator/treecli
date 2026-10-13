@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"crypto/md5"
 	"encoding/base64"
 	"encoding/json"
@@ -621,16 +622,7 @@ func newRequest(accessToken, client, uid string) *resty.Request {
 }
 
 func newRequestWithTimeout(accessToken, client, uid string, timeout time.Duration) *resty.Request {
-	if timeout <= 0 {
-		timeout = 10 * time.Second
-	}
-	restyClient := resty.New()
-	restyClient.SetTimeout(timeout)
-
-	return restyClient.R().
-		SetHeader("access-token", accessToken).
-		SetHeader("client", client).
-		SetHeader("uid", uid)
+	return scopedRequest(context.Background(), "", accessToken, client, uid, timeout)
 }
 
 func postMultipart(
