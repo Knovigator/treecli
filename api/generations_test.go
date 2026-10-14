@@ -357,3 +357,49 @@ func writeTempReferenceFile(t *testing.T, name string, data []byte) string {
 	}
 	return path
 }
+
+// Mirrors Ai::GenerationService.setting_metadata on the backend: duration settings carry
+// int min/max/allowed_values, while upscaler enums (Ai::Upscalers::CATALOG) are strings
+// or ints and numeric settings can default to floats.
+func TestListGenerationActionsAcceptsMixedAllowedValues(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"actions":[
+{"action":"bytedanceup","tag":"bytedanceup","provider":"replicate","kind":"video","async":true,"accepts_reference":true,"requires_reference":true,"prompt_optional":true,"reference_kinds":["video"],"inputs":["reference_url","reference_content_type","reference_kind","target_resolution","target_fps","scene"],
+ "settings":[
+  {"name":"target_resolution","type":"string","description":"Output resolution: 720p, 1080p, 2k or 4k.","default":"4k","allowed_values":["720p","1080p","2k","4k"]},
+  {"name":"target_fps","type":"integer","description":"Output frame rate: 24, 30, 60 or 120.","default":30,"allowed_values":[24,30,60,120]},
+  {"name":"scene","type":"string","allowed_values":["aigc","short_series","ugc","old_film","common"]}]},
+{"action":"seedvrvid","tag":"seedvrvid","provider":"fal","kind":"video","settings":[
+  {"name":"upscale_factor","type":"number","default":2.5,"min":1,"max":10.5}]},
+{"action":"veo3","tag":"veo3","provider":"replicate","kind":"video","settings":[
+  {"name":"duration_seconds","type":"integer","default":8,"min":4,"max":8,"allowed_values":[4,6,8]}]}
+]}`))
+	}))
+	defer server.Close()
+
+	actions, err := ListGenerationActions(server.URL, "secret-token", "client-id", "user@example.test")
+	if err != nil {
+		t.Fatalf("ListGenerationActions returned error: %v", err)
+	}
+	if len(actions) != 3 {
+		t.Fatalf("expected 3 actions, got %#v", actions)
+	}
+
+	resolution := actions[0].Settings[0]
+	if len(resolution.AllowedValues) != 4 || resolution.AllowedValues[3] != "4k" || resolution.Default != "4k" {
+		t.Fatalf("expected string allowed_values, got %#v", resolution)
+	}
+	fps := actions[0].Settings[1]
+	if len(fps.AllowedValues) != 4 || fps.AllowedValues[0] != float64(24) {
+		t.Fatalf("expected numeric allowed_values, got %#v", fps)
+	}
+	factor := actions[1].Settings[0]
+	if factor.Min != float64(1) || factor.Max != 10.5 || factor.Default != 2.5 {
+		t.Fatalf("expected float min/max/default, got %#v", factor)
+	}
+	duration := actions[2].Settings[0]
+	if duration.Min != float64(4) || duration.Max != float64(8) || len(duration.AllowedValues) != 3 || duration.AllowedValues[2] != float64(8) {
+		t.Fatalf("expected int duration bounds, got %#v", duration)
+	}
+}
