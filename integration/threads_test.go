@@ -13,25 +13,35 @@ import (
 func TestCompiledThreadsCommands(t *testing.T) {
 	fallback := fakeTreechatHandler(t, &fakeBackendState{})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/api/v1/users/name/alice":
-			fmt.Fprint(w, `{"user":{"id":"123"}}`)
-		case "/api/v1/quests":
-			if r.URL.Query().Get("authored") != "true" {
-				t.Error("missing authored mode")
-			}
-			page := r.URL.Query().Get("page")
-			limit := r.URL.Query().Get("limit")
-			if r.URL.Query().Get("user") == "123" && r.URL.Query().Get("thread_scope") != "branch" {
-				t.Error("missing branch filter")
-			}
-			fmt.Fprintf(w, `{"threads":[{"id":"newest","future_field":true}],"pagination":{"page":%s,"limit":%s,"next_page":null,"has_more":false}}`, page, limit)
-		case "/api/v1/quests/q1":
-			fmt.Fprint(w, `{"quest":{"id":"q1","future_field":true}}`)
-		case "/api/v1/answers/a1":
-			fmt.Fprint(w, `{"answer":{"id":"a1","child_quests":[{"id":"q1"}]}}`)
-		default:
+		if r.URL.Path != "/api/v1/treecli/call" {
 			fallback.ServeHTTP(w, r)
+			return
+		}
+		if !hasIntegrationAuth(r) {
+			t.Error("missing auth")
+		}
+		var call struct {
+			Name      string                 `json:"name"`
+			Arguments map[string]interface{} `json:"arguments"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&call); err != nil {
+			t.Error(err)
+			return
+		}
+		if call.Name != "treechat_read" {
+			t.Errorf("unexpected tool: %s", call.Name)
+		}
+		args, _ := call.Arguments["arguments"].(map[string]interface{})
+		if call.Arguments["operation"] == "thread" {
+			if args["id"] != "q1" {
+				t.Errorf("wrong ID: %#v", args)
+			}
+			fmt.Fprint(w, `{"structuredContent":{"quest":{"id":"q1","future_field":true}}}`)
+		} else {
+			if args["user"] == "alice" && args["thread_scope"] != "branch" {
+				t.Errorf("missing branch scope: %#v", args)
+			}
+			fmt.Fprint(w, `{"structuredContent":{"threads":[{"id":"newest","future_field":true}],"pagination":{"page":1,"limit":10,"has_more":false}}}`)
 		}
 	}))
 	defer server.Close()

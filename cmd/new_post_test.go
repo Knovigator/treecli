@@ -1,94 +1,6 @@
 package cmd
 
-import (
-	"encoding/json"
-	"strings"
-	"testing"
-)
-
-func TestActionRequestsJSONStringBuildsStructuredModelRequest(t *testing.T) {
-	payloadJSON, err := actionRequestsJSONString(actionInvocation{
-		Tag:    "fluxfast",
-		Prompt: "wide cover image",
-	}, 0, "")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	var payload []map[string]interface{}
-	if err := json.Unmarshal([]byte(payloadJSON), &payload); err != nil {
-		t.Fatalf("invalid JSON payload: %v", err)
-	}
-
-	if len(payload) != 1 {
-		t.Fatalf("expected one action request, got %d", len(payload))
-	}
-
-	action := payload[0]
-	if action["id"] == "" {
-		t.Fatal("expected generated id")
-	}
-	if action["client_id"] != action["id"] {
-		t.Fatalf("expected client_id to match id, got id=%v client_id=%v", action["id"], action["client_id"])
-	}
-	if action["tag"] != "fluxfast" {
-		t.Fatalf("expected tag fluxfast, got %v", action["tag"])
-	}
-	if action["prompt"] != "wide cover image" {
-		t.Fatalf("expected prompt, got %v", action["prompt"])
-	}
-	if action["kind"] != "model" {
-		t.Fatalf("expected model kind, got %v", action["kind"])
-	}
-	if action["generation_count"] != float64(1) {
-		t.Fatalf("expected generation_count 1, got %v", action["generation_count"])
-	}
-	if _, present := action["settings"]; present {
-		t.Fatalf("expected no settings when duration is unset, got %v", action["settings"])
-	}
-}
-
-func TestActionRequestsJSONStringIncludesDurationSetting(t *testing.T) {
-	payloadJSON, err := actionRequestsJSONString(actionInvocation{
-		Tag:    "stableaudio",
-		Prompt: "ambient build, 120 BPM",
-	}, 90, "")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	var payload []map[string]interface{}
-	if err := json.Unmarshal([]byte(payloadJSON), &payload); err != nil {
-		t.Fatalf("invalid JSON payload: %v", err)
-	}
-
-	settings, ok := payload[0]["settings"].(map[string]interface{})
-	if !ok {
-		t.Fatalf("expected settings object, got %v", payload[0]["settings"])
-	}
-	if settings["duration_seconds"] != float64(90) {
-		t.Fatalf("expected duration_seconds 90, got %v", settings["duration_seconds"])
-	}
-}
-
-func TestActionRequestsJSONStringIncludesPaymentMode(t *testing.T) {
-	payloadJSON, err := actionRequestsJSONString(actionInvocation{
-		Tag:    "fluxfast",
-		Prompt: "wide cover image",
-	}, 0, "stripe_metered")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	var payload []map[string]interface{}
-	if err := json.Unmarshal([]byte(payloadJSON), &payload); err != nil {
-		t.Fatalf("invalid JSON payload: %v", err)
-	}
-
-	if payload[0]["payment_mode"] != "stripe_metered" {
-		t.Fatalf("expected payment_mode stripe_metered, got %v", payload[0]["payment_mode"])
-	}
-}
+import "testing"
 
 func TestParseActionInvocationSeparatesTagAndPrompt(t *testing.T) {
 	invocation, err := parseActionInvocation([]string{"!nb", "make", "this", "warmer"})
@@ -107,7 +19,7 @@ func TestParseActionInvocationSeparatesTagAndPrompt(t *testing.T) {
 	}
 }
 
-func TestParseActionInvocationCanonicalizesReplicateIntegrationAliases(t *testing.T) {
+func TestParseActionInvocationPreservesAliasesForBackend(t *testing.T) {
 	tests := []struct {
 		name            string
 		args            []string
@@ -118,23 +30,23 @@ func TestParseActionInvocationCanonicalizesReplicateIntegrationAliases(t *testin
 		{
 			name:            "video sfx shorthand",
 			args:            []string{"sfx", "rain", "on", "wet", "asphalt"},
-			expectedTag:     "video_sfx",
+			expectedTag:     "sfx",
 			expectedPrompt:  "rain on wet asphalt",
-			expectedContent: "!video_sfx rain on wet asphalt",
+			expectedContent: "!sfx rain on wet asphalt",
 		},
 		{
 			name:            "eleven labs numeric shorthand",
 			args:            []string{"!11 read this in a warm voice"},
-			expectedTag:     "eleven_tts",
+			expectedTag:     "11",
 			expectedPrompt:  "read this in a warm voice",
-			expectedContent: "!eleven_tts read this in a warm voice",
+			expectedContent: "!11 read this in a warm voice",
 		},
 		{
 			name:            "eleven labs word shorthand",
 			args:            []string{"elevenlabs", "short", "narration"},
-			expectedTag:     "eleven_tts",
+			expectedTag:     "elevenlabs",
 			expectedPrompt:  "short narration",
-			expectedContent: "!eleven_tts short narration",
+			expectedContent: "!elevenlabs short narration",
 		},
 	}
 
@@ -155,21 +67,6 @@ func TestParseActionInvocationCanonicalizesReplicateIntegrationAliases(t *testin
 				t.Fatalf("expected normalized content %q, got %q", test.expectedContent, invocation.NormalizedContent)
 			}
 
-			payloadJSON, err := actionRequestsJSONString(invocation, 0, "")
-			if err != nil {
-				t.Fatalf("unexpected action request error: %v", err)
-			}
-
-			var payload []map[string]interface{}
-			if err := json.Unmarshal([]byte(payloadJSON), &payload); err != nil {
-				t.Fatalf("invalid JSON payload: %v", err)
-			}
-			if len(payload) != 1 {
-				t.Fatalf("expected one action request, got %d", len(payload))
-			}
-			if payload[0]["tag"] != test.expectedTag {
-				t.Fatalf("expected request tag %q, got %v", test.expectedTag, payload[0]["tag"])
-			}
 		})
 	}
 }
@@ -180,20 +77,5 @@ func TestActionCommandKeepsHiddenTagsCompatibilityCommand(t *testing.T) {
 	}
 	if !actionTagsCompatCmd.Hidden {
 		t.Fatal("expected tags compatibility command to be hidden from help")
-	}
-}
-
-func TestResolveRootThreadTargetRejectsAmbiguousPlacement(t *testing.T) {
-	public := true
-
-	_, err := resolveRootThreadTarget(profileConfig{}, rootThreadCreateOptions{
-		Stream: "public",
-		Public: &public,
-	})
-	if err == nil {
-		t.Fatal("expected ambiguous placement flags to return an error")
-	}
-	if !strings.Contains(err.Error(), "--stream") || !strings.Contains(err.Error(), "--public") {
-		t.Fatalf("expected error to mention conflicting flags, got %v", err)
 	}
 }

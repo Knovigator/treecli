@@ -37,60 +37,54 @@ func TestCompiledPostReplies(t *testing.T) {
 			posts := 0
 			fallback := fakeTreechatHandler(t, &fakeBackendState{})
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				switch r.URL.Path {
-				case "/api/v1/answers/" + target:
-					if tc.failure == "forbidden" {
-						http.Error(w, "denied", 403)
+				if r.URL.Path != "/api/v1/treecli/call" {
+					fallback.ServeHTTP(w, r)
+					return
+				}
+				if !hasIntegrationAuth(r) {
+					t.Error("missing authentication")
+				}
+				var call struct {
+					Name      string                 `json:"name"`
+					Arguments map[string]interface{} `json:"arguments"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&call); err != nil {
+					t.Error(err)
+					return
+				}
+				switch call.Name {
+				case "quote_treechat_write":
+					a, _ := call.Arguments["arguments"].(map[string]interface{})
+					operation := strings.ReplaceAll(tc.command, "-", "_")
+					source := "https://app.example.test/answer/" + target
+					if tc.name == "uppercase post ID" {
+						source = strings.ToUpper(target)
+					}
+					if call.Arguments["operation"] != operation || a["source_post_id"] != source || a["content"] != "hello" || a["id"] != writeID || a["no_quote"] != tc.noQuote {
+						t.Errorf("wrong shared arguments: %#v", call.Arguments)
+					}
+					if tc.failure != "" && tc.failure != "multiple-canonical" && tc.failure != "write-denied" && tc.failure != "drops-quote" {
+						http.Error(w, "backend rejected reply destination", 422)
 						return
 					}
-					children := `[{"id":"branch"}]`
-					quest := "main"
-					if tc.failure == "no-child" {
-						children = `[]`
-					}
-					if tc.failure == "ambiguous" || tc.failure == "multiple-canonical" {
-						children = `[{"id":"other"},{"id":"branch"},{"id":"branch"}]`
-					}
-					if tc.failure == "root" {
-						quest = ""
-					}
-					fmt.Fprintf(w, `{"answer":{"id":%q,"quest_id":%q,"child_quests":%s}}`, target, quest, children)
-				case "/api/v1/quests/branch", "/api/v1/quests/main", "/api/v1/quests/other":
-					parent := target
-					if tc.failure == "wrong-parent" {
-						parent = "another-post"
-					}
-					id := strings.TrimPrefix(r.URL.Path, "/api/v1/quests/")
-					fmt.Fprintf(w, `{"quest":{"id":%q,"parent_id":%q,"space_id":"space-1","side_quest":%t}}`, id, parent, tc.failure == "multiple-canonical" && id == "branch")
-				case "/api/v1/answers":
+					writeJSON(t, w, map[string]interface{}{"structuredContent": map[string]interface{}{"quote_id": "reply-quote"}})
+				case "create_treechat_write":
 					posts++
-					if err := r.ParseForm(); err != nil {
-						t.Error(err)
-					}
-					if r.Header.Get("access-token") == "" {
-						t.Error("missing auth")
-					}
-					quote := r.FormValue("reply_to_answer_id")
-					if tc.failure == "" || tc.failure == "multiple-canonical" {
-						if r.FormValue("quest_id") != tc.destination || quote != tc.quote || r.FormValue("id") != writeID || r.FormValue("content") != "hello" {
-							t.Errorf("wrong payload: %v", r.PostForm)
-						}
-						if tc.noQuote {
-							if _, exists := r.PostForm["reply_to_answer_id"]; exists {
-								t.Error("no-quote must omit the edge")
-							}
-						}
+					if call.Arguments["quote_id"] != "reply-quote" || call.Arguments["idempotency_key"] != writeID {
+						t.Errorf("wrong execute: %#v", call.Arguments)
 					}
 					if tc.failure == "write-denied" {
 						http.Error(w, "denied", 403)
 						return
 					}
 					if tc.failure == "drops-quote" {
-						quote = ""
+						http.Error(w, "write may already exist", 409)
+						return
 					}
-					fmt.Fprintf(w, `{"answer":{"id":%q,"quest_id":%q,"reply_to_answer_id":%q,"content":"hello"}}`, writeID, r.FormValue("quest_id"), quote)
+					fmt.Fprintf(w, `{"structuredContent":{"operation_id":"reply-quote","state":"completed","result":{"status":200,"body":{"answer":{"id":%q,"quest_id":%q,"reply_to_answer_id":%q,"content":"hello"}}}}}`, writeID, tc.destination, tc.quote)
 				default:
-					fallback.ServeHTTP(w, r)
+					t.Errorf("unexpected RPC %s", call.Name)
+					http.Error(w, "unexpected RPC", 500)
 				}
 			}))
 			defer server.Close()

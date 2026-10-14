@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -9,18 +10,29 @@ import (
 
 func TestGetUpvalueHistorySendsAuthAndPagination(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v1/bsv/history" {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/v1/treecli/call" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
-		if r.URL.Query().Get("page") != "2" || r.URL.Query().Get("per_page") != "25" {
-			t.Fatalf("unexpected pagination query: %s", r.URL.RawQuery)
+		var call struct {
+			Name      string `json:"name"`
+			Arguments struct {
+				Operation string                 `json:"operation"`
+				Arguments map[string]interface{} `json:"arguments"`
+			} `json:"arguments"`
 		}
+		if err := json.NewDecoder(r.Body).Decode(&call); err != nil {
+			t.Fatal(err)
+		}
+		if call.Name != "treechat_read" || call.Arguments.Operation != "upvalues" || call.Arguments.Arguments["page"] != float64(2) || call.Arguments.Arguments["per_page"] != float64(25) {
+			t.Fatalf("unexpected RPC: %#v", call)
+		}
+
 		if r.Header.Get("access-token") != "token" || r.Header.Get("client") != "client" || r.Header.Get("uid") != "uid" {
 			t.Fatalf("missing authentication headers")
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{
+		fmt.Fprint(w, `{"structuredContent":{
           "upvalues": [{
             "id": "upvalue-1",
             "tx_id": "tx-1",
@@ -40,7 +52,7 @@ func TestGetUpvalueHistorySendsAuthAndPagination(t *testing.T) {
           "page": 2,
           "per_page": 25,
           "has_more": true
-        }`)
+        }}`)
 	}))
 	defer server.Close()
 

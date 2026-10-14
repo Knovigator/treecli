@@ -26,8 +26,15 @@ func TestCompiledEnvironmentAccounts(t *testing.T) {
 				fmt.Fprint(w, `{}`)
 			case "/api/v1/gon":
 				fmt.Fprintf(w, `{"host":"app.example.test","currentUser":{"id":%q,"space_id":"space"}}`, r.Header.Get("access-token"))
-			case "/api/v1/quests/thread":
-				fmt.Fprintf(w, `{"quest":{"id":"thread","content":%q}}`, r.Header.Get("access-token"))
+			case "/api/v1/treecli/call":
+				var call struct {
+					Name      string                 `json:"name"`
+					Arguments map[string]interface{} `json:"arguments"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&call); err != nil || call.Name != "treechat_read" {
+					t.Errorf("wrong RPC: %#v %v", call, err)
+				}
+				fmt.Fprintf(w, `{"structuredContent":{"quest":{"id":"thread","content":%q}}}`, r.Header.Get("access-token"))
 			default:
 				http.NotFound(w, r)
 			}

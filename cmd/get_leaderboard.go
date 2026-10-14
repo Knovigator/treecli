@@ -1,9 +1,9 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/Knovigator/treecli/api"
 	"github.com/spf13/cobra"
@@ -53,20 +53,15 @@ func runGetLeaderboardUpvalues(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	startDate, endDate, err := resolveLeaderboardDateRange(leaderboardRange, leaderboardStartDate, leaderboardEndDate)
+	raw, err := api.SharedOperation(profile.BackendURL, profile.AccessToken, profile.Client, profile.UID, "treechat_read", map[string]interface{}{
+		"operation": "leaderboard", "arguments": map[string]interface{}{"range": leaderboardRange, "start_date": leaderboardStartDate, "end_date": leaderboardEndDate, "limit": leaderboardLimit},
+	})
 	if err != nil {
 		return err
 	}
-
-	leaderboard, err := api.GetUpvaluedContentLeaderboard(
-		profile.BackendURL,
-		profile.AccessToken,
-		profile.Client,
-		profile.UID,
-		startDate,
-		endDate,
-		leaderboardLimit,
-	)
+	var leaderboard api.UpvaluedContentLeaderboardResponse
+	err = json.Unmarshal(raw, &leaderboard)
+	leaderboard.Raw = raw
 	if err != nil {
 		return err
 	}
@@ -85,66 +80,6 @@ func runGetLeaderboardUpvalues(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
-}
-
-func resolveLeaderboardDateRange(rangeName string, startDateFlag string, endDateFlag string) (string, string, error) {
-	startDate, err := normalizeLeaderboardDateFlag("start-date", startDateFlag)
-	if err != nil {
-		return "", "", err
-	}
-	endDate, err := normalizeLeaderboardDateFlag("end-date", endDateFlag)
-	if err != nil {
-		return "", "", err
-	}
-	if startDate != "" || endDate != "" {
-		return startDate, endDate, nil
-	}
-
-	today := time.Now().UTC().Truncate(24 * time.Hour)
-	formatDate := func(value time.Time) string {
-		return value.Format("2006-01-02")
-	}
-
-	switch strings.ToLower(strings.TrimSpace(rangeName)) {
-	case "", "today":
-		return formatDate(today), "", nil
-	case "1d":
-		return formatDate(today.AddDate(0, 0, -1)), formatDate(today), nil
-	case "7d", "1w":
-		return formatDate(today.AddDate(0, 0, -7)), formatDate(today), nil
-	case "1mo", "1m":
-		return formatDate(today.AddDate(0, -1, 0)), formatDate(today), nil
-	case "1y":
-		return formatDate(today.AddDate(-1, 0, 0)), formatDate(today), nil
-	case "all":
-		return "", "", nil
-	case "last-week", "last-week-sunday", "previous-week":
-		daysSinceSunday := int(today.Weekday())
-		if daysSinceSunday == 0 {
-			daysSinceSunday = 7
-		}
-		previousSunday := today.AddDate(0, 0, -daysSinceSunday)
-		return formatDate(previousSunday.AddDate(0, 0, -6)), formatDate(previousSunday.AddDate(0, 0, 1)), nil
-	default:
-		return "", "", fmt.Errorf("unsupported range %q; use today, 1d, 7d, 1w, 1mo, 1y, all, or last-week", rangeName)
-	}
-}
-
-func normalizeLeaderboardDateFlag(flagName string, rawDate string) (string, error) {
-	trimmedDate := strings.TrimSpace(rawDate)
-	if trimmedDate == "" {
-		return "", nil
-	}
-
-	layouts := []string{"2006-01-02", "20060102"}
-	for _, layout := range layouts {
-		parsedDate, err := time.Parse(layout, trimmedDate)
-		if err == nil {
-			return parsedDate.Format("2006-01-02"), nil
-		}
-	}
-
-	return "", fmt.Errorf("invalid --%s %q; expected YYYY-MM-DD or YYYYMMDD", flagName, rawDate)
 }
 
 func printUpvaluedContentLeaderboardASCII(leaderboard api.UpvaluedContentLeaderboardResponse) {

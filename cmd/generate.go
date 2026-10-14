@@ -3,7 +3,6 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	neturl "net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -48,7 +47,7 @@ var GenerateCmd = &cobra.Command{
 		"  treecli generate kling2 \"slow handheld push-in\" --reference @image.png --out animated.mp4\n" +
 		"  treecli generate qwen \"replace the sky with stars\" --reference @image.png --out edited.png\n" +
 		"  treecli generate topazimg --reference @photo.jpg --input upscale_factor=4x --out photo-4x.jpg\n" +
-		"  treecli generate topazvid --reference @clip.mp4 --input target_resolution=4k --quote\n" +
+		"  treecli generate topazvid --reference @clip.mp4 --input target_resolution=4k --quote --max-price-cents 100\n" +
 		"  treecli generate tts \"Abigail read this in a crisp narration voice\" --out chatterbox.mp3\n" +
 		"  treecli generate clone \"read this in the sampled voice\" --reference @voice.mp3 --out clone.mp3\n" +
 		"  treecli generate eleven_tts \"read this in a crisp narration voice\" --out narration.mp3\n" +
@@ -59,12 +58,23 @@ var GenerateCmd = &cobra.Command{
 		"  treecli generate suno \"...\" --duration 22 --quote\n" +
 		"  treecli generate actions --direct-only\n" +
 		"  treecli generate describe flux2",
-	Args:              cobra.MinimumNArgs(1),
+	Args: func(command *cobra.Command, args []string) error {
+		if generateQuoteID != "" {
+			return nil
+		}
+		return cobra.MinimumNArgs(1)(command, args)
+	},
 	RunE:              runGenerate,
 	ValidArgsFunction: completeGenerateArgs,
 }
 
+var generateMaxPriceCents int
+var generateQuoteID, generateRequestID string
+
 func init() {
+	GenerateCmd.Flags().IntVar(&generateMaxPriceCents, "max-price-cents", 0, "Maximum generation fee in USD cents; required")
+	GenerateCmd.Flags().StringVar(&generateQuoteID, "quote-id", "", "Execute this reviewed quote; reuse with --id on retries")
+	GenerateCmd.Flags().StringVar(&generateRequestID, "id", "", "Generation idempotency key; reuse with --quote-id on retries")
 	GenerateCmd.Flags().StringVarP(&generateOut, "out", "o", "", "Path to write the generated file (required unless --quote). Extra outputs get a -N suffix.")
 	GenerateCmd.Flags().StringVar(&generateSettingsRaw, "settings", "", "Optional JSON object of model settings (e.g. '{\"aspect_ratio\":\"1:1\"}')")
 	GenerateCmd.Flags().StringArrayVar(&generateInputs, "input", nil, "Model input as key=value (repeatable). Value parsed as JSON if possible, else string. Use @path to upload a local media file.")
@@ -82,18 +92,19 @@ func init() {
 }
 
 func runGenerate(cmd *cobra.Command, args []string) error {
-	action, prompt, err := parseGenerateInvocation(args)
-	if err != nil {
-		return err
+	if generateQuoteID != "" && generateQuote {
+		return fmt.Errorf("--quote and --quote-id cannot be combined; --quote never executes a generation")
 	}
-	if err := legacyReferenceActionError(action); err != nil {
-		return err
+	action, prompt := "", ""
+	var err error
+	if generateQuoteID == "" {
+		action, prompt, err = parseGenerateInvocation(args)
+		if err != nil {
+			return err
+		}
 	}
 	// Media-only actions (upscalers) run from --reference alone; the backend still requires a
 	// prompt for every other action.
-	if prompt == "" && strings.TrimSpace(generateReference) == "" {
-		return fmt.Errorf("a prompt is required (media-only actions such as upscalers take --reference instead)")
-	}
 	if !generateQuote && strings.TrimSpace(generateOut) == "" {
 		return fmt.Errorf("--out <path> is required (or use --quote to just see the price)")
 	}
@@ -123,8 +134,15 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 	if generateDuration > 0 {
 		settings["duration_seconds"] = generateDuration
 	}
-	if cmd.Flags().Changed("instrumental") {
+	if cmd != nil && cmd.Flags().Changed("instrumental") {
 		settings["instrumental"] = generateInstrumental
+	}
+
+	if generateQuoteID == "" && ((cmd == nil || !cmd.Flags().Changed("max-price-cents")) || generateMaxPriceCents < 0) {
+		return fmt.Errorf("--max-price-cents is required and must be nonnegative")
+	}
+	if generateQuoteID != "" && generateRequestID == "" {
+		return fmt.Errorf("--id is required when executing --quote-id")
 	}
 
 	profile, err := requireAuthenticatedProfile()
@@ -132,34 +150,56 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if err := resolveFileInputSettings(profile, settings); err != nil {
+	quoteID := generateQuoteID
+	if quoteID == "" {
+		if err := resolveFileInputSettings(profile, settings); err != nil {
+			return err
+		}
+		reference := generateReference
+		if strings.HasPrefix(reference, "@") {
+			uploaded, err := uploadSharedFile(profile, strings.TrimPrefix(reference, "@"), "reference")
+			if err != nil {
+				return err
+			}
+			if stringValue(uploaded["id"]) == "" {
+				return fmt.Errorf("reference upload returned no run ID")
+			}
+			reference = "run:" + stringValue(uploaded["id"])
+		}
+		arguments := map[string]interface{}{"model": action, "prompt": prompt, "settings": settings, "max_price_cents": generateMaxPriceCents}
+		optional(arguments, "reference", reference)
+		optional(arguments, "payment_mode", paymentMode)
+		raw, err := api.SharedOperation(profile.BackendURL, profile.AccessToken, profile.Client, profile.UID, "quote_generation", arguments)
+		if err != nil {
+			return err
+		}
+		var quote map[string]interface{}
+		if err := json.Unmarshal(raw, &quote); err != nil {
+			return err
+		}
+		quoteID = stringValue(quote["quote_id"])
+		if quoteID == "" {
+			return fmt.Errorf("backend omitted generation quote ID")
+		}
+		if generateQuote {
+			fmt.Println(string(raw))
+			return nil
+		}
+		fmt.Fprintf(os.Stderr, "Generation quote %s: %s\n", quoteID, string(raw))
+	}
+	key := generateRequestID
+	if key == "" {
+		key, err = newUUID()
+		if err != nil {
+			return err
+		}
+	}
+	fmt.Fprintf(os.Stderr, "Retry identifiers: --quote-id %s --id %s\n", quoteID, key)
+	raw, err := api.SharedOperation(profile.BackendURL, profile.AccessToken, profile.Client, profile.UID, "create_generation", map[string]interface{}{"quote_id": quoteID, "idempotency_key": key})
+	if err != nil {
 		return err
 	}
-	if strings.TrimSpace(generateReference) != "" {
-		ref, err := resolveReference(profile, generateReference)
-		if err != nil {
-			return err
-		}
-		applyReferenceSettings(settings, ref)
-	}
-
-	// Quote-only: ask the backend for the price and stop. References are resolved first so the
-	// quote prices the request that would run (an image input can select a pricier model).
-	if generateQuote {
-		res, err := api.CreateGeneration(
-			profile.BackendURL, profile.AccessToken, profile.Client, profile.UID,
-			action, prompt, settings, paymentMode, true, generateTimeout,
-		)
-		if err != nil {
-			return err
-		}
-		return printQuote(action, res)
-	}
-
-	result, err := api.CreateGeneration(
-		profile.BackendURL, profile.AccessToken, profile.Client, profile.UID,
-		action, prompt, settings, paymentMode, false, generateTimeout,
-	)
+	result, err := api.DecodeGeneration(raw)
 	if err != nil {
 		return err
 	}
@@ -237,7 +277,7 @@ func parseGenerateInvocation(args []string) (string, string, error) {
 		return "", "", fmt.Errorf("an AI action is required")
 	}
 
-	action := canonicalAIActionName(args[0])
+	action := strings.TrimSpace(args[0])
 	prompt := strings.TrimSpace(strings.Join(args[1:], " "))
 	if action == "" {
 		return "", "", fmt.Errorf("an AI action is required")
@@ -254,204 +294,15 @@ func completeGenerateArgs(cmd *cobra.Command, args []string, toComplete string) 
 	return completeGenerationActionNames(toComplete, true)
 }
 
-type resolvedReference struct {
-	URL         string
-	ContentType string
-	Kind        string
-}
-
-// resolveReference turns a --reference value into a URL the model can fetch. `run:<id>` reuses a
-// prior generation's first output; a public URL passes through; @file uploads a local media file.
-func resolveReference(profile profileConfig, ref string) (resolvedReference, error) {
-	ref = strings.TrimSpace(ref)
-	switch {
-	case strings.HasPrefix(ref, "run:"):
-		id := strings.TrimSpace(strings.TrimPrefix(ref, "run:"))
-		if id == "" {
-			return resolvedReference{}, fmt.Errorf("invalid --reference: run id is empty")
-		}
-		res, err := api.GetGeneration(profile.BackendURL, id, profile.AccessToken, profile.Client, profile.UID)
-		if err != nil {
-			return resolvedReference{}, fmt.Errorf("resolving reference run %s: %w", id, err)
-		}
-		media, ok := firstGenerationMedia(res)
-		if !ok {
-			return resolvedReference{}, fmt.Errorf("reference run %s has no output media (status %q)", id, res.Status)
-		}
-		return media, nil
-	case strings.HasPrefix(ref, "http://"), strings.HasPrefix(ref, "https://"):
-		return resolvedReference{URL: ref, Kind: mediaKindFromURL(ref)}, nil
-	case strings.HasPrefix(ref, "@"):
-		path := strings.TrimSpace(strings.TrimPrefix(ref, "@"))
-		if path == "" {
-			return resolvedReference{}, fmt.Errorf("invalid --reference: @path is empty")
-		}
-		uploaded, err := uploadReferenceFile(profile, path)
-		if err != nil {
-			return resolvedReference{}, fmt.Errorf("uploading reference %s: %w", path, err)
-		}
-		return uploaded, nil
-	default:
-		return resolvedReference{}, fmt.Errorf("invalid --reference %q: use run:<id>, a public URL, or @path", ref)
-	}
-}
-
-func firstGenerationMedia(res api.GenerationResponse) (resolvedReference, bool) {
-	for _, media := range res.MediaOutputs {
-		if strings.TrimSpace(media.URL) == "" {
-			continue
-		}
-		return resolvedReference{
-			URL:         media.URL,
-			ContentType: media.ContentType,
-			Kind:        firstNonBlank(media.Kind, mediaKindFromContentType(media.ContentType), mediaKindFromURL(media.URL)),
-		}, true
-	}
-	for _, mediaURL := range res.MediaURLs {
-		if strings.TrimSpace(mediaURL) == "" {
-			continue
-		}
-		return resolvedReference{URL: mediaURL, Kind: mediaKindFromURL(mediaURL)}, true
-	}
-	return resolvedReference{}, false
-}
-
-func uploadReferenceFile(profile profileConfig, path string) (resolvedReference, error) {
-	res, err := api.UploadReference(profile.BackendURL, profile.AccessToken, profile.Client, profile.UID, path)
-	if err != nil {
-		return resolvedReference{}, err
-	}
-	return resolvedReference{
-		URL:         res.URL,
-		ContentType: res.ContentType,
-		Kind:        firstNonBlank(res.Kind, mediaKindFromContentType(res.ContentType), mediaKindFromURL(res.URL)),
-	}, nil
-}
-
-func applyReferenceSettings(settings map[string]interface{}, ref resolvedReference) {
-	if strings.TrimSpace(ref.URL) == "" {
-		return
-	}
-	settings["reference_url"] = ref.URL
-	if strings.TrimSpace(ref.ContentType) != "" {
-		settings["reference_content_type"] = ref.ContentType
-	}
-	if strings.TrimSpace(ref.Kind) != "" {
-		settings["reference_kind"] = ref.Kind
-	}
-}
-
 func resolveFileInputSettings(profile profileConfig, settings map[string]interface{}) error {
 	for key, value := range settings {
-		resolved, refs, err := resolveFileInputValue(profile, value)
+		resolved, err := uploadLocalInputs(profile, value)
 		if err != nil {
-			return fmt.Errorf("resolving --input %s: %w", key, err)
+			return err
 		}
 		settings[key] = resolved
-		if len(refs) == 0 {
-			continue
-		}
-		firstRef := refs[0]
-		if strings.TrimSpace(firstRef.ContentType) != "" {
-			settings[key+"_content_type"] = firstRef.ContentType
-		}
-		if strings.TrimSpace(firstRef.Kind) != "" {
-			settings[key+"_kind"] = firstRef.Kind
-		}
-		if isReferenceInputKey(key) {
-			if _, exists := settings["reference_url"]; !exists {
-				applyReferenceSettings(settings, firstRef)
-			}
-		}
 	}
 	return nil
-}
-
-func resolveFileInputValue(profile profileConfig, value interface{}) (interface{}, []resolvedReference, error) {
-	switch typed := value.(type) {
-	case string:
-		if !strings.HasPrefix(strings.TrimSpace(typed), "@") {
-			return value, nil, nil
-		}
-		path := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(typed), "@"))
-		if path == "" {
-			return value, nil, fmt.Errorf("@path is empty")
-		}
-		ref, err := uploadReferenceFile(profile, path)
-		if err != nil {
-			return value, nil, err
-		}
-		return ref.URL, []resolvedReference{ref}, nil
-	case []interface{}:
-		resolved := make([]interface{}, 0, len(typed))
-		refs := []resolvedReference{}
-		for _, item := range typed {
-			resolvedItem, itemRefs, err := resolveFileInputValue(profile, item)
-			if err != nil {
-				return value, nil, err
-			}
-			resolved = append(resolved, resolvedItem)
-			refs = append(refs, itemRefs...)
-		}
-		return resolved, refs, nil
-	case map[string]interface{}:
-		resolved := make(map[string]interface{}, len(typed))
-		refs := []resolvedReference{}
-		for itemKey, item := range typed {
-			resolvedItem, itemRefs, err := resolveFileInputValue(profile, item)
-			if err != nil {
-				return value, nil, err
-			}
-			resolved[itemKey] = resolvedItem
-			refs = append(refs, itemRefs...)
-		}
-		return resolved, refs, nil
-	default:
-		return value, nil, nil
-	}
-}
-
-func isReferenceInputKey(key string) bool {
-	switch strings.ToLower(strings.TrimSpace(key)) {
-	case "reference", "reference_url", "image", "video", "audio", "input_image",
-		"reference_image", "reference_video", "reference_audio", "start_image",
-		"start_image_url", "first_frame_image", "input_reference":
-		return true
-	default:
-		return false
-	}
-}
-
-func mediaKindFromContentType(contentType string) string {
-	contentType = strings.ToLower(strings.TrimSpace(contentType))
-	switch {
-	case strings.HasPrefix(contentType, "image/"):
-		return "image"
-	case strings.HasPrefix(contentType, "video/"):
-		return "video"
-	case strings.HasPrefix(contentType, "audio/"):
-		return "audio"
-	default:
-		return ""
-	}
-}
-
-func mediaKindFromURL(rawURL string) string {
-	parsed, err := neturl.Parse(rawURL)
-	path := strings.ToLower(rawURL)
-	if err == nil && parsed.Path != "" {
-		path = strings.ToLower(parsed.Path)
-	}
-	switch filepath.Ext(path) {
-	case ".png", ".jpg", ".jpeg", ".webp", ".gif", ".heic":
-		return "image"
-	case ".mp4", ".mov", ".webm", ".m4v":
-		return "video"
-	case ".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg":
-		return "audio"
-	default:
-		return ""
-	}
 }
 
 // applyInputs merges repeatable --input key=value pairs into settings, parsing each value as JSON
@@ -499,44 +350,6 @@ func writeOutputs(base string, urls []string, profile profileConfig) ([]string, 
 		total += len(data)
 	}
 	return written, total, nil
-}
-
-func printQuote(action string, res api.GenerationResponse) error {
-	sats := res.AmountSats
-	usd := res.AmountUSD
-	if res.Quote != nil {
-		sats = res.Quote.AmountSats
-		usd = res.Quote.AmountUSD
-	}
-	paymentMode := res.PaymentMode
-	if res.Quote != nil && res.Quote.PaymentMode != "" {
-		paymentMode = res.Quote.PaymentMode
-	}
-	if generateJSONOutput {
-		payload := map[string]interface{}{
-			"action":      action,
-			"tag":         action,
-			"quote":       true,
-			"amount_sats": sats,
-			"amount_usd":  usd,
-			"provider":    res.Provider,
-		}
-		if paymentMode != "" {
-			payload["payment_mode"] = paymentMode
-		}
-		encoded, err := json.MarshalIndent(payload, "", "  ")
-		if err != nil {
-			return err
-		}
-		fmt.Println(string(encoded))
-		return nil
-	}
-	paymentSuffix := ""
-	if paymentMode != "" {
-		paymentSuffix = " via " + paymentModeDisplay(paymentMode)
-	}
-	fmt.Printf("Quote for %q%s: %d sats ($%.4f)\n", action, paymentSuffix, sats, usd)
-	return nil
 }
 
 func pollGeneration(profile profileConfig, id string) (api.GenerationResponse, error) {

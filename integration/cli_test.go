@@ -153,13 +153,13 @@ func TestCompiledCLIUserBoundary(t *testing.T) {
 			t.Fatalf("write reference: %v", err)
 		}
 		stdout, stderr, err := runCLI(t, binaryPath, configHome, "", append(baseArgs,
-			"generate", "grokvideo", "slow push-in", "--duration", "6", "--reference", "@"+reference, "--quote", "--json",
+			"generate", "grokvideo", "slow push-in", "--duration", "6", "--reference", "@"+reference, "--quote", "--max-price-cents", "200", "--json",
 		)...)
 		if err != nil {
 			t.Fatalf("generate --quote failed: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
 		}
 		var payload struct {
-			Quote     bool    `json:"quote"`
+			Quote     string  `json:"quote_id"`
 			AmountUSD float64 `json:"amount_usd"`
 		}
 		if err := json.Unmarshal([]byte(stdout), &payload); err != nil {
@@ -168,10 +168,10 @@ func TestCompiledCLIUserBoundary(t *testing.T) {
 		state.mu.Lock()
 		settings := state.quoteSettings
 		state.mu.Unlock()
-		if settings["reference_url"] != "https://cdn.example.test/frame.png" {
+		if settings["reference"] != "run:ref-1" {
 			t.Fatalf("quote request did not carry the uploaded reference: %#v", settings)
 		}
-		if !payload.Quote || payload.AmountUSD != 1.08 {
+		if payload.Quote == "" || payload.AmountUSD != 1.08 {
 			t.Fatalf("expected the image-to-video quote, got %s", stdout)
 		}
 	})
@@ -216,6 +216,83 @@ func fakeTreechatHandler(t *testing.T, state *fakeBackendState) http.Handler {
 			w.Header().Set("expiry", "4102444800")
 			writeJSON(t, w, map[string]interface{}{"ok": true})
 
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/treecli/call":
+			if !hasIntegrationAuth(r) {
+				http.Error(w, "missing auth", 401)
+				return
+			}
+			var call struct {
+				Name      string                 `json:"name"`
+				Arguments map[string]interface{} `json:"arguments"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&call); err != nil {
+				t.Error(err)
+				return
+			}
+			a := call.Arguments
+			var result interface{}
+			switch call.Name {
+			case "treechat_account":
+				result = map[string]interface{}{"id": "user-1", "username": "Integration User"}
+			case "treechat_read":
+				args, _ := a["arguments"].(map[string]interface{})
+				switch a["operation"] {
+				case "thread":
+					id, _ := args["id"].(string)
+					if id == "failing-thread" {
+						http.Error(w, `{"email":"backend-leaked@example.test","access_token":"backend-secret-token"}`, 500)
+						return
+					}
+					result = map[string]interface{}{"quest": map[string]interface{}{"id": id, "parent": map[string]interface{}{"id": "answer-1", "content": "integration post"}}}
+				case "upvalues":
+					result = map[string]interface{}{"upvalues": []interface{}{}, "page": 2, "per_page": 25, "has_more": true}
+				default:
+					t.Errorf("unexpected read: %#v", a)
+					http.Error(w, "unknown read", 500)
+					return
+				}
+			case "quote_treechat_write":
+				args, _ := a["arguments"].(map[string]interface{})
+				if args["content"] != "integration post" || args["private"] != true || args["id"] == "" {
+					t.Errorf("wrong write arguments: %#v", args)
+				}
+				state.mu.Lock()
+				state.createdQuestID, _ = args["id"].(string)
+				state.mu.Unlock()
+				result = map[string]interface{}{"quote_id": "write-quote"}
+			case "create_treechat_write":
+				state.mu.Lock()
+				id := state.createdQuestID
+				state.mu.Unlock()
+				if a["quote_id"] != "write-quote" || a["idempotency_key"] != id {
+					t.Errorf("wrong execution arguments: %#v", a)
+				}
+				result = map[string]interface{}{"operation_id": "write-quote", "state": "completed", "result": map[string]interface{}{"status": 200, "body": map[string]interface{}{"quest": map[string]interface{}{"id": id, "parent": map[string]interface{}{"id": id, "content": "integration post"}}}}}
+			case "register_upload":
+				if a["purpose"] != "reference" || a["filename"] != "frame.png" || a["byte_size"] != float64(8) {
+					t.Errorf("wrong upload: %#v", a)
+				}
+				result = map[string]interface{}{"signed_id": "signed-ref", "direct_upload": map[string]interface{}{"url": "http://" + r.Host + "/storage", "headers": map[string]string{}}}
+			case "finish_reference_upload":
+				if a["signed_id"] != "signed-ref" {
+					t.Errorf("wrong upload completion: %#v", a)
+				}
+				result = map[string]interface{}{"id": "ref-1"}
+			case "quote_generation":
+				state.mu.Lock()
+				state.quoteSettings = a
+				state.mu.Unlock()
+				if a["max_price_cents"] != float64(200) {
+					t.Errorf("missing price cap: %#v", a)
+				}
+				result = map[string]interface{}{"quote_id": "generation-quote", "amount_usd": 1.08}
+			default:
+				t.Errorf("unexpected tool: %s", call.Name)
+				http.Error(w, "unknown tool", 500)
+				return
+			}
+			writeJSON(t, w, map[string]interface{}{"structuredContent": result})
+
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/gon":
 			if !hasIntegrationAuth(r) {
 				http.Error(w, "missing auth", http.StatusUnauthorized)
@@ -229,135 +306,11 @@ func fakeTreechatHandler(t *testing.T, state *fakeBackendState) http.Handler {
 				},
 			})
 
-		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v1/quests/"):
-			if !hasIntegrationAuth(r) {
-				http.Error(w, "missing auth", http.StatusUnauthorized)
-				return
+		case r.Method == http.MethodPut && r.URL.Path == "/storage":
+			if r.Header.Get("access-token") != "" || r.Header.Get("uid") != "" {
+				t.Error("credentials leaked to object storage")
 			}
-			questID := strings.TrimPrefix(r.URL.Path, "/api/v1/quests/")
-			if questID == "failing-thread" {
-				w.WriteHeader(http.StatusInternalServerError)
-				writeJSON(t, w, map[string]string{
-					"email":        "backend-leaked@example.test",
-					"access_token": "backend-secret-token",
-					"error":        "failed for backend-leaked@example.test",
-				})
-				return
-			}
-
-			content := "hello from the fake backend"
-			state.mu.Lock()
-			if questID == state.createdQuestID {
-				content = "integration post"
-			}
-			state.mu.Unlock()
-			writeJSON(t, w, map[string]interface{}{
-				"quest": map[string]interface{}{
-					"id": questID,
-					"parent": map[string]interface{}{
-						"id":      "answer-1",
-						"content": content,
-						"user": map[string]string{
-							"id":    "user-2",
-							"name":  "Integration User",
-							"email": integrationEmail,
-						},
-					},
-					"sorted_answers": []interface{}{},
-				},
-			})
-
-		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/quests":
-			if !hasIntegrationAuth(r) {
-				http.Error(w, "missing auth", http.StatusUnauthorized)
-				return
-			}
-			if err := r.ParseForm(); err != nil {
-				t.Errorf("parse quest form: %v", err)
-				http.Error(w, "invalid form", http.StatusBadRequest)
-				return
-			}
-			questID := r.FormValue("id")
-			answerID := r.FormValue("parent_attributes[id]")
-			if questID == "" || answerID == "" {
-				t.Errorf("missing retry-safe ids in quest form: %#v", r.Form)
-			}
-			if r.FormValue("space_id") != "space-1" || r.FormValue("parent_attributes[content]") != "integration post" {
-				t.Errorf("unexpected quest form: %#v", r.Form)
-			}
-			if r.FormValue("private") != "true" {
-				t.Errorf("expected private quest, got form %#v", r.Form)
-			}
-			state.mu.Lock()
-			state.createdQuestID = questID
-			state.mu.Unlock()
 			w.WriteHeader(http.StatusOK)
-			writeJSON(t, w, map[string]interface{}{
-				"quest": map[string]interface{}{
-					"id": questID,
-					"parent": map[string]string{
-						"id":      answerID,
-						"content": "integration post",
-					},
-				},
-			})
-
-		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/bsv/history":
-			if !hasIntegrationAuth(r) {
-				http.Error(w, "missing auth", http.StatusUnauthorized)
-				return
-			}
-			if r.URL.Query().Get("page") != "2" || r.URL.Query().Get("per_page") != "25" {
-				t.Errorf("unexpected upvalue query: %s", r.URL.RawQuery)
-			}
-			writeJSON(t, w, map[string]interface{}{
-				"upvalues": []interface{}{},
-				"page":     2,
-				"per_page": 25,
-				"has_more": true,
-			})
-
-		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/ai/generations/references/direct_upload":
-			http.NotFound(w, r)
-
-		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/ai/generations/references":
-			if !hasIntegrationAuth(r) {
-				http.Error(w, "missing auth", http.StatusUnauthorized)
-				return
-			}
-			writeJSON(t, w, map[string]interface{}{
-				"id": "ref-1", "url": "https://cdn.example.test/frame.png", "content_type": "image/png", "kind": "image",
-			})
-
-		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/ai/generations":
-			if !hasIntegrationAuth(r) {
-				http.Error(w, "missing auth", http.StatusUnauthorized)
-				return
-			}
-			var body map[string]interface{}
-			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-				t.Errorf("decode generation body: %v", err)
-				http.Error(w, "invalid body", http.StatusBadRequest)
-				return
-			}
-			if body["quote"] != true {
-				t.Errorf("integration journey only quotes; got %#v", body["quote"])
-				http.Error(w, "unexpected generation", http.StatusBadRequest)
-				return
-			}
-			settings, _ := body["settings"].(map[string]interface{})
-			state.mu.Lock()
-			state.quoteSettings = settings
-			state.mu.Unlock()
-			// Mirror the backend: an image input runs grokvideo as image-to-video at twice the price.
-			usd := 0.54
-			if settings["reference_url"] != nil {
-				usd = 1.08
-			}
-			writeJSON(t, w, map[string]interface{}{
-				"action": "grokvideo", "provider": "xai",
-				"quote": map[string]interface{}{"amount_sats": int(usd * 5000000), "amount_usd": usd},
-			})
 
 		default:
 			http.NotFound(w, r)

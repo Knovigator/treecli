@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"os"
 
 	"github.com/Knovigator/treecli/cmd"
@@ -26,51 +25,7 @@ const (
 	legacyConfigPath = "treectl/config.toml"
 )
 
-const bashCompletionPrelude = `
-if [[ $(type -t _get_comp_words_by_ref 2>/dev/null) != function ]]; then
-_get_comp_words_by_ref()
-{
-    local current_index current_word previous_word
-
-    while [[ $# -gt 0 && $1 == -* ]]; do
-        case "$1" in
-            -n)
-                shift 2
-                ;;
-            *)
-                shift
-                ;;
-        esac
-    done
-
-    current_index=${COMP_CWORD:-0}
-    current_word="${COMP_WORDS[current_index]}"
-    previous_word=""
-    if (( current_index > 0 )); then
-        previous_word="${COMP_WORDS[current_index-1]}"
-    fi
-
-    while [[ $# -gt 0 ]]; do
-        case "$1" in
-            cur)
-                printf -v "$1" '%s' "$current_word"
-                ;;
-            prev)
-                printf -v "$1" '%s' "$previous_word"
-                ;;
-            words)
-                eval "$1=(\"\${COMP_WORDS[@]}\")"
-                ;;
-            cword)
-                printf -v "$1" '%s' "$current_index"
-                ;;
-        esac
-        shift
-    done
-}
-fi
-
-`
+const bashCompletionPrelude = cmd.BashCompletionPrelude
 
 func init() {
 	cobra.OnInitialize(initConfig)
@@ -95,6 +50,9 @@ func init() {
 	rootCmd.AddCommand(cmd.OnboardCmd)
 	rootCmd.AddCommand(cmd.SkillsCmd)
 	rootCmd.AddCommand(cmd.UpdateCmd)
+	rootCmd.AddCommand(cmd.ToolsCmd)
+	rootCmd.AddCommand(cmd.MCPCmd)
+	rootCmd.AddCommand(cmd.ReferenceManifestCmd)
 	rootCmd.InitDefaultCompletionCmd()
 	configureCompletionHelp()
 }
@@ -102,7 +60,7 @@ func init() {
 func initConfig() {
 	configPath, err := resolveConfigPath()
 	if err != nil {
-		fmt.Println("Error getting config file path:", err)
+		fmt.Fprintln(os.Stderr, "Error getting config file path:", err)
 		return
 	}
 
@@ -115,7 +73,7 @@ func initConfig() {
 	if err := viper.ReadInConfig(); err != nil {
 		_, isConfigMissing := err.(viper.ConfigFileNotFoundError)
 		if !isConfigMissing && !os.IsNotExist(err) {
-			fmt.Println("Error reading config file:", err)
+			fmt.Fprintln(os.Stderr, "Error reading config file:", err)
 		}
 	}
 }
@@ -171,6 +129,13 @@ If you want persistent completions, see each shell subcommand's help for install
 		"  treecli completion zsh"
 
 	for _, completionChild := range completionCmd.Commands() {
+		completionChild.RunE = func(command *cobra.Command, args []string) error {
+			plain, err := command.Flags().GetBool("no-descriptions")
+			if err != nil {
+				return err
+			}
+			return cmd.RenderCompletion(command.Root(), command.Name(), command.OutOrStdout(), plain)
+		}
 		switch completionChild.Name() {
 		case "bash", "zsh":
 			if completionChild.Name() == "bash" {
@@ -195,19 +160,7 @@ To load completions for every new session, execute once:
 
 You will need to start a new shell for this setup to take effect.`
 				completionChild.Example = "  if command -v complete >/dev/null 2>&1; then source <(treecli completion bash); else echo \"This bash build does not support programmable completion.\"; fi"
-				originalRunE := completionChild.RunE
-				completionChild.RunE = func(cmd *cobra.Command, args []string) error {
-					_, err := io.WriteString(cmd.OutOrStdout(), bashCompletionPrelude)
-					if err != nil {
-						return err
-					}
 
-					if originalRunE == nil {
-						return nil
-					}
-
-					return originalRunE(cmd, args)
-				}
 			} else {
 				completionChild.Example = fmt.Sprintf("  source <(treecli completion %s)", completionChild.Name())
 			}

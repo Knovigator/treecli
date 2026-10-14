@@ -10,7 +10,7 @@ Use this skill when you need to submit or inspect Treechat AI action work throug
 ## Discover AI Actions
 
 - Run `treecli action actions` to inspect the current model-backed AI actions for the selected environment and account.
-- Use `--allow-unknown-action` only when you intentionally need to bypass local AI action validation.
+- Use `--allow-unknown-action` only when you intentionally need to bypass shared catalog validation.
 
 ## Treechat Action Model
 
@@ -25,22 +25,22 @@ Use this skill when you need to submit or inspect Treechat AI action work throug
 
 ## Submit Action Work
 
-- Root action: `treecli action flux "a glass cathedral in the rain"`.
-- Chatterbox text-to-speech action: `treecli action tts "Abigail read this in a crisp narration voice"`.
-- Chatterbox voice clone action in a thread with audio: `treecli action --reply-to <quest-id> clone "read this in the uploaded voice"`.
-- ElevenLabs text-to-speech action: `treecli action eleven_tts "read this in a crisp narration voice"`.
-- Video sound effects action: `treecli action sfx "rain, tires on wet asphalt, distant thunder"`.
-- Root action with requested audio/video duration: `treecli action stableaudio "ambient build, 120 BPM" --duration 90`.
-- Reply action: `treecli action --reply-to <quest-id> animate_kling "animate this as a handheld push-in"`.
-- Existing-image animation: `treecli action --reply-to <quest-id> animate_kling "animate this still as a handheld push-in"`.
-- Existing-image edit: `treecli action --reply-to <quest-id> edit_flux "make this warmer and more cinematic"`.
+- Root action: `treecli action flux "a glass cathedral in the rain" --max-price-cents 100`.
+- Chatterbox text-to-speech action: `treecli action tts "Abigail read this in a crisp narration voice" --max-price-cents 100`.
+- Chatterbox voice clone action in a thread with audio: `treecli action --reply-to <quest-id> clone "read this in the uploaded voice" --max-price-cents 100`.
+- ElevenLabs text-to-speech action: `treecli action eleven_tts "read this in a crisp narration voice" --max-price-cents 100`.
+- Video sound effects action: `treecli action sfx "rain, tires on wet asphalt, distant thunder" --max-price-cents 100`.
+- Root action with requested audio/video duration: `treecli action stableaudio "ambient build, 120 BPM" --duration 90 --max-price-cents 100`.
+- Reply action: `treecli action --reply-to <quest-id> animate_kling "animate this as a handheld push-in" --max-price-cents 100`.
+- Existing-image animation: `treecli action --reply-to <quest-id> animate_kling "animate this still as a handheld push-in" --max-price-cents 100`.
+- Existing-image edit: `treecli action --reply-to <quest-id> edit_flux "make this warmer and more cinematic" --max-price-cents 100`.
 - Root actions default to private placement unless you pass a root-only stream flag like `--stream public`.
 - Use `--duration` only when the target model supports duration, such as audio or video generation; the backend clamps the value to the model's allowed range.
 - Use `--payment usd` for Stripe metered AI billing or `--payment bsv` / `--payment bitcoinsv` for Bitcoin SV. Omit `--payment` to use the account default.
 
 ## Async Workflows
 
-- Submit without waiting: `treecli action --no-wait flux "prompt"`.
+- Submit without waiting: `treecli action --no-wait flux "prompt" --max-price-cents 100`.
 - Check a thread later: `treecli action status <quest-id-or-link>`.
 - Check a specific post or answer later: `treecli action status --post <answer-id>` or `treecli action status --answer <answer-id>`.
 - Keep polling until completion: `treecli action status --answer <answer-id> --watch`.
@@ -51,13 +51,13 @@ Use this skill when you need to submit or inspect Treechat AI action work throug
 - Use `treecli generate actions --direct-only` when you only want actions that can save media locally without creating a post.
 - Use `treecli generate actions --verbose` for a full human/agent-readable catalog with model descriptions, inputs, settings, reference behavior, examples, and notes.
 - Use `treecli generate describe <action>` before generating when you need focused help for one model.
-- Run direct generation with `treecli generate <action> "prompt" --out <file>`.
-- Chatterbox text-to-speech direct generation: `treecli generate tts "Abigail read this in a crisp narration voice" --out chatterbox.mp3`.
-- Chatterbox voice clone direct generation: `treecli generate clone "read this in the sampled voice" --reference @voice.mp3 --out clone.mp3`.
-- ElevenLabs text-to-speech direct generation: `treecli generate eleven_tts "read this in a crisp narration voice" --out narration.mp3`.
-- Video sound effects direct generation: `treecli generate sfx "rain, tires on wet asphalt, distant thunder" --reference @clip.mp4 --out sfx.mp3`.
-- Existing-image animation direct generation: use the base video model with a reference, such as `treecli generate kling2 "slow handheld push-in" --reference @image.png --out animated.mp4`.
-- Existing-image edit direct generation: use the base image model with a reference, such as `treecli generate qwen "replace the sky with stars" --reference @image.png --out edited.png`.
+- Run direct generation with `treecli generate <action> "prompt" --out <file> --max-price-cents 100`.
+- Chatterbox text-to-speech direct generation: `treecli generate tts "Abigail read this in a crisp narration voice" --out chatterbox.mp3 --max-price-cents 100`.
+- Chatterbox voice clone direct generation: `treecli generate clone "read this in the sampled voice" --reference @voice.mp3 --out clone.mp3 --max-price-cents 100`.
+- ElevenLabs text-to-speech direct generation: `treecli generate eleven_tts "read this in a crisp narration voice" --out narration.mp3 --max-price-cents 100`.
+- Video sound effects direct generation: `treecli generate sfx "rain, tires on wet asphalt, distant thunder" --reference @clip.mp4 --out sfx.mp3 --max-price-cents 100`.
+- Existing-image animation direct generation: use the base video model with a reference, such as `treecli generate kling2 "slow handheld push-in" --reference @image.png --out animated.mp4 --max-price-cents 100`.
+- Existing-image edit direct generation: use the base image model with a reference, such as `treecli generate qwen "replace the sky with stars" --reference @image.png --out edited.png --max-price-cents 100`.
 - Pass settings with `--input key=value` for individual values, `--settings '{...}'` for a JSON settings object, `--duration` for duration-aware actions, `--instrumental` for music actions, `--reference run:<id>|https://...|@path` for reference-aware actions, and `--payment usd|bsv` for per-run billing rail selection.
 
 ## Output Rules

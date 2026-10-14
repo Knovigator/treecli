@@ -1,16 +1,9 @@
 package cmd
 
 import (
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/Knovigator/treecli/api"
-	"github.com/spf13/viper"
 )
 
 func withGenerateGlobals(t *testing.T) {
@@ -73,69 +66,7 @@ func TestRunGenerateRejectsNonPositiveTimeoutBeforeAuth(t *testing.T) {
 	}
 }
 
-func TestRunGenerateRejectsLegacyReferenceActionsBeforeAuth(t *testing.T) {
-	withGenerateGlobals(t)
-	generatePollInterval = time.Second
-	generateTimeout = time.Minute
-
-	err := runGenerate(nil, []string{"animate_kling", "slow", "push-in"})
-	if err == nil {
-		t.Fatal("expected legacy action error")
-	}
-	for _, want := range []string{"animate_kling", "legacy image-to-video action", "treecli generate kling2", "--reference @image.png"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Fatalf("expected error to contain %q, got %v", want, err)
-		}
-	}
-	if strings.Contains(err.Error(), "--out <path> is required") {
-		t.Fatalf("expected legacy action guidance before output validation, got %v", err)
-	}
-}
-
-func TestRunGenerateRequiresPromptUnlessReferenceGiven(t *testing.T) {
-	withGenerateGlobals(t)
-	generateOut = "photo-4x.png"
-	generatePollInterval = time.Second
-	generateTimeout = time.Minute
-
-	err := runGenerate(nil, []string{"flux"})
-	if err == nil || !strings.Contains(err.Error(), "a prompt is required") {
-		t.Fatalf("expected prompt error without a reference, got %v", err)
-	}
-
-	action, prompt, err := parseGenerateInvocation([]string{"!topazimg"})
-	if err != nil || action != "topazimg" || prompt != "" {
-		t.Fatalf("expected a prompt-less upscaler invocation, got %q %q %v", action, prompt, err)
-	}
-}
-
-func TestPromptOptionalDirectGenerationHelpOmitsPrompt(t *testing.T) {
-	row := enrichGenerationActionRow(generationActionRow{
-		Action:            "topazvid",
-		Provider:          "replicate",
-		Kind:              "video",
-		DirectGeneration:  true,
-		AcceptsReference:  true,
-		RequiresReference: true,
-		PromptOptional:    true,
-		ReferenceKinds:    []string{"video"},
-	})
-
-	want := []string{
-		"treecli generate topazvid --reference @clip.mp4 --out output.mp4",
-		"treecli generate topazvid --reference @clip.mp4 --quote",
-	}
-	if strings.Join(row.Examples, "\n") != strings.Join(want, "\n") {
-		t.Fatalf("expected prompt-less upscaler examples, got %#v", row.Examples)
-	}
-	for _, setting := range row.Settings {
-		if setting.Name == "prompt" && !strings.HasPrefix(setting.Description, "Optional") {
-			t.Fatalf("expected optional prompt help, got %#v", setting)
-		}
-	}
-}
-
-func TestParseGenerateInvocationCanonicalizesReplicateIntegrationAliases(t *testing.T) {
+func TestParseGenerateInvocationPreservesAliasesForBackend(t *testing.T) {
 	tests := []struct {
 		name           string
 		args           []string
@@ -145,25 +76,25 @@ func TestParseGenerateInvocationCanonicalizesReplicateIntegrationAliases(t *test
 		{
 			name:           "video sfx shorthand",
 			args:           []string{"sfx", "rain", "on", "wet", "asphalt"},
-			expectedAction: "video_sfx",
+			expectedAction: "sfx",
 			expectedPrompt: "rain on wet asphalt",
 		},
 		{
 			name:           "eleven labs numeric shorthand",
 			args:           []string{"!11", "read", "this"},
-			expectedAction: "eleven_tts",
+			expectedAction: "!11",
 			expectedPrompt: "read this",
 		},
 		{
 			name:           "chatterbox shorthand",
 			args:           []string{"chatterbox", "Brian", "read", "this"},
-			expectedAction: "tts",
+			expectedAction: "chatterbox",
 			expectedPrompt: "Brian read this",
 		},
 		{
 			name:           "canonical action",
 			args:           []string{"!video_sfx", "foley", "pass"},
-			expectedAction: "video_sfx",
+			expectedAction: "!video_sfx",
 			expectedPrompt: "foley pass",
 		},
 	}
@@ -184,285 +115,12 @@ func TestParseGenerateInvocationCanonicalizesReplicateIntegrationAliases(t *test
 	}
 }
 
-func TestGenerationActionRowsIncludesFullCatalogAndMarksDirectSupport(t *testing.T) {
-	rows := generationActionRows(
-		[]api.AIModelRef{
-			{
-				Name:             "flux-2-pro",
-				HumanName:        "Flux 2 Pro",
-				DescriptionShort: "Image generation",
-				Provider:         "replicate",
-				ModelType:        "image",
-				ActionTagName:    "flux2",
-			},
-			{
-				Name:          "veo-3",
-				HumanName:     "Veo 3",
-				Provider:      "google",
-				ModelType:     "video",
-				ActionTagName: "veo3",
-			},
-			{
-				Name:          "openclaw-gateway",
-				Provider:      "openclaw",
-				ModelType:     "text",
-				ActionTagName: "openclaw",
-			},
-			{
-				Name:          "qwen-image-edit",
-				Provider:      "replicate",
-				ModelType:     "image",
-				ActionTagName: "edit_qwen",
-			},
-		},
-		[]api.GenerationActionInfo{
-			{
-				Action:           "flux2",
-				Provider:         "replicate",
-				Kind:             "image",
-				AcceptsReference: true,
-				ReferenceKinds:   []string{"image"},
-				Inputs:           []string{"aspect_ratio"},
-			},
-			{
-				Action:               "suno",
-				Provider:             "suno",
-				Kind:                 "audio",
-				Async:                true,
-				AcceptsReference:     true,
-				SupportsInstrumental: true,
-				DurationMin:          5,
-				DurationMax:          240,
-			},
-			{
-				Action:   "openclaw",
-				Provider: "openclaw",
-				Kind:     "text",
-			},
-			{
-				Action:   "animate_kling",
-				Provider: "replicate",
-				Kind:     "video",
-			},
-		},
-		false,
-	)
-
-	byAction := map[string]generationActionRow{}
-	for _, row := range rows {
-		byAction[row.Action] = row
-	}
-
-	if _, ok := byAction["openclaw"]; ok {
-		t.Fatal("expected hidden OpenClaw action to be omitted")
-	}
-	if _, ok := byAction["edit_qwen"]; ok {
-		t.Fatal("expected legacy edit action to be omitted from generate rows")
-	}
-	if _, ok := byAction["animate_kling"]; ok {
-		t.Fatal("expected legacy animate action to be omitted from generate rows")
-	}
-	if got := byAction["flux2"]; !got.DirectGeneration || got.Name != "Flux 2 Pro" || !got.AcceptsReference {
-		t.Fatalf("expected flux2 direct support with catalog metadata, got %#v", got)
-	}
-	if got := byAction["flux2"]; got.RequiresReference || len(got.ReferenceKinds) != 1 || got.ReferenceKinds[0] != "image" {
-		t.Fatalf("expected flux2 optional image reference metadata, got %#v", got)
-	}
-	if got := byAction["flux2"]; !hasSetting(got.Settings, "prompt") || !hasSetting(got.Settings, "aspect_ratio") {
-		t.Fatalf("expected flux2 prompt and aspect_ratio setting help, got %#v", got.Settings)
-	}
-	if got := byAction["veo3"]; got.DirectGeneration || got.Kind != "video" {
-		t.Fatalf("expected veo3 catalog row without direct support, got %#v", got)
-	}
-	if got := byAction["veo3"]; len(got.Notes) == 0 || !strings.Contains(got.Examples[0], "treecli action veo3") {
-		t.Fatalf("expected veo3 post-backed guidance, got notes=%#v examples=%#v", got.Notes, got.Examples)
-	}
-	if got := byAction["suno"]; !got.DirectGeneration || !got.Async {
-		t.Fatalf("expected direct-only suno row to be included, got %#v", got)
-	}
-	if got := byAction["suno"]; !hasSetting(got.Settings, "lyrics") || !hasSetting(got.Settings, "reference_url") {
-		t.Fatalf("expected suno lyrics and reference_url setting help, got %#v", got.Settings)
-	}
-}
-
-func TestGenerationActionRowsCanFilterToDirectOnly(t *testing.T) {
-	rows := generationActionRows(
-		[]api.AIModelRef{
-			{HumanName: "Flux 2 Pro", Provider: "replicate", ModelType: "image", ActionTagName: "flux2"},
-			{HumanName: "Veo 3", Provider: "google", ModelType: "video", ActionTagName: "veo3"},
-		},
-		[]api.GenerationActionInfo{{Action: "flux2", Provider: "replicate", Kind: "image"}},
-		true,
-	)
-
-	if len(rows) != 1 {
-		t.Fatalf("expected only direct rows, got %#v", rows)
-	}
-	if rows[0].Action != "flux2" || !rows[0].DirectGeneration {
-		t.Fatalf("expected flux2 direct row, got %#v", rows[0])
-	}
-}
-
-func TestVideoSFXDirectGenerationHelpRequiresVideoReference(t *testing.T) {
-	row := enrichGenerationActionRow(generationActionRow{
-		Action:           "video_sfx",
-		Provider:         "replicate",
-		Kind:             "audio",
-		DirectGeneration: true,
-		Async:            true,
-		AcceptsReference: true,
-	})
-
-	if len(row.Examples) == 0 {
-		t.Fatal("expected video_sfx examples")
-	}
-	for _, example := range row.Examples {
-		if strings.Contains(example, "treecli generate video_sfx \"prompt\" --out output.mp3") {
-			t.Fatalf("video_sfx should not advertise prompt-only generation, got examples %#v", row.Examples)
-		}
-	}
-	if !strings.Contains(row.Examples[0], "--reference @clip.mp4") || !strings.Contains(row.Examples[0], "--out sfx.mp3") {
-		t.Fatalf("expected first video_sfx example to use a video reference and audio output, got %#v", row.Examples)
-	}
-	if !hasSetting(row.Settings, "negative_prompt") || !hasSetting(row.Settings, "cfg_strength") {
-		t.Fatalf("expected video_sfx provider setting help, got %#v", row.Settings)
-	}
-	for _, setting := range row.Settings {
-		if setting.Name == "prompt" && !strings.Contains(setting.Example, "--reference @clip.mp4") {
-			t.Fatalf("expected video_sfx prompt example to include a video reference, got %#v", setting)
-		}
-	}
-	if len(row.Notes) == 0 || !strings.Contains(strings.Join(row.Notes, "\n"), "requires --reference with video media") {
-		t.Fatalf("expected video_sfx reference note, got %#v", row.Notes)
-	}
-}
-
-func TestChatterboxTTSDirectGenerationHelpIncludesProviderSettings(t *testing.T) {
-	row := enrichGenerationActionRow(generationActionRow{
-		Action:           "tts",
-		Provider:         "replicate",
-		Kind:             "audio",
-		DirectGeneration: true,
-		Async:            true,
-	})
-
-	if len(row.Examples) == 0 || !strings.Contains(row.Examples[0], "Abigail read this") {
-		t.Fatalf("expected Chatterbox TTS example, got %#v", row.Examples)
-	}
-	if !hasSetting(row.Settings, "voice") || !hasSetting(row.Settings, "exaggeration") || !hasSetting(row.Settings, "cfg_weight") || !hasSetting(row.Settings, "temperature") {
-		t.Fatalf("expected Chatterbox provider setting help, got %#v", row.Settings)
-	}
-}
-
-func TestChatterboxCloneDirectGenerationHelpRequiresAudioReference(t *testing.T) {
-	row := enrichGenerationActionRow(generationActionRow{
-		Action:           "clone",
-		Provider:         "replicate",
-		Kind:             "audio",
-		DirectGeneration: true,
-		Async:            true,
-		AcceptsReference: true,
-	})
-
-	if len(row.Examples) == 0 {
-		t.Fatal("expected clone examples")
-	}
-	if !strings.Contains(row.Examples[0], "--reference @voice.mp3") || !strings.Contains(row.Examples[0], "--out clone.mp3") {
-		t.Fatalf("expected first clone example to use an audio reference and audio output, got %#v", row.Examples)
-	}
-	for _, example := range row.Examples {
-		if strings.Contains(example, "@reference.png") {
-			t.Fatalf("clone should not advertise a generic image reference, got examples %#v", row.Examples)
-		}
-	}
-	if hasSetting(row.Settings, "voice") || !hasSetting(row.Settings, "reference_url") || !hasSetting(row.Settings, "cfg_weight") {
-		t.Fatalf("expected clone reference and provider setting help without voice, got %#v", row.Settings)
-	}
-	for _, setting := range row.Settings {
-		if setting.Name == "prompt" && !strings.Contains(setting.Example, "--reference @voice.mp3") {
-			t.Fatalf("expected clone prompt example to include an audio reference, got %#v", setting)
-		}
-	}
-	if len(row.Notes) == 0 || !strings.Contains(strings.Join(row.Notes, "\n"), "requires --reference with audio media") {
-		t.Fatalf("expected clone reference note, got %#v", row.Notes)
-	}
-}
-
-func TestOptionalImageReferenceDirectGenerationHelpUsesBaseActionExamples(t *testing.T) {
-	row := enrichGenerationActionRow(generationActionRow{
-		Action:           "qwen",
-		Provider:         "replicate",
-		Kind:             "image",
-		DirectGeneration: true,
-		AcceptsReference: true,
-		ReferenceKinds:   []string{"image"},
-	})
-
-	if len(row.Examples) < 2 {
-		t.Fatalf("expected qwen prompt-only and image reference examples, got %#v", row.Examples)
-	}
-	if !strings.Contains(row.Examples[0], "treecli generate qwen \"prompt\" --out output.png") {
-		t.Fatalf("expected first qwen example to allow prompt-only generation, got %#v", row.Examples)
-	}
-	if !strings.Contains(row.Examples[1], "--reference @image.png") {
-		t.Fatalf("expected second qwen example to use an image reference, got %#v", row.Examples)
-	}
-	if !hasSetting(row.Settings, "reference_url") {
-		t.Fatalf("expected qwen reference setting help, got %#v", row.Settings)
-	}
-	if got := referenceSummary(row); got != "yes:image" {
-		t.Fatalf("expected optional image reference summary, got %q", got)
-	}
-	if strings.Contains(strings.Join(row.Notes, "\n"), "requires --reference with image media") {
-		t.Fatalf("did not expect required-reference note for qwen, got %#v", row.Notes)
-	}
-}
-
 func TestGenerateActionsCommandKeepsHiddenTagsCompatibilityCommand(t *testing.T) {
 	if generateTagsCompatCmd.Use != "tags" {
 		t.Fatalf("expected hidden compatibility command to use tags, got %q", generateTagsCompatCmd.Use)
 	}
 	if !generateTagsCompatCmd.Hidden {
 		t.Fatal("expected tags compatibility command to be hidden from help")
-	}
-}
-
-func TestFindGenerationActionRowNormalizesBangPrefix(t *testing.T) {
-	row, ok := findGenerationActionRow([]generationActionRow{{Action: "flux2"}}, "!FLUX2")
-	if !ok {
-		t.Fatal("expected to find action with bang-prefixed input")
-	}
-	if row.Action != "flux2" {
-		t.Fatalf("expected flux2 row, got %#v", row)
-	}
-}
-
-func TestFindGenerationActionRowCanonicalizesReplicateIntegrationAliases(t *testing.T) {
-	tests := []struct {
-		query    string
-		expected string
-	}{
-		{query: "sfx", expected: "video_sfx"},
-		{query: "!11", expected: "eleven_tts"},
-		{query: "chatterbox", expected: "tts"},
-	}
-
-	rows := []generationActionRow{
-		{Action: "tts"},
-		{Action: "eleven_tts"},
-		{Action: "video_sfx"},
-	}
-
-	for _, test := range tests {
-		t.Run(test.query, func(t *testing.T) {
-			row, ok := findGenerationActionRow(rows, test.query)
-			if !ok {
-				t.Fatalf("expected to find %q", test.query)
-			}
-			if row.Action != test.expected {
-				t.Fatalf("expected %q row, got %#v", test.expected, row)
-			}
-		})
 	}
 }
 
@@ -486,9 +144,9 @@ func TestCompleteGenerationActionRowNamesFiltersAndPreservesBangPrefix(t *testin
 
 func TestCompleteGenerationActionRowNamesIncludesReplicateIntegrationAliases(t *testing.T) {
 	rows := []generationActionRow{
-		{Action: "tts"},
-		{Action: "eleven_tts"},
-		{Action: "video_sfx"},
+		{Action: "tts", Aliases: []string{"chatterbox"}},
+		{Action: "eleven_tts", Aliases: []string{"11"}},
+		{Action: "video_sfx", Aliases: []string{"sfx"}},
 	}
 
 	got := completeGenerationActionRowNames(rows, "s")
@@ -510,154 +168,5 @@ func TestCompleteGenerationActionRowNamesIncludesReplicateIntegrationAliases(t *
 	got = completeGenerationActionRowNames(rows, "!11")
 	if len(got) != 1 || got[0] != "!11" {
 		t.Fatalf("expected bang-prefixed 11 completion, got %#v", got)
-	}
-}
-
-func TestFirstGenerationMediaPrefersTypedMediaOutputs(t *testing.T) {
-	ref, ok := firstGenerationMedia(api.GenerationResponse{
-		MediaURLs: []string{"https://cdn.example.test/fallback.png"},
-		MediaOutputs: []api.GenerationMedia{
-			{
-				URL:         "https://cdn.example.test/source.mp4",
-				ContentType: "video/mp4",
-			},
-		},
-	})
-
-	if !ok {
-		t.Fatal("expected media reference")
-	}
-	if ref.URL != "https://cdn.example.test/source.mp4" || ref.Kind != "video" || ref.ContentType != "video/mp4" {
-		t.Fatalf("unexpected reference: %#v", ref)
-	}
-}
-
-func TestResolveFileInputSettingsUploadsReferenceLikeInput(t *testing.T) {
-	uploadSeen := false
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api/v1/ai/generations/references/direct_upload" {
-			http.NotFound(w, r)
-			return
-		}
-		if r.URL.Path != "/api/v1/ai/generations/references" {
-			t.Fatalf("unexpected path %s", r.URL.Path)
-		}
-		if err := r.ParseMultipartForm(2 << 20); err != nil {
-			t.Fatalf("parsing multipart: %v", err)
-		}
-		file, header, err := r.FormFile("file")
-		if err != nil {
-			t.Fatalf("expected file upload: %v", err)
-		}
-		defer file.Close()
-		uploadSeen = true
-		if got := header.Header.Get("Content-Type"); got != "image/png" {
-			t.Fatalf("expected image/png upload content type, got %q", got)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"id":"ref-1","url":"https://cdn.example.test/ref.png","content_type":"image/png","kind":"image"}`))
-	}))
-	defer server.Close()
-
-	referenceFile := t.TempDir() + "/frame.png"
-	if err := os.WriteFile(referenceFile, []byte("\x89PNG\r\n\x1a\n"), 0o644); err != nil {
-		t.Fatalf("writing temp reference: %v", err)
-	}
-
-	settings := map[string]interface{}{"image": "@" + referenceFile}
-	err := resolveFileInputSettings(profileConfig{BackendURL: server.URL}, settings)
-	if err != nil {
-		t.Fatalf("resolveFileInputSettings returned error: %v", err)
-	}
-	if !uploadSeen {
-		t.Fatal("expected upload endpoint to be called")
-	}
-	if settings["image"] != "https://cdn.example.test/ref.png" {
-		t.Fatalf("expected image input URL, got %#v", settings["image"])
-	}
-	if settings["reference_url"] != "https://cdn.example.test/ref.png" {
-		t.Fatalf("expected reference_url to be seeded, got %#v", settings["reference_url"])
-	}
-	if settings["reference_content_type"] != "image/png" || settings["reference_kind"] != "image" {
-		t.Fatalf("expected reference media metadata, got %#v", settings)
-	}
-}
-
-func hasSetting(settings []settingHelp, name string) bool {
-	for _, setting := range settings {
-		if setting.Name == name {
-			return true
-		}
-	}
-	return false
-}
-
-// A quote must price the request that would actually run: a reference image can switch the
-// backend to a different (pricier) model, e.g. grokvideo with a start image runs image-to-video.
-func TestRunGenerateQuoteSendsResolvedReference(t *testing.T) {
-	withGenerateGlobals(t)
-	viper.Reset()
-	t.Cleanup(viper.Reset)
-	oldEnv, oldAccount, oldBackend, oldHost := SelectedEnvironment, SelectedAccount, BackendURLOverride, AppHostOverride
-	t.Cleanup(func() {
-		SelectedEnvironment, SelectedAccount, BackendURLOverride, AppHostOverride = oldEnv, oldAccount, oldBackend, oldHost
-	})
-	SelectedEnvironment, SelectedAccount, AppHostOverride = "", "", ""
-	for _, name := range []string{"TREECLI_ENV", "TREECLI_ACCOUNT", "TREECLI_BACKEND_URL", "TREECTL_BACKEND_URL", "TREECLI_APP_HOST", "TREECTL_APP_HOST", "TREECLI_PROFILE", "TREECTL_PROFILE"} {
-		t.Setenv(name, "")
-	}
-	t.Setenv("TREECLI_ALLOW_INSECURE_HTTP", "1")
-
-	var quotedSettings map[string]interface{}
-	quoteRequests := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch r.URL.Path {
-		case "/api/v1/ai/generations/references/direct_upload":
-			http.NotFound(w, r)
-		case "/api/v1/ai/generations/references":
-			_, _ = w.Write([]byte(`{"id":"ref-1","url":"https://cdn.example.test/frame.png","content_type":"image/png","kind":"image"}`))
-		case "/api/v1/ai/generations":
-			var body map[string]interface{}
-			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-				t.Fatalf("decoding generation body: %v", err)
-			}
-			if body["quote"] != true {
-				t.Fatalf("expected a quote request, got %#v", body["quote"])
-			}
-			quoteRequests++
-			quotedSettings, _ = body["settings"].(map[string]interface{})
-			_, _ = w.Write([]byte(`{"action":"grokvideo","quote":{"amount_sats":5400000,"amount_usd":1.08},"provider":"xai"}`))
-		default:
-			t.Fatalf("unexpected path %s", r.URL.Path)
-		}
-	}))
-	defer server.Close()
-
-	BackendURLOverride = server.URL
-	viper.Set("active_profile", "prod")
-	viper.Set("profiles.prod.backend_url", server.URL)
-	viper.Set("profiles.prod.access_token", "token")
-	viper.Set("profiles.prod.client", "client")
-	viper.Set("profiles.prod.uid", "uid")
-
-	referenceFile := t.TempDir() + "/frame.png"
-	if err := os.WriteFile(referenceFile, []byte("\x89PNG\r\n\x1a\n"), 0o644); err != nil {
-		t.Fatalf("writing temp reference: %v", err)
-	}
-	generateQuote = true
-	generateReference = "@" + referenceFile
-	generateDuration = 6
-	generatePollInterval = time.Second
-	generateTimeout = time.Minute
-
-	if err := runGenerate(GenerateCmd, []string{"grokvideo", "slow push-in"}); err != nil {
-		t.Fatalf("runGenerate returned error: %v", err)
-	}
-	if quoteRequests != 1 {
-		t.Fatalf("expected one quote request, got %d", quoteRequests)
-	}
-	if quotedSettings["reference_url"] != "https://cdn.example.test/frame.png" {
-		t.Fatalf("expected the quote to carry the resolved reference, got %#v", quotedSettings)
 	}
 }

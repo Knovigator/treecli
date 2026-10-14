@@ -1,7 +1,7 @@
 package api
 
 import (
-	"bytes"
+	"context"
 	"crypto/md5"
 	"encoding/base64"
 	"encoding/json"
@@ -14,54 +14,6 @@ import (
 	"github.com/go-resty/resty/v2"
 )
 
-type MultipartFile struct {
-	FieldName   string
-	FileName    string
-	ContentType string
-	Content     []byte
-}
-
-type CreateQuestRequest struct {
-	QuestID            string
-	ParentAnswerID     string
-	SpaceID            string
-	Content            string
-	DeltaJSON          string
-	ActionRequestsJSON string
-	MessageType        string
-	ThreadType         string
-	TeamID             string
-	Public             *bool
-	Private            *bool
-	Uploads            []MultipartFile
-}
-
-type CreateAnswerRequest struct {
-	ReplyToAnswerID    string
-	AnswerID           string
-	ChildQuestID       string
-	QuestID            string
-	SpaceID            string
-	UserID             string
-	Content            string
-	DeltaJSON          string
-	ActionRequestsJSON string
-	MessageType        string
-	Uploads            []MultipartFile
-}
-
-type CreateClipQuestRequest struct {
-	QuestID     string
-	URL         string
-	Content     string
-	DeltaJSON   string
-	Image       []byte
-	Video       []byte
-	File        []byte
-	Title       string
-	Destination map[string]interface{}
-}
-
 type ResolvedMediaLink struct {
 	MediaLink    string
 	RawMediaLink string
@@ -69,53 +21,17 @@ type ResolvedMediaLink struct {
 
 // GetMessages fetches messages from the API and returns them
 func GetMessages(backendURL, accessToken, client, uid string, messageIDs []string) (MessagesResponse, error) {
-	requestBody := map[string][]string{"ids": messageIDs}
-
-	resp, err := newRequest(accessToken, client, uid).
-		SetHeader("accept", "application/json").
-		SetHeader("Content-Type", "application/json").
-		SetBody(requestBody).
-		Post(fmt.Sprintf("%s/api/v1/answers/bulk", backendURL))
-
-	if err != nil {
-		return MessagesResponse{}, fmt.Errorf("error making request: %v", err)
-	}
-
-	if resp.StatusCode() != http.StatusOK {
-		return MessagesResponse{}, fmt.Errorf("error: received status code %d. Response body: %s", resp.StatusCode(), SafeResponseBody(resp.Body()))
-	}
-
-	var messagesInfo MessagesResponse
-	err = json.Unmarshal(resp.Body(), &messagesInfo)
-	if err != nil {
-		return MessagesResponse{}, fmt.Errorf("error parsing response: %v", err)
-	}
-	messagesInfo.Raw = append(messagesInfo.Raw[:0], resp.Body()...)
-
-	return messagesInfo, nil
+	var out MessagesResponse
+	raw, err := sharedRead(backendURL, accessToken, client, uid, "messages", map[string]interface{}{"ids": messageIDs}, &out)
+	out.Raw = raw
+	return out, err
 }
 
 func GetThread(backendURL, threadID, accessToken, client, uid string) (ThreadResponse, error) {
-	resp, err := newRequest(accessToken, client, uid).
-		SetHeader("accept", "application/json").
-		Get(fmt.Sprintf("%s/api/v1/quests/%s", backendURL, threadID))
-
-	if err != nil {
-		return ThreadResponse{}, fmt.Errorf("error making request: %v", err)
-	}
-
-	if resp.StatusCode() != http.StatusOK {
-		return ThreadResponse{}, fmt.Errorf("received status code %d: %s", resp.StatusCode(), SafeResponseBody(resp.Body()))
-	}
-
-	var threadInfo ThreadResponse
-	err = json.Unmarshal(resp.Body(), &threadInfo)
-	if err != nil {
-		return ThreadResponse{}, fmt.Errorf("error parsing response: %v", err)
-	}
-	threadInfo.Raw = append(threadInfo.Raw[:0], resp.Body()...)
-
-	return threadInfo, nil
+	var out ThreadResponse
+	raw, err := sharedRead(backendURL, accessToken, client, uid, "thread", map[string]interface{}{"id": threadID}, &out)
+	out.Raw = raw
+	return out, err
 }
 
 func GetNotifications(
@@ -128,40 +44,20 @@ func GetNotifications(
 	unseenOnly bool,
 	clear bool,
 ) (NotificationsResponse, error) {
-	request := newRequest(accessToken, client, uid).
-		SetHeader("accept", "application/json").
-		SetQueryParam("notifications", "true")
-
-	if strings.TrimSpace(spaceID) != "" {
-		request.SetQueryParam("space_id", strings.TrimSpace(spaceID))
-	}
-	if page > 0 {
-		request.SetQueryParam("page", fmt.Sprintf("%d", page))
-	}
-	if unseenOnly {
-		request.SetQueryParam("unseen", "true")
-	}
+	var out NotificationsResponse
+	tool := "treechat_read"
+	args := map[string]interface{}{"space_id": spaceID, "page": page, "unseen": unseenOnly}
+	envelope := map[string]interface{}{"operation": "notifications", "arguments": args}
 	if clear {
-		request.SetQueryParam("clear", "true")
+		tool = "clear_notifications"
+		delete(envelope, "operation")
 	}
-
-	resp, err := request.Get(fmt.Sprintf("%s/api/v1/quests", backendURL))
-	if err != nil {
-		return NotificationsResponse{}, fmt.Errorf("error making request: %v", err)
+	raw, err := SharedOperation(backendURL, accessToken, client, uid, tool, envelope)
+	if err == nil {
+		err = json.Unmarshal(raw, &out)
 	}
-
-	if resp.StatusCode() != http.StatusOK {
-		return NotificationsResponse{}, fmt.Errorf("received status code %d: %s", resp.StatusCode(), SafeResponseBody(resp.Body()))
-	}
-
-	var notifications NotificationsResponse
-	err = json.Unmarshal(resp.Body(), &notifications)
-	if err != nil {
-		return NotificationsResponse{}, fmt.Errorf("error parsing response: %v", err)
-	}
-	notifications.Raw = append(notifications.Raw[:0], resp.Body()...)
-
-	return notifications, nil
+	out.Raw = raw
+	return out, err
 }
 
 func GetNotificationsCount(
@@ -171,30 +67,10 @@ func GetNotificationsCount(
 	uid string,
 	spaceID string,
 ) (NotificationsCountResponse, error) {
-	request := newRequest(accessToken, client, uid).
-		SetHeader("accept", "application/json")
-
-	if strings.TrimSpace(spaceID) != "" {
-		request.SetQueryParam("space_id", strings.TrimSpace(spaceID))
-	}
-
-	resp, err := request.Get(fmt.Sprintf("%s/api/v1/notifications/count", backendURL))
-	if err != nil {
-		return NotificationsCountResponse{}, fmt.Errorf("error making request: %v", err)
-	}
-
-	if resp.StatusCode() != http.StatusOK {
-		return NotificationsCountResponse{}, fmt.Errorf("received status code %d: %s", resp.StatusCode(), SafeResponseBody(resp.Body()))
-	}
-
-	var count NotificationsCountResponse
-	err = json.Unmarshal(resp.Body(), &count)
-	if err != nil {
-		return NotificationsCountResponse{}, fmt.Errorf("error parsing response: %v", err)
-	}
-	count.Raw = append(count.Raw[:0], resp.Body()...)
-
-	return count, nil
+	var out NotificationsCountResponse
+	raw, err := sharedRead(backendURL, accessToken, client, uid, "notification_count", map[string]interface{}{"space_id": spaceID}, &out)
+	out.Raw = raw
+	return out, err
 }
 
 func GetUpvalueHistory(
@@ -205,55 +81,17 @@ func GetUpvalueHistory(
 	page int,
 	perPage int,
 ) (UpvalueHistoryResponse, error) {
-	request := newRequest(accessToken, client, uid).
-		SetHeader("accept", "application/json")
-
-	if page > 0 {
-		request.SetQueryParam("page", fmt.Sprintf("%d", page))
-	}
-	if perPage > 0 {
-		request.SetQueryParam("per_page", fmt.Sprintf("%d", perPage))
-	}
-
-	resp, err := request.Get(fmt.Sprintf("%s/api/v1/bsv/history", backendURL))
-	if err != nil {
-		return UpvalueHistoryResponse{}, fmt.Errorf("error making request: %v", err)
-	}
-
-	if resp.StatusCode() != http.StatusOK {
-		return UpvalueHistoryResponse{}, fmt.Errorf("received status code %d: %s", resp.StatusCode(), SafeResponseBody(resp.Body()))
-	}
-
-	var history UpvalueHistoryResponse
-	if err := json.Unmarshal(resp.Body(), &history); err != nil {
-		return UpvalueHistoryResponse{}, fmt.Errorf("error parsing response: %v", err)
-	}
-	history.Raw = append(history.Raw[:0], resp.Body()...)
-
-	return history, nil
+	var out UpvalueHistoryResponse
+	raw, err := sharedRead(backendURL, accessToken, client, uid, "upvalues", map[string]interface{}{"page": page, "per_page": perPage}, &out)
+	out.Raw = raw
+	return out, err
 }
 
 func GetAnswer(backendURL, answerID, accessToken, client, uid string) (AnswerResponse, error) {
-	resp, err := newRequest(accessToken, client, uid).
-		SetHeader("accept", "application/json").
-		Get(fmt.Sprintf("%s/api/v1/answers/%s", backendURL, answerID))
-
-	if err != nil {
-		return AnswerResponse{}, fmt.Errorf("error making request: %v", err)
-	}
-
-	if resp.StatusCode() != http.StatusOK {
-		return AnswerResponse{}, fmt.Errorf("received status code %d: %s", resp.StatusCode(), SafeResponseBody(resp.Body()))
-	}
-
-	var answerInfo AnswerResponse
-	err = json.Unmarshal(resp.Body(), &answerInfo)
-	if err != nil {
-		return AnswerResponse{}, fmt.Errorf("error parsing response: %v", err)
-	}
-	answerInfo.Raw = append(answerInfo.Raw[:0], resp.Body()...)
-
-	return answerInfo, nil
+	var out AnswerResponse
+	raw, err := sharedRead(backendURL, accessToken, client, uid, "post", map[string]interface{}{"id": answerID}, &out)
+	out.Raw = raw
+	return out, err
 }
 
 func GetUpvaluedContentLeaderboard(
@@ -265,57 +103,16 @@ func GetUpvaluedContentLeaderboard(
 	endDate string,
 	limit int,
 ) (UpvaluedContentLeaderboardResponse, error) {
-	request := newRequest(accessToken, client, uid).
-		SetHeader("accept", "application/json")
-
-	if strings.TrimSpace(startDate) != "" {
-		request.SetQueryParam("start_date", strings.TrimSpace(startDate))
-	}
-	if strings.TrimSpace(endDate) != "" {
-		request.SetQueryParam("end_date", strings.TrimSpace(endDate))
-	}
-	if limit > 0 {
-		request.SetQueryParam("limit", fmt.Sprintf("%d", limit))
-	}
-
-	resp, err := request.Get(fmt.Sprintf("%s/api/v1/leaderboards/upvalued_content", backendURL))
-	if err != nil {
-		return UpvaluedContentLeaderboardResponse{}, fmt.Errorf("error making request: %v", err)
-	}
-
-	if resp.StatusCode() != http.StatusOK {
-		return UpvaluedContentLeaderboardResponse{}, fmt.Errorf("received status code %d: %s", resp.StatusCode(), SafeResponseBody(resp.Body()))
-	}
-
-	var leaderboard UpvaluedContentLeaderboardResponse
-	err = json.Unmarshal(resp.Body(), &leaderboard)
-	if err != nil {
-		return UpvaluedContentLeaderboardResponse{}, fmt.Errorf("error parsing response: %v", err)
-	}
-	leaderboard.Raw = append(leaderboard.Raw[:0], resp.Body()...)
-
-	return leaderboard, nil
+	var out UpvaluedContentLeaderboardResponse
+	raw, err := sharedRead(backendURL, accessToken, client, uid, "leaderboard", map[string]interface{}{"start_date": startDate, "end_date": endDate, "limit": limit}, &out)
+	out.Raw = raw
+	return out, err
 }
 
 func ListAIModels(backendURL, accessToken, client, uid string) (AIModelsResponse, error) {
-	resp, err := newRequest(accessToken, client, uid).
-		SetHeader("accept", "application/json").
-		Get(fmt.Sprintf("%s/api/v1/ai_models", backendURL))
-	if err != nil {
-		return nil, fmt.Errorf("error making request: %v", err)
-	}
-
-	if resp.StatusCode() != http.StatusOK {
-		return nil, fmt.Errorf("received status code %d: %s", resp.StatusCode(), SafeResponseBody(resp.Body()))
-	}
-
-	var models AIModelsResponse
-	err = json.Unmarshal(resp.Body(), &models)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing response: %v", err)
-	}
-
-	return models, nil
+	var out AIModelsResponse
+	_, err := sharedRead(backendURL, accessToken, client, uid, "models", map[string]interface{}{}, &out)
+	return out, err
 }
 
 func ListTeams(
@@ -326,33 +123,14 @@ func ListTeams(
 	spaceID string,
 	publicOnly bool,
 ) (TeamsResponse, error) {
-	request := newRequest(accessToken, client, uid).
-		SetHeader("accept", "application/json").
-		SetQueryParam("space_id", spaceID)
-
+	var out TeamsResponse
+	operation := "streams"
 	if publicOnly {
-		request.SetQueryParam("public", "true")
-	} else {
-		request.SetQueryParam("include_hidden", "false")
+		operation = "public_streams"
 	}
-
-	resp, err := request.Get(fmt.Sprintf("%s/api/v1/teams", backendURL))
-	if err != nil {
-		return TeamsResponse{}, fmt.Errorf("error making request: %v", err)
-	}
-
-	if resp.StatusCode() != http.StatusOK {
-		return TeamsResponse{}, fmt.Errorf("received status code %d: %s", resp.StatusCode(), SafeResponseBody(resp.Body()))
-	}
-
-	var teamsResponse TeamsResponse
-	err = json.Unmarshal(resp.Body(), &teamsResponse)
-	if err != nil {
-		return TeamsResponse{}, fmt.Errorf("error parsing response: %v", err)
-	}
-	teamsResponse.Raw = append(teamsResponse.Raw[:0], resp.Body()...)
-
-	return teamsResponse, nil
+	raw, err := sharedRead(backendURL, accessToken, client, uid, operation, map[string]interface{}{"space_id": spaceID}, &out)
+	out.Raw = raw
+	return out, err
 }
 
 func ListPublicTeams(
@@ -362,344 +140,16 @@ func ListPublicTeams(
 	uid string,
 	spaceID string,
 ) (TeamsResponse, error) {
-	resp, err := newRequest(accessToken, client, uid).
-		SetHeader("accept", "application/json").
-		SetQueryParam("space_id", spaceID).
-		Get(fmt.Sprintf("%s/api/v1/teams/public", backendURL))
-	if err != nil {
-		return TeamsResponse{}, fmt.Errorf("error making request: %v", err)
-	}
-
-	if resp.StatusCode() != http.StatusOK {
-		return TeamsResponse{}, fmt.Errorf("received status code %d: %s", resp.StatusCode(), SafeResponseBody(resp.Body()))
-	}
-
-	var teamsResponse TeamsResponse
-	err = json.Unmarshal(resp.Body(), &teamsResponse)
-	if err != nil {
-		return TeamsResponse{}, fmt.Errorf("error parsing response: %v", err)
-	}
-	teamsResponse.Raw = append(teamsResponse.Raw[:0], resp.Body()...)
-
-	return teamsResponse, nil
-}
-
-func CreateQuest(
-	backendURL string,
-	accessToken string,
-	client string,
-	uid string,
-	request CreateQuestRequest,
-) (CreateQuestResponse, error) {
-	form := neturl.Values{}
-	form.Set("id", request.QuestID)
-	form.Set("space_id", request.SpaceID)
-	form.Set("parent_attributes[id]", request.ParentAnswerID)
-	form.Set("parent_attributes[content]", request.Content)
-	if request.DeltaJSON != "" {
-		form.Set("parent_attributes[delta_json]", request.DeltaJSON)
-	}
-	if request.ActionRequestsJSON != "" {
-		form.Set("parent_attributes[action_requests]", request.ActionRequestsJSON)
-	}
-
-	if request.MessageType != "" {
-		form.Set("parent_attributes[message_type]", request.MessageType)
-	}
-	if request.ThreadType != "" {
-		form.Set("thread_type", request.ThreadType)
-	}
-	if request.TeamID != "" {
-		form.Set("team_id", request.TeamID)
-	}
-	if request.Public != nil {
-		form.Set("public", fmt.Sprintf("%t", *request.Public))
-	}
-	if request.Private != nil {
-		form.Set("private", fmt.Sprintf("%t", *request.Private))
-	}
-
-	resp, err := postMultipart(
-		backendURL,
-		"/api/v1/quests",
-		accessToken,
-		client,
-		uid,
-		form,
-		request.Uploads,
-	)
-	if err != nil {
-		return CreateQuestResponse{}, err
-	}
-
-	var questResponse CreateQuestResponse
-	err = json.Unmarshal(resp.Body(), &questResponse)
-	if err != nil {
-		return CreateQuestResponse{}, fmt.Errorf("error parsing response: %v", err)
-	}
-	questResponse.Raw = append(questResponse.Raw[:0], resp.Body()...)
-
-	return questResponse, nil
-}
-
-func CreateAnswer(
-	backendURL string,
-	accessToken string,
-	client string,
-	uid string,
-	request CreateAnswerRequest,
-) (CreateAnswerResponse, error) {
-	form := neturl.Values{}
-	form.Set("id", request.AnswerID)
-	form.Set("space_id", request.SpaceID)
-	form.Set("quest_id", request.QuestID)
-	if request.ReplyToAnswerID != "" {
-		form.Set("reply_to_answer_id", request.ReplyToAnswerID)
-	}
-	if request.UserID != "" {
-		form.Set("user_id", request.UserID)
-	}
-	form.Set("content", request.Content)
-	if request.DeltaJSON != "" {
-		form.Set("delta_json", request.DeltaJSON)
-	}
-	if request.ActionRequestsJSON != "" {
-		form.Set("action_requests", request.ActionRequestsJSON)
-	}
-
-	if request.ChildQuestID != "" {
-		form.Set("child_quest_id", request.ChildQuestID)
-	}
-	if request.MessageType != "" {
-		form.Set("message_type", request.MessageType)
-	}
-
-	resp, err := postMultipart(
-		backendURL,
-		"/api/v1/answers",
-		accessToken,
-		client,
-		uid,
-		form,
-		request.Uploads,
-	)
-	if err != nil {
-		return CreateAnswerResponse{}, err
-	}
-
-	var answerResponse CreateAnswerResponse
-	err = json.Unmarshal(resp.Body(), &answerResponse)
-	if err != nil {
-		return CreateAnswerResponse{}, fmt.Errorf("error parsing response: %v", err)
-	}
-	answerResponse.Raw = append(answerResponse.Raw[:0], resp.Body()...)
-
-	return answerResponse, nil
-}
-
-func CreateClipQuest(
-	backendURL string,
-	accessToken string,
-	client string,
-	uid string,
-	request CreateClipQuestRequest,
-) (CreateQuestResponse, error) {
-	form := neturl.Values{}
-	if request.QuestID != "" {
-		form.Set("id", request.QuestID)
-	}
-
-	if request.URL != "" {
-		form.Set("quest[answers_attributes][0][url_attributes][address]", request.URL)
-		form.Set("quest[answers_attributes][0][url_attributes][title]", request.Title)
-	} else if request.Title != "" {
-		form.Set("quest[answers_attributes][0][url_attributes][title]", request.Title)
-	}
-
-	if request.Content != "" {
-		form.Set("quest[answers_attributes][0][content]", request.Content)
-	}
-	if request.DeltaJSON != "" {
-		form.Set("quest[answers_attributes][0][delta_json]", request.DeltaJSON)
-	}
-
-	if request.Destination != nil {
-		if destType, ok := request.Destination["type"].(string); ok {
-			form.Set("destination[type]", destType)
-		}
-		switch destID := request.Destination["id"].(type) {
-		case float64:
-			form.Set("destination[id]", fmt.Sprintf("%d", int(destID)))
-		case string:
-			form.Set("destination[id]", destID)
-		}
-	}
-
-	uploads := []MultipartFile{}
-	if len(request.Image) > 0 {
-		uploads = append(uploads, MultipartFile{
-			FieldName: "quest[answers_attributes][0][images]",
-			FileName:  "image",
-			Content:   request.Image,
-		})
-	}
-	if len(request.Video) > 0 {
-		uploads = append(uploads, MultipartFile{
-			FieldName: "quest[answers_attributes][0][recording]",
-			FileName:  "video",
-			Content:   request.Video,
-		})
-	}
-	if len(request.File) > 0 {
-		uploads = append(uploads, MultipartFile{
-			FieldName: "quest[answers_attributes][0][files]",
-			FileName:  "file",
-			Content:   request.File,
-		})
-	}
-
-	resp, err := postMultipart(backendURL, "/plugin_new/clip", accessToken, client, uid, form, uploads)
-	if err != nil {
-		return CreateQuestResponse{}, err
-	}
-
-	var quest Quest
-	err = json.Unmarshal(resp.Body(), &quest)
-	if err != nil {
-		return CreateQuestResponse{}, fmt.Errorf("error parsing response: %v", err)
-	}
-
-	return CreateQuestResponse{
-		Quest: quest,
-		Raw:   append([]byte(nil), resp.Body()...),
-	}, nil
-}
-
-func ClipLink(
-	backendURL string,
-	accessToken string,
-	client string,
-	uid string,
-	url string,
-	image []byte,
-	video []byte,
-	file []byte,
-	title string,
-	content string,
-	destination map[string]interface{},
-) (map[string]interface{}, error) {
-	clipResponse, err := CreateClipQuest(
-		backendURL,
-		accessToken,
-		client,
-		uid,
-		CreateClipQuestRequest{
-			URL:         url,
-			Content:     content,
-			Image:       image,
-			Video:       video,
-			File:        file,
-			Title:       title,
-			Destination: destination,
-		},
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	var clipInfo map[string]interface{}
-	err = json.Unmarshal(clipResponse.Raw, &clipInfo)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing response: %v", err)
-	}
-
-	return clipInfo, nil
-}
-
-func newRequest(accessToken, client, uid string) *resty.Request {
-	return newRequestWithTimeout(accessToken, client, uid, 10*time.Second)
+	var out TeamsResponse
+	raw, err := sharedRead(backendURL, accessToken, client, uid, "public_streams", map[string]interface{}{"space_id": spaceID}, &out)
+	out.Raw = raw
+	return out, err
 }
 
 func newRequestWithTimeout(accessToken, client, uid string, timeout time.Duration) *resty.Request {
-	if timeout <= 0 {
-		timeout = 10 * time.Second
-	}
-	restyClient := resty.New()
-	restyClient.SetTimeout(timeout)
-
-	return restyClient.R().
-		SetHeader("access-token", accessToken).
-		SetHeader("client", client).
-		SetHeader("uid", uid)
+	return scopedRequest(context.Background(), "", accessToken, client, uid, timeout)
 }
 
-func postMultipart(
-	backendURL string,
-	path string,
-	accessToken string,
-	client string,
-	uid string,
-	form neturl.Values,
-	uploads []MultipartFile,
-) (*resty.Response, error) {
-	// Prefer S3 direct upload: send each attachment's bytes straight to S3 and attach it by
-	// signed_id (a plain form field), so the create request itself stays tiny and the app server
-	// never buffers file bytes. Any attachment whose direct upload fails falls back to a multipart
-	// file part, which the backend still accepts — so this is backwards compatible with the
-	// original files[] byte upload and with backends that lack the direct-upload endpoint.
-	var multipartFallback []MultipartFile
-	for _, upload := range uploads {
-		signedID, err := directUploadToS3(backendURL, accessToken, client, uid, upload)
-		if err != nil || signedID == "" {
-			multipartFallback = append(multipartFallback, upload)
-			continue
-		}
-		form.Add(upload.FieldName, signedID)
-	}
-
-	// Fallback multipart uploads can still take well over the 10s default while the server
-	// processes media inline, so keep a generous timeout for the create request.
-	request := newRequestWithTimeout(accessToken, client, uid, 5*time.Minute).
-		SetHeader("accept", "application/json").
-		SetFormDataFromValues(form)
-
-	for _, upload := range multipartFallback {
-		if strings.TrimSpace(upload.ContentType) != "" {
-			request.SetMultipartField(
-				upload.FieldName,
-				upload.FileName,
-				upload.ContentType,
-				bytes.NewReader(upload.Content),
-			)
-		} else {
-			request.SetFileReader(upload.FieldName, upload.FileName, bytes.NewReader(upload.Content))
-		}
-	}
-
-	resp, err := request.Post(fmt.Sprintf("%s%s", backendURL, path))
-	if err != nil {
-		return nil, fmt.Errorf("error making request: %v", err)
-	}
-
-	if resp.StatusCode() != http.StatusOK {
-		return nil, &HTTPError{
-			StatusCode: resp.StatusCode(),
-			Body:       SafeResponseBody(resp.Body()),
-		}
-	}
-
-	return resp, nil
-}
-
-// directUploadToS3 uploads a file's bytes straight to S3 via an Active Storage direct upload and
-// returns the resulting blob's signed_id. The caller attaches the blob by passing that signed_id
-// as an ordinary form field (e.g. files[]=<signed_id>) instead of the raw bytes.
-//
-// Flow (all Active Storage native): POST /rails/active_storage/direct_uploads with the blob's
-// metadata (filename, byte_size, base64 MD5 checksum, content_type) → the backend registers a blob
-// and returns { signed_id, direct_upload: { url, headers } } → PUT the bytes to that presigned S3
-// URL with exactly the returned headers. Any error is returned so the caller can fall back to a
-// multipart file part.
 // directUploadTarget is the response from a direct-upload registration endpoint: a blob signed_id
 // plus the presigned PUT URL/headers the client uses to send the bytes straight to storage.
 type directUploadTarget struct {
@@ -715,27 +165,7 @@ func md5Base64(data []byte) string {
 	return base64.StdEncoding.EncodeToString(sum[:])
 }
 
-// registerDirectUploadAndPut registers a blob at registerPath (which returns a presigned PUT
-// target), PUTs the bytes straight to storage, and returns the blob signed_id. The register body is
-// caller-supplied so this works for the standard ActiveStorage endpoint and for custom ones (e.g.
-// the AI-reference registration that keeps an extensioned blob key).
-func registerDirectUploadAndPut(backendURL, accessToken, client, uid, registerPath string, body interface{}, content []byte) (string, error) {
-	initResp, err := newRequestWithTimeout(accessToken, client, uid, 60*time.Second).
-		SetHeader("accept", "application/json").
-		SetHeader("Content-Type", "application/json").
-		SetBody(body).
-		Post(fmt.Sprintf("%s%s", backendURL, registerPath))
-	if err != nil {
-		return "", fmt.Errorf("direct-upload init request: %w", err)
-	}
-	if initResp.StatusCode() >= 300 {
-		return "", fmt.Errorf("direct-upload init: status %d", initResp.StatusCode())
-	}
-
-	var du directUploadTarget
-	if err := json.Unmarshal(initResp.Body(), &du); err != nil {
-		return "", fmt.Errorf("direct-upload parse: %w", err)
-	}
+func putDirectUpload(du directUploadTarget, content []byte) (string, error) {
 	if du.SignedID == "" || du.DirectUpload.URL == "" {
 		return "", fmt.Errorf("direct-upload: missing signed_id or url")
 	}
@@ -758,48 +188,6 @@ func registerDirectUploadAndPut(backendURL, accessToken, client, uid, registerPa
 	}
 
 	return du.SignedID, nil
-}
-
-// directUploadToS3 registers + uploads a file via the standard ActiveStorage direct-upload endpoint
-// and returns its signed_id.
-func directUploadToS3(backendURL, accessToken, client, uid string, file MultipartFile) (string, error) {
-	contentType := strings.TrimSpace(file.ContentType)
-	if contentType == "" {
-		contentType = "application/octet-stream"
-	}
-	body := map[string]interface{}{
-		"blob": map[string]interface{}{
-			"filename":     file.FileName,
-			"byte_size":    len(file.Content),
-			"checksum":     md5Base64(file.Content),
-			"content_type": contentType,
-		},
-	}
-	return registerDirectUploadAndPut(backendURL, accessToken, client, uid, "/rails/active_storage/direct_uploads", body, file.Content)
-}
-
-// postRawMultipart sends a plain multipart form (no direct upload). Used by callers that must keep
-// server-side file handling — e.g. AI reference uploads whose server generates an extensioned blob
-// key — and as the fallback when a direct-upload endpoint is unavailable.
-func postRawMultipart(backendURL, path, accessToken, client, uid string, form neturl.Values, uploads []MultipartFile) (*resty.Response, error) {
-	request := newRequestWithTimeout(accessToken, client, uid, 5*time.Minute).
-		SetHeader("accept", "application/json").
-		SetFormDataFromValues(form)
-	for _, upload := range uploads {
-		if strings.TrimSpace(upload.ContentType) != "" {
-			request.SetMultipartField(upload.FieldName, upload.FileName, upload.ContentType, bytes.NewReader(upload.Content))
-		} else {
-			request.SetFileReader(upload.FieldName, upload.FileName, bytes.NewReader(upload.Content))
-		}
-	}
-	resp, err := request.Post(fmt.Sprintf("%s%s", backendURL, path))
-	if err != nil {
-		return nil, fmt.Errorf("error making request: %v", err)
-	}
-	if resp.StatusCode() != http.StatusOK {
-		return nil, fmt.Errorf("received status code %d: %s", resp.StatusCode(), SafeResponseBody(resp.Body()))
-	}
-	return resp, nil
 }
 
 func ResolveAnswerMediaLinks(answer Answer, fallbackBase string) []ResolvedMediaLink {

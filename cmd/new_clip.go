@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"github.com/Knovigator/treecli/api"
 
 	"github.com/spf13/cobra"
 )
@@ -29,30 +30,20 @@ func init() {
 }
 
 func runNewClip(cmd *cobra.Command, args []string) error {
-	var url string
+	url := ""
 	if len(args) > 0 {
 		url = args[0]
 	}
-	resolvedOutputFormat := resolveOutputFormat(createOutputFormat, createJSONOutput)
-
+	format := resolveOutputFormat(createOutputFormat, createJSONOutput)
 	profile, err := requireAuthenticatedProfile()
 	if err != nil {
 		return err
 	}
-
-	target, err := resolveStreamTarget(profile, clipStream, streamTarget{
-		Kind: "clips",
-		ID:   "PSEUDOSTREAM__CLIPS",
-		Name: "Clips",
-	})
-	if err != nil {
-		return err
+	arguments := map[string]interface{}{"id": clipWriteID, "url": url, "content": clipContent}
+	optional(arguments, "stream", clipStream)
+	var out api.CreateQuestResponse
+	if err := sharedNativeWrite(profile, "clip", arguments, clipAttachment, 0, &out); err != nil {
+		return writeErrorForOutput(fmt.Errorf("creating clip: %w", err), format)
 	}
-
-	result, err := createClipQuest(profile, url, clipContent, clipAttachment, target, clipWriteID)
-	if err != nil {
-		return writeErrorForOutput(fmt.Errorf("creating clip: %w", err), resolvedOutputFormat)
-	}
-
-	return printCreateQuestResult(profile, result, resolvedOutputFormat)
+	return printCreateQuestResult(profile, out, format)
 }
