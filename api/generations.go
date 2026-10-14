@@ -71,14 +71,16 @@ type GenerationActionInfo struct {
 type TagInfo = GenerationActionInfo
 
 // SettingInfo describes one backend-advertised direct generation setting.
+// Min, Max and AllowedValues stay untyped: the backend sends ints for durations
+// but strings (e.g. "1K", "4k", "2x") or floats for other settings.
 type SettingInfo struct {
-	Name          string      `json:"name"`
-	Type          string      `json:"type,omitempty"`
-	Description   string      `json:"description,omitempty"`
-	Default       interface{} `json:"default,omitempty"`
-	Min           int         `json:"min,omitempty"`
-	Max           int         `json:"max,omitempty"`
-	AllowedValues []int       `json:"allowed_values,omitempty"`
+	Name          string        `json:"name"`
+	Type          string        `json:"type,omitempty"`
+	Description   string        `json:"description,omitempty"`
+	Default       interface{}   `json:"default,omitempty"`
+	Min           interface{}   `json:"min,omitempty"`
+	Max           interface{}   `json:"max,omitempty"`
+	AllowedValues []interface{} `json:"allowed_values,omitempty"`
 }
 
 // CreateGeneration runs a direct AI generation that charges the user and returns media
