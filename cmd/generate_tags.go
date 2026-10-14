@@ -27,6 +27,7 @@ type generationActionRow struct {
 	Async                bool              `json:"async"`
 	AcceptsReference     bool              `json:"accepts_reference"`
 	RequiresReference    bool              `json:"requires_reference"`
+	PromptOptional       bool              `json:"prompt_optional"`
 	ReferenceKinds       []string          `json:"reference_kinds,omitempty"`
 	SupportsInstrumental bool              `json:"supports_instrumental"`
 	DurationMin          int               `json:"duration_min,omitempty"`
@@ -346,6 +347,7 @@ func generationActionRowFromModel(model api.AIModelRef, directTag api.Generation
 		row.Async = directTag.Async
 		row.AcceptsReference = directTag.AcceptsReference
 		row.RequiresReference = directTag.RequiresReference
+		row.PromptOptional = directTag.PromptOptional
 		row.ReferenceKinds = directTag.ReferenceKinds
 		row.SupportsInstrumental = directTag.SupportsInstrumental
 		row.DurationMin = directTag.DurationMin
@@ -365,6 +367,7 @@ func generationActionRowFromDirectAction(directTag api.GenerationActionInfo) gen
 		Async:                directTag.Async,
 		AcceptsReference:     directTag.AcceptsReference,
 		RequiresReference:    directTag.RequiresReference,
+		PromptOptional:       directTag.PromptOptional,
 		ReferenceKinds:       directTag.ReferenceKinds,
 		SupportsInstrumental: directTag.SupportsInstrumental,
 		DurationMin:          directTag.DurationMin,
@@ -418,6 +421,9 @@ func generationSettingsFor(row generationActionRow) []settingHelp {
 			Description: "Primary generation prompt. Pass it after the action name.",
 			Example:     promptSettingExampleFor(row),
 		},
+	}
+	if row.PromptOptional {
+		settings[0].Description = "Optional for this action: the reference media is enough. When given, it is passed to models that accept a prompt."
 	}
 
 	if row.DurationMax > 0 {
@@ -491,6 +497,9 @@ func promptSettingExampleFor(row generationActionRow) string {
 		return fmt.Sprintf("treecli generate %s \"read this in the sampled voice\" --reference @voice.mp3 --out clone.%s", row.Action, ext)
 	case "video_sfx":
 		return fmt.Sprintf("treecli generate %s \"rain, tires on wet asphalt\" --reference @clip.mp4 --out sfx.%s", row.Action, ext)
+	}
+	if row.PromptOptional && actionRequiresReference(row) {
+		return fmt.Sprintf("treecli generate %s --reference %s --out output.%s", row.Action, referenceExamplePath(row), ext)
 	}
 	if actionRequiresReference(row) {
 		return fmt.Sprintf("treecli generate %s \"prompt\" --reference %s --out output.%s", row.Action, referenceExamplePath(row), ext)
@@ -696,7 +705,11 @@ func generationExamplesFor(row generationActionRow) []string {
 			fmt.Sprintf("treecli generate %s \"cinematic electronic\" --instrumental --reference run:abc123 --out track.mp3", row.Action),
 		)
 	default:
-		if actionRequiresReference(row) {
+		if row.PromptOptional && actionRequiresReference(row) {
+			examples = append(examples, fmt.Sprintf("treecli generate %s --reference %s --out output.%s", row.Action, referenceExamplePath(row), ext))
+			examples = append(examples, fmt.Sprintf("treecli generate %s --reference %s --quote", row.Action, referenceExamplePath(row)))
+			return examples
+		} else if actionRequiresReference(row) {
 			examples = append(examples, fmt.Sprintf("treecli generate %s \"prompt\" --reference %s --out output.%s", row.Action, referenceExamplePath(row), ext))
 		} else {
 			examples = append(examples, fmt.Sprintf("treecli generate %s \"prompt\" --out output.%s", row.Action, ext))

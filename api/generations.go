@@ -58,6 +58,7 @@ type GenerationActionInfo struct {
 	Async                bool          `json:"async"`
 	AcceptsReference     bool          `json:"accepts_reference"`
 	RequiresReference    bool          `json:"requires_reference"`
+	PromptOptional       bool          `json:"prompt_optional"` // e.g. upscalers: the media input is enough
 	ReferenceKinds       []string      `json:"reference_kinds,omitempty"`
 	SupportsInstrumental bool          `json:"supports_instrumental"`
 	Settings             []SettingInfo `json:"settings,omitempty"`

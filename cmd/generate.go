@@ -47,6 +47,8 @@ var GenerateCmd = &cobra.Command{
 		"  treecli generate flux2 \"wide hero banner\" --out banner.webp --input aspect_ratio=3:1\n" +
 		"  treecli generate kling2 \"slow handheld push-in\" --reference @image.png --out animated.mp4\n" +
 		"  treecli generate qwen \"replace the sky with stars\" --reference @image.png --out edited.png\n" +
+		"  treecli generate topazimg --reference @photo.jpg --input upscale_factor=4x --out photo-4x.jpg\n" +
+		"  treecli generate topazvid --reference @clip.mp4 --input target_resolution=4k --quote\n" +
 		"  treecli generate tts \"Abigail read this in a crisp narration voice\" --out chatterbox.mp3\n" +
 		"  treecli generate clone \"read this in the sampled voice\" --reference @voice.mp3 --out clone.mp3\n" +
 		"  treecli generate eleven_tts \"read this in a crisp narration voice\" --out narration.mp3\n" +
@@ -86,6 +88,11 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 	}
 	if err := legacyReferenceActionError(action); err != nil {
 		return err
+	}
+	// Media-only actions (upscalers) run from --reference alone; the backend still requires a
+	// prompt for every other action.
+	if prompt == "" && strings.TrimSpace(generateReference) == "" {
+		return fmt.Errorf("a prompt is required (media-only actions such as upscalers take --reference instead)")
 	}
 	if !generateQuote && strings.TrimSpace(generateOut) == "" {
 		return fmt.Errorf("--out <path> is required (or use --quote to just see the price)")
@@ -234,9 +241,6 @@ func parseGenerateInvocation(args []string) (string, string, error) {
 	prompt := strings.TrimSpace(strings.Join(args[1:], " "))
 	if action == "" {
 		return "", "", fmt.Errorf("an AI action is required")
-	}
-	if prompt == "" {
-		return "", "", fmt.Errorf("a prompt is required")
 	}
 
 	return action, prompt, nil
