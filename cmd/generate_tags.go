@@ -17,6 +17,7 @@ var generateActionsVerbose bool
 var generateDescribeJSON bool
 
 type generationActionRow struct {
+	PromptOptional       bool          `json:"prompt_optional"`
 	Action               string        `json:"action"`
 	Name                 string        `json:"name,omitempty"`
 	Description          string        `json:"description,omitempty"`
