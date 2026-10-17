@@ -88,6 +88,7 @@ func runSignup(cmd *cobra.Command, args []string) error {
 	profile.AccessToken = tokens.AccessToken
 	profile.Client = tokens.Client
 	profile.UID = tokens.UID
+	clearOAuthCredentials(&profile)
 	profile.Expiry = tokens.Expiry
 	profile.AppHost = normalizeAppHost(bootstrap.Host)
 	profile.CurrentUserID = bootstrap.CurrentUser.ID

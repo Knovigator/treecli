@@ -35,6 +35,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&cmd.BackendURLOverride, "backend-url", "", "Override the backend API base URL for this invocation")
 	rootCmd.PersistentFlags().StringVar(&cmd.AppHostOverride, "app-host", "", "Override the app host for generated links for this invocation")
 	rootCmd.AddCommand(cmd.LoginCmd)
+	rootCmd.AddCommand(cmd.ConnectCmd)
 	rootCmd.AddCommand(cmd.SignupCmd)
 	rootCmd.AddCommand(cmd.GetCmd)
 	rootCmd.AddCommand(cmd.ActionCmd)

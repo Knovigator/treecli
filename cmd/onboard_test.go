@@ -343,7 +343,7 @@ func TestBuildOnboardNextStepsDropsCompletedItems(t *testing.T) {
 	if len(steps) != 3 {
 		t.Fatalf("expected login, refresh, and skills steps, got %v", steps)
 	}
-	if !strings.Contains(steps[0].Command, "treecli login --profile prod") {
+	if !strings.Contains(steps[0].Command, "treecli connect --profile prod") {
 		t.Fatalf("expected login step first, got %q", steps[0].Command)
 	}
 	if !strings.Contains(steps[1].Command, "onboard agents --write") {

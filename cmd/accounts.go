@@ -144,7 +144,7 @@ func resolveNamedAccount(environment, account string) (profileConfig, error) {
 		return profileConfig{}, fmt.Errorf("environment %q has no server; use --env %s --backend-url URL --account %s login", environment, environment, account)
 	}
 	key := "accounts." + environment + "." + account + "."
-	stored := profileConfig{BackendURL: viper.GetString(key + "backend_url"), AccessToken: viper.GetString(key + "access_token"), Client: viper.GetString(key + "client"), UID: viper.GetString(key + "uid"), Expiry: viper.GetString(key + "expiry"), CurrentUserID: viper.GetString(key + "current_user_id"), ActiveSpaceID: viper.GetString(key + "active_space_id")}
+	stored := profileConfig{BackendURL: viper.GetString(key + "backend_url"), AccessToken: viper.GetString(key + "access_token"), Client: viper.GetString(key + "client"), UID: viper.GetString(key + "uid"), Expiry: viper.GetString(key + "expiry"), CurrentUserID: viper.GetString(key + "current_user_id"), ActiveSpaceID: viper.GetString(key + "active_space_id"), RefreshToken: viper.GetString(key + "refresh_token"), OAuthTokenURL: viper.GetString(key + "oauth_token_url"), OAuthResource: viper.GetString(key + "oauth_resource")}
 	if !viper.IsSet(key + "backend_url") {
 		legacyName := account
 		if account == "default" {

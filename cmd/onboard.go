@@ -559,14 +559,14 @@ func buildOnboardNextSteps(status onboardStatus) []onboardNextStep {
 		})
 	} else if !status.Profile.SignedIn {
 		steps = append(steps, onboardNextStep{
-			Description: fmt.Sprintf("Log in to the %q profile", status.Profile.Name),
-			Command:     fmt.Sprintf("treecli login --profile %s", status.Profile.Name),
+			Description: fmt.Sprintf("Connect the %q profile in the browser (sign in or sign up, optional card billing)", status.Profile.Name),
+			Command:     fmt.Sprintf("treecli connect --profile %s", status.Profile.Name),
 		})
 	}
 
 	if status.Profile.Environment != "" && len(steps) > 0 {
 		steps[0].Description = "Inspect or authenticate the selected environment and account"
-		steps[0].Command = fmt.Sprintf("treecli --env %s --account %s login", status.Profile.Environment, status.Profile.Account)
+		steps[0].Command = fmt.Sprintf("treecli --env %s --account %s connect", status.Profile.Environment, status.Profile.Account)
 	}
 
 	hasCurrentBlock := false

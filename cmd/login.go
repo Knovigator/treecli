@@ -56,6 +56,10 @@ type profileConfig struct {
 	Expiry        string `json:"expiry,omitempty"`
 	CurrentUserID string `json:"current_user_id,omitempty"`
 	ActiveSpaceID string `json:"active_space_id,omitempty"`
+	// Set by `treecli connect` (Client == api.OAuthClient); Expiry is then RFC 3339.
+	RefreshToken  string `json:"refresh_token,omitempty"`
+	OAuthTokenURL string `json:"oauth_token_url,omitempty"`
+	OAuthResource string `json:"oauth_resource,omitempty"`
 }
 
 type loginBootstrap struct {
@@ -146,6 +150,7 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	profile.Client = tokens.Client
 	profile.UID = tokens.UID
 	profile.Expiry = tokens.Expiry
+	clearOAuthCredentials(&profile)
 	profile.AppHost = normalizeAppHost(bootstrap.Host)
 	profile.CurrentUserID = bootstrap.CurrentUser.ID
 	profile.ActiveSpaceID = bootstrap.CurrentUser.SpaceID
@@ -364,6 +369,9 @@ func loadStoredProfile(profileName string) profileConfig {
 		Expiry:        strings.TrimSpace(viper.GetString(profileKeyPrefix + "expiry")),
 		CurrentUserID: strings.TrimSpace(viper.GetString(profileKeyPrefix + "current_user_id")),
 		ActiveSpaceID: strings.TrimSpace(viper.GetString(profileKeyPrefix + "active_space_id")),
+		RefreshToken:  strings.TrimSpace(viper.GetString(profileKeyPrefix + "refresh_token")),
+		OAuthTokenURL: strings.TrimSpace(viper.GetString(profileKeyPrefix + "oauth_token_url")),
+		OAuthResource: strings.TrimSpace(viper.GetString(profileKeyPrefix + "oauth_resource")),
 	}
 }
 
@@ -394,6 +402,15 @@ func mergeProfile(base profileConfig, override profileConfig) profileConfig {
 	}
 	if override.ActiveSpaceID != "" {
 		base.ActiveSpaceID = override.ActiveSpaceID
+	}
+	if override.RefreshToken != "" {
+		base.RefreshToken = override.RefreshToken
+	}
+	if override.OAuthTokenURL != "" {
+		base.OAuthTokenURL = override.OAuthTokenURL
+	}
+	if override.OAuthResource != "" {
+		base.OAuthResource = override.OAuthResource
 	}
 
 	return base
@@ -429,6 +446,11 @@ func requireAuthenticatedProfile() (profileConfig, error) {
 	}
 	if err := validateCredentialTransport(profile.BackendURL); err != nil {
 		return profileConfig{}, err
+	}
+	if profile.Client == api.OAuthClient {
+		if err := prepareOAuthProfile(&profile); err != nil {
+			return profileConfig{}, err
+		}
 	}
 
 	return profile, nil
@@ -610,9 +632,8 @@ func saveProfile(profile profileConfig, setActive bool) error {
 	viper.SetConfigFile(configPath)
 	viper.SetConfigType("toml")
 
-	profileKeyPrefix := fmt.Sprintf("profiles.%s.", normalizeProfileName(profile.Name))
+	profileKeyPrefix := storedProfileKeyPrefix(profile)
 	if profile.Environment != "" {
-		profileKeyPrefix = "accounts." + profile.Environment + "." + profile.Account + "."
 		viper.Set("environments."+profile.Environment+".backend_url", profile.BackendURL)
 		viper.Set("environments."+profile.Environment+".app_host", profile.AppHost)
 		if setActive {
@@ -627,11 +648,19 @@ func saveProfile(profile profileConfig, setActive bool) error {
 	viper.Set(profileKeyPrefix+"expiry", profile.Expiry)
 	viper.Set(profileKeyPrefix+"current_user_id", profile.CurrentUserID)
 	viper.Set(profileKeyPrefix+"active_space_id", profile.ActiveSpaceID)
+	viper.Set(profileKeyPrefix+"refresh_token", profile.RefreshToken)
+	viper.Set(profileKeyPrefix+"oauth_token_url", profile.OAuthTokenURL)
+	viper.Set(profileKeyPrefix+"oauth_resource", profile.OAuthResource)
 
 	if setActive && profile.Environment == "" {
 		viper.Set("active_profile", normalizeProfileName(profile.Name))
 	}
 
+	return writeConfigFile(configPath)
+}
+
+// writeConfigFile persists viper's current settings with owner-only permissions.
+func writeConfigFile(configPath string) error {
 	statErr := error(nil)
 	if _, statErr = os.Stat(configPath); statErr == nil {
 		if err := viper.WriteConfig(); err != nil {
@@ -648,6 +677,14 @@ func saveProfile(profile profileConfig, setActive bool) error {
 		return err
 	}
 	return os.Chmod(configPath, 0600)
+}
+
+// storedProfileKeyPrefix is where a profile's credentials live in the config.
+func storedProfileKeyPrefix(profile profileConfig) string {
+	if profile.Environment != "" {
+		return "accounts." + profile.Environment + "." + profile.Account + "."
+	}
+	return fmt.Sprintf("profiles.%s.", normalizeProfileName(profile.Name))
 }
 
 func configFilePath() (string, error) {

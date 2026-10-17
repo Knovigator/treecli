@@ -15,6 +15,7 @@ type identityResult struct {
 	BackendURL    string `json:"backend_url"`
 	Username      string `json:"username"`
 	UserID        string `json:"user_id"`
+	SpaceID       string `json:"-"`
 }
 
 var WhoamiCmd = newWhoamiCommand()
@@ -59,6 +60,7 @@ func fetchIdentity(profile profileConfig) (identityResult, error) {
 	var result struct {
 		ID       string `json:"id"`
 		Username string `json:"username"`
+		SpaceID  string `json:"space_id"`
 	}
 	if err := sharedCall(profile, "treechat_account", map[string]interface{}{}, &result); err != nil {
 		return identityResult{}, fmt.Errorf("could not verify identity: %w", err)
@@ -66,7 +68,7 @@ func fetchIdentity(profile profileConfig) (identityResult, error) {
 	if strings.TrimSpace(result.ID) == "" || strings.TrimSpace(result.Username) == "" {
 		return identityResult{}, fmt.Errorf("could not verify identity: server did not return an authenticated user ID and username; log in again if your session expired")
 	}
-	identity := identityResult{Environment: profile.Environment, Account: profile.Account, BackendURL: profile.BackendURL, Username: result.Username, UserID: result.ID}
+	identity := identityResult{Environment: profile.Environment, Account: profile.Account, BackendURL: profile.BackendURL, Username: result.Username, UserID: result.ID, SpaceID: result.SpaceID}
 	if profile.Environment == "" {
 		identity.LegacyProfile = profile.Name
 	}

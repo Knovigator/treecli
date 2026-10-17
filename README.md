@@ -74,7 +74,24 @@ packaged agent skills. Design details are in
 
 ## Authentication
 
-Create a Treechat account interactively:
+The easiest way in, for people and for agents setting up their person:
+
+```sh
+treecli connect
+```
+
+treecli prints a short code and opens a Treechat page. There the person signs in
+or creates an account (email, Google or X), checks that the code matches,
+allows access, and can add a card for pay-as-you-go AI generation. treecli waits
+for the approval, then saves an OAuth connection that renews itself; nobody
+types a password into the terminal. Use `--no-browser` to only print the link,
+and `--billing-wait 0` to skip waiting for card setup.
+
+Connected accounts call the backend's `/mcp` endpoint with a short-lived bearer
+token and refresh it automatically. A connection that goes unused for 30 days
+expires; run `treecli connect` again then, or if the connection is revoked.
+
+Or create a Treechat account interactively:
 
 ```sh
 treecli signup
