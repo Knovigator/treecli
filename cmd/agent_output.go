@@ -8,7 +8,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/Knovigator/treecli/api"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -43,7 +42,12 @@ func agentOutput() bool {
 // that have it when output is piped, then applies account selection.
 func PrepareCommand(command *cobra.Command, args []string) error {
 	if agentOutput() {
-		if flag := command.Flags().Lookup("json"); flag != nil && !flag.Changed && flag.Value.Type() == "bool" {
+		// An explicit --output choice (e.g. ascii) wins over the automatic JSON.
+		explicitFormat := false
+		if format := command.Flags().Lookup("output"); format != nil && format.Changed {
+			explicitFormat = true
+		}
+		if flag := command.Flags().Lookup("json"); flag != nil && !flag.Changed && !explicitFormat && flag.Value.Type() == "bool" {
 			_ = command.Flags().Set("json", "true")
 		}
 	}
@@ -55,9 +59,9 @@ func ExitCode(err error) int {
 	if err == nil {
 		return ExitOK
 	}
-	var httpErr *api.HTTPError
-	if errors.As(err, &httpErr) {
-		switch httpErr.StatusCode {
+	var statusErr interface{ HTTPStatus() int }
+	if errors.As(err, &statusErr) {
+		switch statusErr.HTTPStatus() {
 		case 401, 403:
 			return ExitNotSignedIn
 		case 402:
@@ -78,8 +82,6 @@ func ExitCode(err error) int {
 		return false
 	}
 	switch {
-	case contains("unknown command", "unknown flag", "unknown shorthand flag", "required flag", "accepts ", "requires at least", "invalid argument", "flag needs an argument"):
-		return ExitUsage
 	case contains("daily_limit_reached", "price_cap_exceeded", "price cap", "spending cap", "spending limit", "insufficient", "billing is not", "payment required"):
 		return ExitSpending
 	case contains("rate_limit_exceeded", "rate limit", "too many requests", "try again later"):
@@ -88,6 +90,13 @@ func ExitCode(err error) int {
 		return ExitNotSignedIn
 	case contains("not_found", "not found"):
 		return ExitNotFound
+	// Checked last so server-side auth, spending and lookup failures keep their
+	// own codes: these are the CLI's argument and flag validation messages.
+	case contains("unknown command", "unknown flag", "unknown shorthand flag", "required flag", "accepts ",
+		"requires at least", "invalid argument", "flag needs an argument", "is required", "must be ",
+		"cannot be ", "invalid --", "invalid output", "invalid account", "invalid payment", "specify ",
+		"requires --", "invalid_arguments"):
+		return ExitUsage
 	}
 	return ExitError
 }
@@ -100,9 +109,10 @@ func PrintError(writer io.Writer, err error) {
 		encoder := json.NewEncoder(writer)
 		encoder.SetIndent("", "  ")
 		if encoder.Encode(writeErrorPayload{
-			Status:  "error",
-			WriteID: structuredErr.WriteID,
-			Error:   structuredErr.Message,
+			Status:   "error",
+			WriteID:  structuredErr.WriteID,
+			Error:    structuredErr.Message,
+			ExitCode: ExitCode(err),
 		}) == nil {
 			return
 		}

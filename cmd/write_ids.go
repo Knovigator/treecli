@@ -21,9 +21,10 @@ type structuredWriteError struct {
 }
 
 type writeErrorPayload struct {
-	Status  string `json:"status"`
-	WriteID string `json:"write_id"`
-	Error   string `json:"error"`
+	Status   string `json:"status"`
+	WriteID  string `json:"write_id"`
+	Error    string `json:"error"`
+	ExitCode int    `json:"exit_code"`
 }
 
 func (e *writeOutcomeError) Error() string {
