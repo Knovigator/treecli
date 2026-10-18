@@ -24,10 +24,12 @@ type fakeAuthServer struct {
 	refreshes   int
 	validBearer string
 	grantTypes  []string
+	// Lifetime of refreshed tokens; under oauthRefreshSkew they are never fresh.
+	refreshExpiresIn int
 }
 
 func newFakeAuthServer(t *testing.T) *fakeAuthServer {
-	f := &fakeAuthServer{validBearer: "access-1"}
+	f := &fakeAuthServer{validBearer: "access-1", refreshExpiresIn: 900}
 	f.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
 		defer f.mu.Unlock()
@@ -57,7 +59,7 @@ func newFakeAuthServer(t *testing.T) *fakeAuthServer {
 			case "refresh_token":
 				f.refreshes++
 				f.validBearer = fmt.Sprintf("access-r%d", f.refreshes)
-				fmt.Fprintf(w, `{"access_token":%q,"refresh_token":"refresh-r%d","expires_in":900}`, f.validBearer, f.refreshes)
+				fmt.Fprintf(w, `{"access_token":%q,"refresh_token":"refresh-r%d","expires_in":%d}`, f.validBearer, f.refreshes, f.refreshExpiresIn)
 			default:
 				w.WriteHeader(http.StatusBadRequest)
 			}
@@ -333,5 +335,65 @@ func TestRefreshOfAnAccountInheritingALegacyLoginSavesToTheLegacyProfile(t *test
 	second, err := requireAuthenticatedProfile()
 	if err != nil || second.AccessToken != "access-r2" {
 		t.Fatalf("second refresh should use the rotated token: %q, %v", second.AccessToken, err)
+	}
+}
+
+func TestALongCommandRenewsAgainOnceTheReusedTokenExpires(t *testing.T) {
+	server := newFakeAuthServer(t)
+	server.refreshExpiresIn = 30 // shorter than the refresh skew: never fresh
+	useTempConfig(t, server.URL)
+	profile := profileConfig{
+		Name: "prod", BackendURL: server.URL, AccessToken: "access-0", Client: api.OAuthClient, UID: "user-1",
+		Expiry: time.Now().Add(10 * time.Minute).UTC().Format(time.RFC3339), RefreshToken: "refresh-0",
+		OAuthTokenURL: server.URL + "/mcp/oauth/token", OAuthResource: server.URL + "/mcp",
+	}
+	if err := saveProfile(profile, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := prepareOAuthProfile(&profile); err != nil {
+		t.Fatal(err)
+	}
+
+	// Each call starts from the command's original token, as SharedOperation does.
+	for round := 1; round <= 2; round++ {
+		server.mu.Lock()
+		server.validBearer = fmt.Sprintf("rejects-everything-%d", round)
+		server.mu.Unlock()
+		if _, err := fetchIdentity(profile); err != nil {
+			t.Fatalf("round %d: %v", round, err)
+		}
+	}
+	if server.refreshes != 2 {
+		t.Fatalf("expected a second renewal after the first replacement expired, got %d", server.refreshes)
+	}
+}
+
+func TestSavingAConnectionKeepsAnotherAccountsNewerTokens(t *testing.T) {
+	useTempConfig(t, "https://example.test")
+	if err := saveProfile(profileConfig{Name: "alt", BackendURL: "https://example.test", RefreshToken: "alt-old"}, false); err != nil {
+		t.Fatal(err)
+	}
+	other := viper.New()
+	other.SetConfigFile(viper.ConfigFileUsed())
+	other.SetConfigType("toml")
+	if err := other.ReadInConfig(); err != nil {
+		t.Fatal(err)
+	}
+	other.Set("profiles.alt.refresh_token", "alt-new")
+	if err := other.WriteConfig(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := saveProfile(profileConfig{Name: "prod", BackendURL: "https://example.test", AccessToken: "a", Client: api.OAuthClient, UID: "u"}, true); err != nil {
+		t.Fatal(err)
+	}
+	onDisk := viper.New()
+	onDisk.SetConfigFile(viper.ConfigFileUsed())
+	onDisk.SetConfigType("toml")
+	if err := onDisk.ReadInConfig(); err != nil {
+		t.Fatal(err)
+	}
+	if got := onDisk.GetString("profiles.alt.refresh_token"); got != "alt-new" {
+		t.Fatalf("saving prod restored alt's stale token: %q", got)
 	}
 }

@@ -3,6 +3,7 @@ package cmd
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -629,60 +630,77 @@ func saveProfile(profile profileConfig, setActive bool) error {
 	if err != nil {
 		return err
 	}
-
-	err = os.MkdirAll(filepath.Dir(configPath), 0700)
-	if err != nil {
-		return err
-	}
-
 	viper.SetConfigFile(configPath)
 	viper.SetConfigType("toml")
 
+	fields := map[string]interface{}{}
 	profileKeyPrefix := storedProfileKeyPrefix(profile)
 	if profile.Environment != "" {
-		viper.Set("environments."+profile.Environment+".backend_url", profile.BackendURL)
-		viper.Set("environments."+profile.Environment+".app_host", profile.AppHost)
+		fields["environments."+profile.Environment+".backend_url"] = profile.BackendURL
+		fields["environments."+profile.Environment+".app_host"] = profile.AppHost
 		if setActive {
-			viper.Set("environments."+profile.Environment+".active_account", profile.Account)
+			fields["environments."+profile.Environment+".active_account"] = profile.Account
 		}
 	}
-	viper.Set(profileKeyPrefix+"backend_url", normalizeBaseURL(profile.BackendURL))
-	viper.Set(profileKeyPrefix+"app_host", normalizeAppHost(profile.AppHost))
-	viper.Set(profileKeyPrefix+"access_token", profile.AccessToken)
-	viper.Set(profileKeyPrefix+"client", profile.Client)
-	viper.Set(profileKeyPrefix+"uid", profile.UID)
-	viper.Set(profileKeyPrefix+"expiry", profile.Expiry)
-	viper.Set(profileKeyPrefix+"current_user_id", profile.CurrentUserID)
-	viper.Set(profileKeyPrefix+"active_space_id", profile.ActiveSpaceID)
-	viper.Set(profileKeyPrefix+"refresh_token", profile.RefreshToken)
-	viper.Set(profileKeyPrefix+"oauth_token_url", profile.OAuthTokenURL)
-	viper.Set(profileKeyPrefix+"oauth_resource", profile.OAuthResource)
+	fields[profileKeyPrefix+"backend_url"] = normalizeBaseURL(profile.BackendURL)
+	fields[profileKeyPrefix+"app_host"] = normalizeAppHost(profile.AppHost)
+	fields[profileKeyPrefix+"access_token"] = profile.AccessToken
+	fields[profileKeyPrefix+"client"] = profile.Client
+	fields[profileKeyPrefix+"uid"] = profile.UID
+	fields[profileKeyPrefix+"expiry"] = profile.Expiry
+	fields[profileKeyPrefix+"current_user_id"] = profile.CurrentUserID
+	fields[profileKeyPrefix+"active_space_id"] = profile.ActiveSpaceID
+	fields[profileKeyPrefix+"refresh_token"] = profile.RefreshToken
+	fields[profileKeyPrefix+"oauth_token_url"] = profile.OAuthTokenURL
+	fields[profileKeyPrefix+"oauth_resource"] = profile.OAuthResource
 
 	if setActive && profile.Environment == "" {
-		viper.Set("active_profile", normalizeProfileName(profile.Name))
+		fields["active_profile"] = normalizeProfileName(profile.Name)
 	}
 
-	return writeConfigFile(configPath)
+	return withConfigLock(func() error { return saveConfigFields(fields) })
 }
 
-// writeConfigFile persists viper's current settings with owner-only permissions.
-func writeConfigFile(configPath string) error {
-	statErr := error(nil)
-	if _, statErr = os.Stat(configPath); statErr == nil {
-		if err := viper.WriteConfig(); err != nil {
-			return err
-		}
-		return os.Chmod(configPath, 0600)
-	}
-
-	if !os.IsNotExist(statErr) {
-		return statErr
-	}
-
-	if err := viper.SafeWriteConfigAs(configPath); err != nil {
+// saveConfigFields sets keys in the config file as it is on disk now, not in
+// this process's startup copy (which may hold tokens another treecli process
+// has since rotated), mirrors them into this process, and replaces the file
+// atomically with owner-only permissions. Callers hold withConfigLock.
+func saveConfigFields(fields map[string]interface{}) error {
+	configPath, err := configFilePath()
+	if err != nil {
 		return err
 	}
-	return os.Chmod(configPath, 0600)
+	onDisk := viper.New()
+	onDisk.SetConfigFile(configPath)
+	onDisk.SetConfigType("toml")
+	if err := onDisk.ReadInConfig(); err != nil {
+		var notFound viper.ConfigFileNotFoundError
+		if !os.IsNotExist(err) && !errors.As(err, &notFound) {
+			return err
+		}
+	}
+	for key, value := range fields {
+		onDisk.Set(key, value)
+		viper.Set(key, value)
+	}
+
+	// Write through a symlinked config (e.g. dotfiles) instead of replacing the link.
+	if resolved, err := filepath.EvalSymlinks(configPath); err == nil {
+		configPath = resolved
+	}
+	if err := os.MkdirAll(filepath.Dir(configPath), 0700); err != nil {
+		return err
+	}
+	temp := filepath.Join(filepath.Dir(configPath), fmt.Sprintf(".config-%d.tmp.toml", os.Getpid()))
+	if err := onDisk.WriteConfigAs(temp); err != nil {
+		os.Remove(temp)
+		return err
+	}
+	if err := os.Chmod(temp, 0600); err != nil {
+		os.Remove(temp)
+		return err
+	}
+	return os.Rename(temp, configPath)
 }
 
 // storedProfileKeyPrefix is where a profile's credentials live in the config.

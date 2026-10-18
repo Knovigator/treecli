@@ -249,8 +249,9 @@ func clearOAuthCredentials(profile *profileConfig) {
 func prepareOAuthProfile(profile *profileConfig) error {
 	current := *profile
 	api.SetOAuthRefresher(func(stale string) (string, error) {
-		// Another call in this process may already have renewed it.
-		if stale != current.AccessToken {
+		// Another call in this process may already have renewed it; reuse that
+		// only while it is still fresh (long commands can outlive it too).
+		if stale != current.AccessToken && oauthTokenFresh(current) {
 			return current.AccessToken, nil
 		}
 		if err := renewOAuthProfile(&current, stale); err != nil {
@@ -339,49 +340,14 @@ func refreshOAuthProfile(profile *profileConfig) error {
 
 // saveOAuthTokens writes only the renewed token fields, so per-command overrides
 // such as --backend-url never become saved settings.
-// It edits the file as it is now (a separate reader), not this process's startup
-// copy, so another account's newer tokens are never overwritten, and replaces it
-// atomically. Callers hold withConfigLock.
+// Callers hold withConfigLock.
 func saveOAuthTokens(profile profileConfig) error {
-	configPath, err := configFilePath()
-	if err != nil {
-		return err
-	}
 	prefix := credentialKeyPrefix(profile)
-	fields := map[string]string{
+	return saveConfigFields(map[string]interface{}{
 		prefix + "access_token":  profile.AccessToken,
 		prefix + "refresh_token": profile.RefreshToken,
 		prefix + "expiry":        profile.Expiry,
-	}
-
-	onDisk := viper.New()
-	onDisk.SetConfigFile(configPath)
-	onDisk.SetConfigType("toml")
-	if err := onDisk.ReadInConfig(); err != nil && !os.IsNotExist(err) {
-		return err
-	}
-	for key, value := range fields {
-		onDisk.Set(key, value)
-		viper.Set(key, value) // keep this process's view current
-	}
-
-	// Write through a symlinked config (e.g. dotfiles) instead of replacing the link.
-	if resolved, err := filepath.EvalSymlinks(configPath); err == nil {
-		configPath = resolved
-	}
-	if err := os.MkdirAll(filepath.Dir(configPath), 0700); err != nil {
-		return err
-	}
-	temp := filepath.Join(filepath.Dir(configPath), fmt.Sprintf(".config-%d.tmp.toml", os.Getpid()))
-	if err := onDisk.WriteConfigAs(temp); err != nil {
-		os.Remove(temp)
-		return err
-	}
-	if err := os.Chmod(temp, 0600); err != nil {
-		os.Remove(temp)
-		return err
-	}
-	return os.Rename(temp, configPath)
+	})
 }
 
 const configLockStale = 30 * time.Second
