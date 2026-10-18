@@ -20,22 +20,27 @@ func TestBackendCatalogAndCallSharedByStdio(t *testing.T) {
 			t.Error("wrong user context")
 		}
 		w.Header().Set("Content-Type", "application/json")
-		switch r.URL.Path {
-		case "/api/v1/treecli/tools":
-			if r.Method != "GET" {
-				t.Error("method")
-			}
-			fmt.Fprint(w, `{"tools":[{"name":"backend_feature","inputSchema":{"type":"object","properties":{"setting":{"type":"string"}}}}]}`)
-		case "/api/v1/treecli/call":
+		// Bearer (OAuth) clients reach the backend only through its /mcp endpoint.
+		if r.URL.Path != "/mcp" || r.Method != "POST" {
+			t.Error("unexpected path")
+			return
+		}
+		var body struct {
+			Method string                 `json:"method"`
+			Params map[string]interface{} `json:"params"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		switch body.Method {
+		case "tools/list":
+			fmt.Fprint(w, `{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"backend_feature","inputSchema":{"type":"object","properties":{"setting":{"type":"string"}}}}]}}`)
+		case "tools/call":
 			calls++
-			var body map[string]interface{}
-			json.NewDecoder(r.Body).Decode(&body)
-			if body["name"] != "backend_feature" || body["arguments"].(map[string]interface{})["setting"] != "value" {
+			if body.Params["name"] != "backend_feature" || body.Params["arguments"].(map[string]interface{})["setting"] != "value" {
 				t.Error("arguments changed")
 			}
-			fmt.Fprint(w, `{"content":[{"type":"text","text":"done"}],"structuredContent":{"ok":true}}`)
+			fmt.Fprint(w, `{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"done"}],"structuredContent":{"ok":true}}}`)
 		default:
-			t.Error("unexpected path")
+			t.Error("unexpected method")
 		}
 	}))
 	defer server.Close()

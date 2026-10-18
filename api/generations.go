@@ -64,7 +64,9 @@ func DownloadMedia(mediaURL, backendURL, accessToken, client, uid string) ([]byt
 		return nil, fmt.Errorf("download failed: empty media URL")
 	}
 
-	if shouldSendTreechatAuth(canonicalURL, backendURL) {
+	// OAuth (connect) bearers work only on /mcp, and the media URLs it returns are
+	// signed, so those downloads carry no credential (none that could expire).
+	if client != OAuthClient && shouldSendTreechatAuth(canonicalURL, backendURL) {
 		resp, err := newRequestWithTimeout(accessToken, client, uid, 60*time.Second).Get(canonicalURL)
 		if err != nil {
 			return nil, fmt.Errorf("error downloading media: %w", err)

@@ -19,6 +19,9 @@ type ToolResult struct {
 
 func (c *Client) ListTools(ctx context.Context) (ToolList, error) {
 	var out ToolList
+	if c.bearer != "" {
+		return out, c.mcpCall(ctx, "tools/list", nil, &out)
+	}
 	err := c.DoJSON(ctx, "GET", "/api/v1/treecli/tools", nil, nil, &out)
 	return out, err
 }
@@ -30,6 +33,9 @@ func (c *Client) CallTool(ctx context.Context, name string, args map[string]inte
 		args = map[string]interface{}{}
 	}
 	var out ToolResult
+	if c.bearer != "" {
+		return out, c.mcpCall(ctx, "tools/call", map[string]interface{}{"name": name, "arguments": args}, &out)
+	}
 	err := c.DoJSON(ctx, "POST", "/api/v1/treecli/call", nil, map[string]interface{}{"name": name, "arguments": args}, &out)
 	return out, err
 }

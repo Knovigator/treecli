@@ -3,6 +3,7 @@ package cmd
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -56,6 +57,13 @@ type profileConfig struct {
 	Expiry        string `json:"expiry,omitempty"`
 	CurrentUserID string `json:"current_user_id,omitempty"`
 	ActiveSpaceID string `json:"active_space_id,omitempty"`
+	// Set by `treecli connect` (Client == api.OAuthClient); Expiry is then RFC 3339.
+	RefreshToken  string `json:"refresh_token,omitempty"`
+	OAuthTokenURL string `json:"oauth_token_url,omitempty"`
+	OAuthResource string `json:"oauth_resource,omitempty"`
+	// Where the saved credentials were read from, when that differs from the
+	// profile's own section (an account inheriting a legacy profile's login).
+	credentialKeyPrefix string
 }
 
 type loginBootstrap struct {
@@ -146,6 +154,7 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	profile.Client = tokens.Client
 	profile.UID = tokens.UID
 	profile.Expiry = tokens.Expiry
+	clearOAuthCredentials(&profile)
 	profile.AppHost = normalizeAppHost(bootstrap.Host)
 	profile.CurrentUserID = bootstrap.CurrentUser.ID
 	profile.ActiveSpaceID = bootstrap.CurrentUser.SpaceID
@@ -364,6 +373,9 @@ func loadStoredProfile(profileName string) profileConfig {
 		Expiry:        strings.TrimSpace(viper.GetString(profileKeyPrefix + "expiry")),
 		CurrentUserID: strings.TrimSpace(viper.GetString(profileKeyPrefix + "current_user_id")),
 		ActiveSpaceID: strings.TrimSpace(viper.GetString(profileKeyPrefix + "active_space_id")),
+		RefreshToken:  strings.TrimSpace(viper.GetString(profileKeyPrefix + "refresh_token")),
+		OAuthTokenURL: strings.TrimSpace(viper.GetString(profileKeyPrefix + "oauth_token_url")),
+		OAuthResource: strings.TrimSpace(viper.GetString(profileKeyPrefix + "oauth_resource")),
 	}
 }
 
@@ -394,6 +406,18 @@ func mergeProfile(base profileConfig, override profileConfig) profileConfig {
 	}
 	if override.ActiveSpaceID != "" {
 		base.ActiveSpaceID = override.ActiveSpaceID
+	}
+	if override.RefreshToken != "" {
+		base.RefreshToken = override.RefreshToken
+	}
+	if override.OAuthTokenURL != "" {
+		base.OAuthTokenURL = override.OAuthTokenURL
+	}
+	if override.OAuthResource != "" {
+		base.OAuthResource = override.OAuthResource
+	}
+	if override.credentialKeyPrefix != "" {
+		base.credentialKeyPrefix = override.credentialKeyPrefix
 	}
 
 	return base
@@ -430,6 +454,11 @@ func requireAuthenticatedProfile() (profileConfig, error) {
 	if err := validateCredentialTransport(profile.BackendURL); err != nil {
 		return profileConfig{}, err
 	}
+	if profile.Client == api.OAuthClient {
+		if err := prepareOAuthProfile(&profile); err != nil {
+			return profileConfig{}, err
+		}
+	}
 
 	return profile, nil
 }
@@ -440,7 +469,7 @@ func setActiveProfile(profileName string) error {
 		return err
 	}
 
-	return saveProfile(profile, true)
+	return selectProfile(profile)
 }
 
 func resolveEmail() (string, error) {
@@ -596,58 +625,159 @@ func fetchBootstrap(backendURL string, tokens authTokens) (*loginBootstrap, erro
 	return &bootstrap, nil
 }
 
+// saveProfile saves new credentials (login, signup, connect) for a profile.
 func saveProfile(profile profileConfig, setActive bool) error {
+	return saveProfileLocked(profile, setActive, false)
+}
+
+// selectProfile makes an already-saved profile active. It re-reads the saved
+// credentials under the lock first, so a refresh token another treecli just
+// rotated is never written back with the stale value this process resolved.
+func selectProfile(profile profileConfig) error {
+	return saveProfileLocked(profile, true, true)
+}
+
+func saveProfileLocked(profile profileConfig, setActive, reloadCredentials bool) error {
 	configPath, err := configFilePath()
 	if err != nil {
 		return err
 	}
-
-	err = os.MkdirAll(filepath.Dir(configPath), 0700)
-	if err != nil {
-		return err
-	}
-
 	viper.SetConfigFile(configPath)
 	viper.SetConfigType("toml")
 
-	profileKeyPrefix := fmt.Sprintf("profiles.%s.", normalizeProfileName(profile.Name))
+	return withConfigLock(func() error {
+		if reloadCredentials {
+			if err := reloadSavedCredentials(&profile, configPath); err != nil {
+				return err
+			}
+		}
+		return saveConfigFields(profileFields(profile, setActive))
+	})
+}
+
+func reloadSavedCredentials(profile *profileConfig, configPath string) error {
+	saved := viper.New()
+	saved.SetConfigFile(configPath)
+	saved.SetConfigType("toml")
+	prefix := credentialKeyPrefix(*profile)
+	if saved.ReadInConfig() != nil || !saved.IsSet(prefix+"client") {
+		return nil
+	}
+	if strings.TrimSpace(saved.GetString(prefix+"client")) == "" {
+		// An inherited login another `account use` already moved: read it from
+		// this account's own section instead of the emptied source.
+		own := storedProfileKeyPrefix(*profile)
+		if own == prefix || strings.TrimSpace(saved.GetString(own+"client")) == "" {
+			return fmt.Errorf("this account has no saved login anymore; log in or connect again")
+		}
+		prefix, profile.credentialKeyPrefix = own, ""
+	}
+	get := func(key string) string { return strings.TrimSpace(saved.GetString(prefix + key)) }
+	// Credentials saved for another server must never be paired with this one.
+	if backend := get("backend_url"); backend != "" && normalizeBaseURL(backend) != normalizeBaseURL(profile.BackendURL) {
+		return fmt.Errorf("this account's login changed in another treecli; run the command again")
+	}
+	profile.AccessToken, profile.Client, profile.UID, profile.Expiry = get("access_token"), get("client"), get("uid"), get("expiry")
+	profile.RefreshToken, profile.OAuthTokenURL, profile.OAuthResource = get("refresh_token"), get("oauth_token_url"), get("oauth_resource")
+	return nil
+}
+
+func profileFields(profile profileConfig, setActive bool) map[string]interface{} {
+	fields := map[string]interface{}{}
+	profileKeyPrefix := storedProfileKeyPrefix(profile)
 	if profile.Environment != "" {
-		profileKeyPrefix = "accounts." + profile.Environment + "." + profile.Account + "."
-		viper.Set("environments."+profile.Environment+".backend_url", profile.BackendURL)
-		viper.Set("environments."+profile.Environment+".app_host", profile.AppHost)
+		fields["environments."+profile.Environment+".backend_url"] = profile.BackendURL
+		fields["environments."+profile.Environment+".app_host"] = profile.AppHost
 		if setActive {
-			viper.Set("environments."+profile.Environment+".active_account", profile.Account)
+			fields["environments."+profile.Environment+".active_account"] = profile.Account
 		}
 	}
-	viper.Set(profileKeyPrefix+"backend_url", normalizeBaseURL(profile.BackendURL))
-	viper.Set(profileKeyPrefix+"app_host", normalizeAppHost(profile.AppHost))
-	viper.Set(profileKeyPrefix+"access_token", profile.AccessToken)
-	viper.Set(profileKeyPrefix+"client", profile.Client)
-	viper.Set(profileKeyPrefix+"uid", profile.UID)
-	viper.Set(profileKeyPrefix+"expiry", profile.Expiry)
-	viper.Set(profileKeyPrefix+"current_user_id", profile.CurrentUserID)
-	viper.Set(profileKeyPrefix+"active_space_id", profile.ActiveSpaceID)
+	fields[profileKeyPrefix+"backend_url"] = normalizeBaseURL(profile.BackendURL)
+	fields[profileKeyPrefix+"app_host"] = normalizeAppHost(profile.AppHost)
+	fields[profileKeyPrefix+"access_token"] = profile.AccessToken
+	fields[profileKeyPrefix+"client"] = profile.Client
+	fields[profileKeyPrefix+"uid"] = profile.UID
+	fields[profileKeyPrefix+"expiry"] = profile.Expiry
+	fields[profileKeyPrefix+"current_user_id"] = profile.CurrentUserID
+	fields[profileKeyPrefix+"active_space_id"] = profile.ActiveSpaceID
+	fields[profileKeyPrefix+"refresh_token"] = profile.RefreshToken
+	fields[profileKeyPrefix+"oauth_token_url"] = profile.OAuthTokenURL
+	fields[profileKeyPrefix+"oauth_resource"] = profile.OAuthResource
 
 	if setActive && profile.Environment == "" {
-		viper.Set("active_profile", normalizeProfileName(profile.Name))
+		fields["active_profile"] = normalizeProfileName(profile.Name)
 	}
 
-	statErr := error(nil)
-	if _, statErr = os.Stat(configPath); statErr == nil {
-		if err := viper.WriteConfig(); err != nil {
-			return err
+	// An OAuth login inherited from another section moves here rather than being
+	// copied: refresh tokens rotate, so two copies would each break the other.
+	if source := profile.credentialKeyPrefix; profile.Client == api.OAuthClient && source != "" && source != profileKeyPrefix {
+		for _, key := range []string{"access_token", "refresh_token", "client", "expiry"} {
+			fields[source+key] = ""
 		}
-		return os.Chmod(configPath, 0600)
 	}
+	return fields
+}
 
-	if !os.IsNotExist(statErr) {
-		return statErr
-	}
-
-	if err := viper.SafeWriteConfigAs(configPath); err != nil {
+// saveConfigFields sets keys in the config file as it is on disk now, not in
+// this process's startup copy (which may hold tokens another treecli process
+// has since rotated), mirrors them into this process, and replaces the file
+// atomically with owner-only permissions. Callers hold withConfigLock.
+func saveConfigFields(fields map[string]interface{}) error {
+	configPath, err := configFilePath()
+	if err != nil {
 		return err
 	}
-	return os.Chmod(configPath, 0600)
+	onDisk := viper.New()
+	onDisk.SetConfigFile(configPath)
+	onDisk.SetConfigType("toml")
+	// The temp file holds credentials from the moment it exists.
+	onDisk.SetConfigPermissions(0600)
+	if err := onDisk.ReadInConfig(); err != nil {
+		var notFound viper.ConfigFileNotFoundError
+		if !os.IsNotExist(err) && !errors.As(err, &notFound) {
+			return err
+		}
+	}
+	for key, value := range fields {
+		onDisk.Set(key, value)
+		viper.Set(key, value)
+	}
+
+	// Write through a symlinked config (e.g. dotfiles) instead of replacing the link.
+	if resolved, err := filepath.EvalSymlinks(configPath); err == nil {
+		configPath = resolved
+	}
+	if err := os.MkdirAll(filepath.Dir(configPath), 0700); err != nil {
+		return err
+	}
+	temp := filepath.Join(filepath.Dir(configPath), fmt.Sprintf(".config-%d.tmp.toml", os.Getpid()))
+	os.Remove(temp) // an existing file would keep its old permissions
+	if err := onDisk.WriteConfigAs(temp); err != nil {
+		os.Remove(temp)
+		return err
+	}
+	if err := os.Chmod(temp, 0600); err != nil {
+		os.Remove(temp)
+		return err
+	}
+	return os.Rename(temp, configPath)
+}
+
+// storedProfileKeyPrefix is where a profile's credentials live in the config.
+func storedProfileKeyPrefix(profile profileConfig) string {
+	if profile.Environment != "" {
+		return "accounts." + profile.Environment + "." + profile.Account + "."
+	}
+	return fmt.Sprintf("profiles.%s.", normalizeProfileName(profile.Name))
+}
+
+// credentialKeyPrefix is where the credentials a profile was resolved with are
+// saved, so renewed tokens go back to the same place they are read from.
+func credentialKeyPrefix(profile profileConfig) string {
+	if profile.credentialKeyPrefix != "" {
+		return profile.credentialKeyPrefix
+	}
+	return storedProfileKeyPrefix(profile)
 }
 
 func configFilePath() (string, error) {
@@ -731,6 +861,9 @@ func redactProfile(profile profileConfig) profileConfig {
 	}
 	if strings.Contains(redactedProfile.UID, "@") {
 		redactedProfile.UID = profileRedactedValue
+	}
+	if redactedProfile.RefreshToken != "" {
+		redactedProfile.RefreshToken = profileRedactedValue
 	}
 
 	return redactedProfile

@@ -35,6 +35,9 @@ func NewOAuthClient(origin, bearer string) (*Client, error) {
 }
 
 func NewTokenClient(origin, accessToken, clientID, uid string) (*Client, error) {
+	if clientID == OAuthClient {
+		return NewOAuthClient(origin, accessToken)
+	}
 	c, err := newClient(origin)
 	if err != nil {
 		return nil, err
