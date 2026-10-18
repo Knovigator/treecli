@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -395,5 +396,76 @@ func TestSavingAConnectionKeepsAnotherAccountsNewerTokens(t *testing.T) {
 	}
 	if got := onDisk.GetString("profiles.alt.refresh_token"); got != "alt-new" {
 		t.Fatalf("saving prod restored alt's stale token: %q", got)
+	}
+}
+
+func TestRenewalNeverAdoptsTokensForAnotherServer(t *testing.T) {
+	server := newFakeAuthServer(t)
+	useTempConfig(t, server.URL)
+	expired := profileConfig{
+		Name: "prod", BackendURL: server.URL, AccessToken: "access-old", Client: api.OAuthClient, UID: "user-1",
+		Expiry: time.Now().Add(-time.Minute).UTC().Format(time.RFC3339), RefreshToken: "refresh-old",
+		OAuthTokenURL: server.URL + "/mcp/oauth/token", OAuthResource: server.URL + "/mcp",
+	}
+	if err := saveProfile(expired, true); err != nil {
+		t.Fatal(err)
+	}
+	// Another invocation reconnected this section to a different server.
+	other := viper.New()
+	other.SetConfigFile(viper.ConfigFileUsed())
+	other.SetConfigType("toml")
+	if err := other.ReadInConfig(); err != nil {
+		t.Fatal(err)
+	}
+	other.Set("profiles.prod.access_token", "other-server-token")
+	other.Set("profiles.prod.refresh_token", "other-server-refresh")
+	other.Set("profiles.prod.expiry", time.Now().Add(10*time.Minute).UTC().Format(time.RFC3339))
+	other.Set("profiles.prod.oauth_token_url", "https://other.example.test/mcp/oauth/token")
+	if err := other.WriteConfig(); err != nil {
+		t.Fatal(err)
+	}
+
+	profile := expired
+	if err := renewOAuthProfile(&profile, "access-old"); err != nil {
+		t.Fatal(err)
+	}
+	if profile.AccessToken == "other-server-token" || server.refreshes != 1 {
+		t.Fatalf("adopted another server's token: %q after %d refreshes", profile.AccessToken, server.refreshes)
+	}
+}
+
+func TestAccountUseMovesAnInheritedOAuthLoginInsteadOfCopyingIt(t *testing.T) {
+	useTempConfig(t, "")
+	oldEnv, oldAccount, oldSelection := SelectedEnvironment, SelectedAccount, accountSelection
+	t.Cleanup(func() { SelectedEnvironment, SelectedAccount, accountSelection = oldEnv, oldAccount, oldSelection })
+	for _, name := range []string{"TREECLI_ENV", "TREECLI_ACCOUNT", "TREECLI_BACKEND_URL", "TREECTL_BACKEND_URL"} {
+		t.Setenv(name, "")
+	}
+	legacy := profileConfig{
+		Name: "qa", BackendURL: "https://qa.example.test", AccessToken: "access-1", Client: api.OAuthClient, UID: "user-1",
+		Expiry: time.Now().Add(10 * time.Minute).UTC().Format(time.RFC3339), RefreshToken: "refresh-1",
+		OAuthTokenURL: "https://qa.example.test/mcp/oauth/token", OAuthResource: "https://qa.example.test/mcp",
+	}
+	if err := saveProfile(legacy, false); err != nil {
+		t.Fatal(err)
+	}
+	viper.Set("environments.qa.backend_url", "https://qa.example.test")
+
+	accountSelection, SelectedEnvironment, SelectedAccount = true, "qa", "qa"
+	inherited, err := resolveAccount()
+	if err != nil || inherited.RefreshToken != "refresh-1" {
+		t.Fatalf("inherit: %#v %v", inherited, err)
+	}
+	if err := saveProfile(inherited, true); err != nil {
+		t.Fatal(err)
+	}
+	if got := viper.GetString("accounts.qa.qa.refresh_token"); got != "refresh-1" {
+		t.Fatalf("login not moved to the account: %q", got)
+	}
+	if got := viper.GetString("profiles.qa.refresh_token"); got != "" {
+		t.Fatalf("rotating refresh token left in two places: %q", got)
+	}
+	if info, err := os.Stat(viper.ConfigFileUsed()); err != nil || info.Mode().Perm() != 0600 {
+		t.Fatalf("config must stay private: %v %v", info.Mode().Perm(), err)
 	}
 }

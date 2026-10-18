@@ -305,6 +305,13 @@ func reloadSavedOAuthTokens(profile *profileConfig) {
 	if strings.TrimSpace(saved.GetString(prefix+"client")) != api.OAuthClient {
 		return
 	}
+	// Only adopt tokens for this same connection. If the section was reconnected
+	// to another server or account meanwhile, its tokens must never be sent here.
+	if strings.TrimSpace(saved.GetString(prefix+"oauth_token_url")) != profile.OAuthTokenURL ||
+		strings.TrimSpace(saved.GetString(prefix+"oauth_resource")) != profile.OAuthResource ||
+		strings.TrimSpace(saved.GetString(prefix+"uid")) != profile.UID {
+		return
+	}
 	if refresh := strings.TrimSpace(saved.GetString(prefix + "refresh_token")); refresh != "" {
 		profile.AccessToken = strings.TrimSpace(saved.GetString(prefix + "access_token"))
 		profile.RefreshToken = refresh

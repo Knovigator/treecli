@@ -658,6 +658,14 @@ func saveProfile(profile profileConfig, setActive bool) error {
 		fields["active_profile"] = normalizeProfileName(profile.Name)
 	}
 
+	// An OAuth login inherited from another section moves here rather than being
+	// copied: refresh tokens rotate, so two copies would each break the other.
+	if source := profile.credentialKeyPrefix; profile.Client == api.OAuthClient && source != "" && source != profileKeyPrefix {
+		for _, key := range []string{"access_token", "refresh_token", "client", "expiry"} {
+			fields[source+key] = ""
+		}
+	}
+
 	return withConfigLock(func() error { return saveConfigFields(fields) })
 }
 
@@ -673,6 +681,8 @@ func saveConfigFields(fields map[string]interface{}) error {
 	onDisk := viper.New()
 	onDisk.SetConfigFile(configPath)
 	onDisk.SetConfigType("toml")
+	// The temp file holds credentials from the moment it exists.
+	onDisk.SetConfigPermissions(0600)
 	if err := onDisk.ReadInConfig(); err != nil {
 		var notFound viper.ConfigFileNotFoundError
 		if !os.IsNotExist(err) && !errors.As(err, &notFound) {
@@ -692,6 +702,7 @@ func saveConfigFields(fields map[string]interface{}) error {
 		return err
 	}
 	temp := filepath.Join(filepath.Dir(configPath), fmt.Sprintf(".config-%d.tmp.toml", os.Getpid()))
+	os.Remove(temp) // an existing file would keep its old permissions
 	if err := onDisk.WriteConfigAs(temp); err != nil {
 		os.Remove(temp)
 		return err
