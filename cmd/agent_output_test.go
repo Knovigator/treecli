@@ -100,6 +100,27 @@ func TestExplicitOutputFormatBeatsAutomaticJSON(t *testing.T) {
 	}
 }
 
+func TestLegacyOnboardContentModesStayText(t *testing.T) {
+	previousSelection := accountSelection
+	t.Cleanup(func() { accountSelection = previousSelection })
+	pretendPiped(t, true)
+	command := &cobra.Command{Use: "onboard"}
+	command.Flags().Bool("json", false, "")
+	command.Flags().Bool("agents-md", false, "")
+	_ = command.Flags().Set("agents-md", "true")
+	_ = PrepareCommand(command, nil)
+	if value, _ := command.Flags().GetBool("json"); value {
+		t.Fatal("onboard --agents-md >> AGENTS.md must keep printing Markdown")
+	}
+}
+
+func TestFlagGroupErrorsAreUsage(t *testing.T) {
+	err := errors.New("if any flags in the group [short long] are set none of the others can be; [long short] were all set")
+	if ExitCode(err) != ExitUsage {
+		t.Fatalf("got %d", ExitCode(err))
+	}
+}
+
 func TestStructuredWriteErrorsCarryTheExitCode(t *testing.T) {
 	var out bytes.Buffer
 	PrintError(&out, &structuredWriteError{WriteID: "w-1", Message: "daily_limit_reached", Err: errors.New(`Treechat operation failed: {"error":"daily_limit_reached"}`)})

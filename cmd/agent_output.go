@@ -42,10 +42,14 @@ func agentOutput() bool {
 // that have it when output is piped, then applies account selection.
 func PrepareCommand(command *cobra.Command, args []string) error {
 	if agentOutput() {
-		// An explicit --output choice (e.g. ascii) wins over the automatic JSON.
+		// An explicit text format wins over the automatic JSON: --output (e.g.
+		// ascii), or onboard's legacy content modes, which print Markdown to append
+		// to a file (onboard --agents-md >> AGENTS.md).
 		explicitFormat := false
-		if format := command.Flags().Lookup("output"); format != nil && format.Changed {
-			explicitFormat = true
+		for _, name := range []string{"output", "agents-md", "short", "long"} {
+			if flag := command.Flags().Lookup(name); flag != nil && flag.Changed {
+				explicitFormat = true
+			}
 		}
 		if flag := command.Flags().Lookup("json"); flag != nil && !flag.Changed && !explicitFormat && flag.Value.Type() == "bool" {
 			_ = command.Flags().Set("json", "true")
@@ -94,6 +98,7 @@ func ExitCode(err error) int {
 	// own codes: these are the CLI's argument and flag validation messages.
 	case contains("unknown command", "unknown flag", "unknown shorthand flag", "required flag", "accepts ",
 		"requires at least", "invalid argument", "flag needs an argument", "is required", "must be ",
+		"if any flags in the group", "at least one of the flags in the group",
 		"cannot be ", "invalid --", "invalid output", "invalid account", "invalid payment", "specify ",
 		"requires --", "invalid_arguments"):
 		return ExitUsage
