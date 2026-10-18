@@ -520,3 +520,40 @@ func TestAccountUseRefusesALoginSavedForAnotherServer(t *testing.T) {
 		t.Fatal("expected selection to refuse credentials saved for another server")
 	}
 }
+
+func TestOverlappingAccountUseKeepsTheMovedLogin(t *testing.T) {
+	useTempConfig(t, "")
+	oldEnv, oldAccount, oldSelection := SelectedEnvironment, SelectedAccount, accountSelection
+	t.Cleanup(func() { SelectedEnvironment, SelectedAccount, accountSelection = oldEnv, oldAccount, oldSelection })
+	for _, name := range []string{"TREECLI_ENV", "TREECLI_ACCOUNT", "TREECLI_BACKEND_URL", "TREECTL_BACKEND_URL"} {
+		t.Setenv(name, "")
+	}
+	legacy := profileConfig{
+		Name: "qa", BackendURL: "https://qa.example.test", AccessToken: "access-1", Client: api.OAuthClient, UID: "user-1",
+		RefreshToken: "refresh-1", OAuthTokenURL: "https://qa.example.test/mcp/oauth/token", OAuthResource: "https://qa.example.test/mcp",
+	}
+	if err := saveProfile(legacy, false); err != nil {
+		t.Fatal(err)
+	}
+	viper.Set("environments.qa.backend_url", "https://qa.example.test")
+	accountSelection, SelectedEnvironment, SelectedAccount = true, "qa", "qa"
+
+	// Two invocations resolve the inherited login before either saves.
+	first, _ := resolveAccount()
+	second, _ := resolveAccount()
+	if err := selectProfile(first); err != nil {
+		t.Fatal(err)
+	}
+	if err := selectProfile(second); err != nil {
+		t.Fatal(err)
+	}
+	onDisk := viper.New()
+	onDisk.SetConfigFile(viper.ConfigFileUsed())
+	onDisk.SetConfigType("toml")
+	if err := onDisk.ReadInConfig(); err != nil {
+		t.Fatal(err)
+	}
+	if got := onDisk.GetString("accounts.qa.qa.refresh_token"); got != "refresh-1" {
+		t.Fatalf("second account use wiped the moved login: %q", got)
+	}
+}

@@ -663,6 +663,15 @@ func reloadSavedCredentials(profile *profileConfig, configPath string) error {
 	if saved.ReadInConfig() != nil || !saved.IsSet(prefix+"client") {
 		return nil
 	}
+	if strings.TrimSpace(saved.GetString(prefix+"client")) == "" {
+		// An inherited login another `account use` already moved: read it from
+		// this account's own section instead of the emptied source.
+		own := storedProfileKeyPrefix(*profile)
+		if own == prefix || strings.TrimSpace(saved.GetString(own+"client")) == "" {
+			return fmt.Errorf("this account has no saved login anymore; log in or connect again")
+		}
+		prefix, profile.credentialKeyPrefix = own, ""
+	}
 	get := func(key string) string { return strings.TrimSpace(saved.GetString(prefix + key)) }
 	// Credentials saved for another server must never be paired with this one.
 	if backend := get("backend_url"); backend != "" && normalizeBaseURL(backend) != normalizeBaseURL(profile.BackendURL) {
