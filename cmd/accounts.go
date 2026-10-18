@@ -208,7 +208,7 @@ func newAccountCommand() *cobra.Command {
 		if profile.AccessToken == "" || profile.Client == "" || profile.UID == "" {
 			return fmt.Errorf("account %q has no credentials for environment %q; log in first", name, environment)
 		}
-		if err := saveProfile(profile, true); err != nil {
+		if err := selectProfile(profile); err != nil {
 			return err
 		}
 		fmt.Fprintf(cmd.OutOrStdout(), "Active account for %s: %s\n", environment, name)

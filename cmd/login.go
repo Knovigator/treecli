@@ -469,7 +469,7 @@ func setActiveProfile(profileName string) error {
 		return err
 	}
 
-	return saveProfile(profile, true)
+	return selectProfile(profile)
 }
 
 func resolveEmail() (string, error) {
@@ -625,7 +625,19 @@ func fetchBootstrap(backendURL string, tokens authTokens) (*loginBootstrap, erro
 	return &bootstrap, nil
 }
 
+// saveProfile saves new credentials (login, signup, connect) for a profile.
 func saveProfile(profile profileConfig, setActive bool) error {
+	return saveProfileLocked(profile, setActive, false)
+}
+
+// selectProfile makes an already-saved profile active. It re-reads the saved
+// credentials under the lock first, so a refresh token another treecli just
+// rotated is never written back with the stale value this process resolved.
+func selectProfile(profile profileConfig) error {
+	return saveProfileLocked(profile, true, true)
+}
+
+func saveProfileLocked(profile profileConfig, setActive, reloadCredentials bool) error {
 	configPath, err := configFilePath()
 	if err != nil {
 		return err
@@ -633,6 +645,28 @@ func saveProfile(profile profileConfig, setActive bool) error {
 	viper.SetConfigFile(configPath)
 	viper.SetConfigType("toml")
 
+	return withConfigLock(func() error {
+		if reloadCredentials {
+			reloadSavedCredentials(&profile, configPath)
+		}
+		return saveConfigFields(profileFields(profile, setActive))
+	})
+}
+
+func reloadSavedCredentials(profile *profileConfig, configPath string) {
+	saved := viper.New()
+	saved.SetConfigFile(configPath)
+	saved.SetConfigType("toml")
+	prefix := credentialKeyPrefix(*profile)
+	if saved.ReadInConfig() != nil || !saved.IsSet(prefix+"client") {
+		return
+	}
+	get := func(key string) string { return strings.TrimSpace(saved.GetString(prefix + key)) }
+	profile.AccessToken, profile.Client, profile.UID, profile.Expiry = get("access_token"), get("client"), get("uid"), get("expiry")
+	profile.RefreshToken, profile.OAuthTokenURL, profile.OAuthResource = get("refresh_token"), get("oauth_token_url"), get("oauth_resource")
+}
+
+func profileFields(profile profileConfig, setActive bool) map[string]interface{} {
 	fields := map[string]interface{}{}
 	profileKeyPrefix := storedProfileKeyPrefix(profile)
 	if profile.Environment != "" {
@@ -665,8 +699,7 @@ func saveProfile(profile profileConfig, setActive bool) error {
 			fields[source+key] = ""
 		}
 	}
-
-	return withConfigLock(func() error { return saveConfigFields(fields) })
+	return fields
 }
 
 // saveConfigFields sets keys in the config file as it is on disk now, not in

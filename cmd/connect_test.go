@@ -465,11 +465,22 @@ func TestAccountUseMovesAnInheritedOAuthLoginInsteadOfCopyingIt(t *testing.T) {
 	if err != nil || inherited.RefreshToken != "refresh-1" {
 		t.Fatalf("inherit: %#v %v", inherited, err)
 	}
-	if err := saveProfile(inherited, true); err != nil {
+	// Another process rotates the inherited login before `account use` saves.
+	other := viper.New()
+	other.SetConfigFile(viper.ConfigFileUsed())
+	other.SetConfigType("toml")
+	if err := other.ReadInConfig(); err != nil {
 		t.Fatal(err)
 	}
-	if got := viper.GetString("accounts.qa.qa.refresh_token"); got != "refresh-1" {
-		t.Fatalf("login not moved to the account: %q", got)
+	other.Set("profiles.qa.refresh_token", "refresh-2")
+	if err := other.WriteConfig(); err != nil {
+		t.Fatal(err)
+	}
+	if err := selectProfile(inherited); err != nil {
+		t.Fatal(err)
+	}
+	if got := viper.GetString("accounts.qa.qa.refresh_token"); got != "refresh-2" {
+		t.Fatalf("login not moved to the account with its newest token: %q", got)
 	}
 	if got := viper.GetString("profiles.qa.refresh_token"); got != "" {
 		t.Fatalf("rotating refresh token left in two places: %q", got)
