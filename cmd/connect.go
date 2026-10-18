@@ -410,11 +410,17 @@ func withConfigLock(fn func() error) error {
 // so an agent can generate right after connect returns.
 func reportBillingAfterConnect(cmd *cobra.Command, profile profileConfig) {
 	out := cmd.OutOrStdout()
-	active := func(refresh bool) bool {
+	active := func(refresh bool) (bool, error) {
 		status, err := api.GetStripeAiBillingStatus(profile.BackendURL, profile.AccessToken, profile.Client, profile.UID, refresh)
-		return err == nil && (status.Stripe.SubscriptionStatus == "active" || status.Stripe.SubscriptionStatus == "trialing")
+		return err == nil && (status.Stripe.SubscriptionStatus == "active" || status.Stripe.SubscriptionStatus == "trialing"), err
 	}
-	if active(true) {
+	on, err := active(true)
+	if err != nil {
+		// Don't wait on a check that can't succeed; the connection itself is saved.
+		fmt.Fprintf(out, "Couldn't check card billing (%v). Run `treecli billing status` to see it.\n", err)
+		return
+	}
+	if on {
 		fmt.Fprintln(out, "Card billing is on: AI generations are charged pay as you go.")
 		return
 	}
@@ -423,7 +429,7 @@ func reportBillingAfterConnect(cmd *cobra.Command, profile profileConfig) {
 		deadline := time.Now().Add(connectBillingWait)
 		for time.Now().Before(deadline) {
 			time.Sleep(5 * time.Second)
-			if active(false) {
+			if on, _ := active(false); on {
 				fmt.Fprintln(out, "Card billing is on: AI generations are charged pay as you go.")
 				return
 			}

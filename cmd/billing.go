@@ -257,7 +257,7 @@ func printBillingStatus(status api.StripeAiBillingStatusResponse) {
 		if index >= 10 {
 			break
 		}
-		line := fmt.Sprintf("  #%d %s %s", event.ID, event.Status, centsToUSD(event.AmountCents))
+		line := fmt.Sprintf("  #%s %s %s", event.ID, event.Status, centsToUSD(event.AmountCents))
 		if event.OccurredAt != "" {
 			line += " " + event.OccurredAt
 		}
