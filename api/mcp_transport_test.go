@@ -32,3 +32,17 @@ func TestMCPCallRefreshesOnceThenGivesUp(t *testing.T) {
 		t.Fatalf("expected one retry after one refresh, got %d requests and %d refreshes", requests, refreshes)
 	}
 }
+
+func TestOAuthMediaDownloadsSendNoCredentials(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "" || r.Header.Get("access-token") != "" {
+			t.Error("credential sent with a media download")
+		}
+		w.Write([]byte("media"))
+	}))
+	defer server.Close()
+	data, err := DownloadMedia(server.URL+"/rails/active_storage/blobs/x/out.png", server.URL, "expired-bearer", OAuthClient, "user-1")
+	if err != nil || string(data) != "media" {
+		t.Fatalf("download: %q %v", data, err)
+	}
+}

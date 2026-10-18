@@ -489,3 +489,12 @@ func TestAccountUseMovesAnInheritedOAuthLoginInsteadOfCopyingIt(t *testing.T) {
 		t.Fatalf("config must stay private: %v %v", info.Mode().Perm(), err)
 	}
 }
+
+func TestDevicePollingDefaultsToFiveSeconds(t *testing.T) {
+	if got := devicePollInterval(deviceAuthorization{}); got != 5*time.Second {
+		t.Fatalf("missing interval should default to 5s, got %s", got)
+	}
+	if got := devicePollInterval(deviceAuthorization{Interval: 2}); got != 2*time.Second {
+		t.Fatalf("server interval ignored: %s", got)
+	}
+}

@@ -185,7 +185,7 @@ func startDeviceAuthorization(server oauthServer) (deviceAuthorization, error) {
 
 // pollDeviceToken waits for the person to approve in the browser (RFC 8628 3.4-3.5).
 func pollDeviceToken(server oauthServer, device deviceAuthorization) (oauthTokenResponse, error) {
-	interval := time.Duration(max(device.Interval, 1)) * time.Second
+	interval := devicePollInterval(device)
 	deadline := time.Now().Add(time.Duration(max(device.ExpiresIn, 60)) * time.Second)
 	for time.Now().Before(deadline) {
 		time.Sleep(interval)
@@ -213,6 +213,14 @@ func pollDeviceToken(server oauthServer, device deviceAuthorization) (oauthToken
 		}
 	}
 	return oauthTokenResponse{}, fmt.Errorf("the code expired; run treecli connect again")
+}
+
+// RFC 8628 section 3.2: poll every 5 seconds unless the server says otherwise.
+func devicePollInterval(device deviceAuthorization) time.Duration {
+	if device.Interval > 0 {
+		return time.Duration(device.Interval) * time.Second
+	}
+	return 5 * time.Second
 }
 
 func requestToken(tokenURL string, form map[string]string) (oauthTokenResponse, int, error) {

@@ -147,9 +147,6 @@ func ListPublicTeams(
 }
 
 func newRequestWithTimeout(accessToken, client, uid string, timeout time.Duration) *resty.Request {
-	if client == OAuthClient {
-		return scopedRequest(context.Background(), accessToken, "", "", "", timeout)
-	}
 	return scopedRequest(context.Background(), "", accessToken, client, uid, timeout)
 }
 
