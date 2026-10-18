@@ -280,7 +280,9 @@ func oauthTokenFresh(profile profileConfig) bool {
 // those are stale too.
 func renewOAuthProfile(profile *profileConfig, stale string) error {
 	return withConfigLock(func() error {
-		reloadSavedOAuthTokens(profile)
+		if err := reloadSavedOAuthTokens(profile); err != nil {
+			return err
+		}
 		if profile.AccessToken != stale && oauthTokenFresh(*profile) {
 			return nil
 		}
@@ -290,33 +292,36 @@ func renewOAuthProfile(profile *profileConfig, stale string) error {
 
 // reloadSavedOAuthTokens reads the config file afresh (a separate reader, since
 // values this process already set would mask the file in the global one).
-func reloadSavedOAuthTokens(profile *profileConfig) {
+// It fails if the saved section now holds a different login (reconnected to
+// another server or account, or replaced by a password login): renewing the
+// old one would overwrite the new login and could mix their credentials.
+func reloadSavedOAuthTokens(profile *profileConfig) error {
 	configPath, err := configFilePath()
 	if err != nil {
-		return
+		return nil
 	}
 	saved := viper.New()
 	saved.SetConfigFile(configPath)
 	saved.SetConfigType("toml")
 	if saved.ReadInConfig() != nil {
-		return
+		return nil
 	}
 	prefix := credentialKeyPrefix(*profile)
-	if strings.TrimSpace(saved.GetString(prefix+"client")) != api.OAuthClient {
-		return
+	if !saved.IsSet(prefix + "client") {
+		return nil
 	}
-	// Only adopt tokens for this same connection. If the section was reconnected
-	// to another server or account meanwhile, its tokens must never be sent here.
-	if strings.TrimSpace(saved.GetString(prefix+"oauth_token_url")) != profile.OAuthTokenURL ||
+	if strings.TrimSpace(saved.GetString(prefix+"client")) != api.OAuthClient ||
+		strings.TrimSpace(saved.GetString(prefix+"oauth_token_url")) != profile.OAuthTokenURL ||
 		strings.TrimSpace(saved.GetString(prefix+"oauth_resource")) != profile.OAuthResource ||
 		strings.TrimSpace(saved.GetString(prefix+"uid")) != profile.UID {
-		return
+		return fmt.Errorf("this account's Treechat login changed in another treecli; run the command again")
 	}
 	if refresh := strings.TrimSpace(saved.GetString(prefix + "refresh_token")); refresh != "" {
 		profile.AccessToken = strings.TrimSpace(saved.GetString(prefix + "access_token"))
 		profile.RefreshToken = refresh
 		profile.Expiry = strings.TrimSpace(saved.GetString(prefix + "expiry"))
 	}
+	return nil
 }
 
 func refreshOAuthProfile(profile *profileConfig) error {

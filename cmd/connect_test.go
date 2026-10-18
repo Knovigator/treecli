@@ -399,7 +399,7 @@ func TestSavingAConnectionKeepsAnotherAccountsNewerTokens(t *testing.T) {
 	}
 }
 
-func TestRenewalNeverAdoptsTokensForAnotherServer(t *testing.T) {
+func TestRenewalStopsWhenTheSavedLoginChanged(t *testing.T) {
 	server := newFakeAuthServer(t)
 	useTempConfig(t, server.URL)
 	expired := profileConfig{
@@ -426,11 +426,20 @@ func TestRenewalNeverAdoptsTokensForAnotherServer(t *testing.T) {
 	}
 
 	profile := expired
-	if err := renewOAuthProfile(&profile, "access-old"); err != nil {
+	if err := renewOAuthProfile(&profile, "access-old"); err == nil {
+		t.Fatal("expected renewal to stop when the saved login changed")
+	}
+	if profile.AccessToken == "other-server-token" || server.refreshes != 0 {
+		t.Fatalf("used or refreshed across connections: %q after %d refreshes", profile.AccessToken, server.refreshes)
+	}
+	reread := viper.New()
+	reread.SetConfigFile(viper.ConfigFileUsed())
+	reread.SetConfigType("toml")
+	if err := reread.ReadInConfig(); err != nil {
 		t.Fatal(err)
 	}
-	if profile.AccessToken == "other-server-token" || server.refreshes != 1 {
-		t.Fatalf("adopted another server's token: %q after %d refreshes", profile.AccessToken, server.refreshes)
+	if got := reread.GetString("profiles.prod.refresh_token"); got != "other-server-refresh" {
+		t.Fatalf("overwrote the new login: %q", got)
 	}
 }
 
