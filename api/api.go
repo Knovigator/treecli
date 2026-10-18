@@ -173,6 +173,7 @@ func putDirectUpload(du directUploadTarget, content []byte) (string, error) {
 	// PUT the bytes straight to S3 with a bare client and ONLY the headers the backend returned:
 	// the presigned URL carries its own auth, and adding our access-token headers would break the
 	// S3 signature.
+	MarkNetwork()
 	putClient := resty.New()
 	putClient.SetTimeout(15 * time.Minute)
 	putReq := putClient.R()
@@ -234,6 +235,7 @@ func ResolveFinalURL(rawURL string, fallbackBase string) string {
 		return canonicalURL
 	}
 
+	MarkNetwork()
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 		CheckRedirect: func(request *http.Request, via []*http.Request) error {

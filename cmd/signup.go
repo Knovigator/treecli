@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Knovigator/treecli/api"
 	"github.com/go-resty/resty/v2"
 	"github.com/spf13/cobra"
 )
@@ -179,6 +180,7 @@ func resolveSignupPassword() (string, error) {
 }
 
 func performSignup(backendURL, username, email, password string) (authTokens, error) {
+	api.MarkNetwork()
 	client := resty.New()
 	client.SetTimeout(10 * time.Second)
 

@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/Knovigator/treecli/api"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -28,6 +29,9 @@ type usageError struct{ err error }
 
 func (e usageError) Error() string { return e.err.Error() }
 func (e usageError) Unwrap() error { return e.err }
+
+// networkUsed is a variable so tests can choose; see ExitCode.
+var networkUsed = api.NetworkUsed
 
 // stdoutIsTerminal is a variable so tests can pretend output is piped.
 var stdoutIsTerminal = func() bool { return term.IsTerminal(int(os.Stdout.Fd())) }
@@ -115,6 +119,12 @@ func ExitCode(err error) int {
 		"if any flags in the group", "at least one of the flags in the group",
 		"cannot be ", "invalid --", "invalid output", "invalid account", "invalid payment", "specify ",
 		"requires --", "invalid_arguments"):
+		return ExitUsage
+	}
+	// A command that failed before contacting any server failed on its own
+	// arguments or local input (a missing target, a conflicting flag, an
+	// unreadable --reference file): an invalid invocation.
+	if !networkUsed() {
 		return ExitUsage
 	}
 	return ExitError

@@ -21,6 +21,9 @@ func pretendPiped(t *testing.T, piped bool) {
 }
 
 func TestExitCodesAreStable(t *testing.T) {
+	previous := networkUsed
+	networkUsed = func() bool { return true }
+	t.Cleanup(func() { networkUsed = previous })
 	cases := map[error]int{
 		nil:                                ExitOK,
 		errors.New("something broke"):      ExitError,
@@ -124,6 +127,19 @@ func TestAccountSelectionErrorsAreUsage(t *testing.T) {
 	err := PrepareCommand(command, nil)
 	if err == nil || ExitCode(err) != ExitUsage {
 		t.Fatalf("expected a usage error, got %v (exit %d)", err, ExitCode(err))
+	}
+}
+
+func TestFailingBeforeAnyRequestIsUsage(t *testing.T) {
+	previous := networkUsed
+	t.Cleanup(func() { networkUsed = previous })
+	networkUsed = func() bool { return false }
+	if got := ExitCode(errors.New("pass a quest id/link, or use --post/--answer <post-id-or-link>")); got != ExitUsage {
+		t.Fatalf("local validation failure: got %d", got)
+	}
+	networkUsed = func() bool { return true }
+	if got := ExitCode(errors.New("something broke on the server")); got != ExitError {
+		t.Fatalf("operational failure: got %d", got)
 	}
 }
 

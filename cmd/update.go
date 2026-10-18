@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Knovigator/treecli/api"
 	"github.com/spf13/cobra"
 )
 
@@ -88,6 +89,7 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 		version = args[0]
 	}
 
+	api.MarkNetwork()
 	client := &http.Client{Timeout: 60 * time.Second}
 	var tag string
 	var updateAvailable bool
