@@ -104,6 +104,30 @@ authenticated account, so a separate `treecli login` is not required.
 Commands default to production. Use `treecli --account NAME login` to save a
 login, or `treecli --env dev --account NAME login` for local development.
 
+## Output for agents and scripts
+
+When stdout isn't a terminal, commands that support `--json` print JSON by
+default, errors go to stderr as `{"status":"error","error":...,"exit_code":N}`,
+and progress for long jobs goes to stderr. Set `TREECLI_OUTPUT=text` to keep
+human output when piping, or `TREECLI_OUTPUT=json` to force JSON in a terminal.
+
+Exit codes are stable:
+
+| Code | Meaning |
+| --- | --- |
+| 0 | OK |
+| 1 | Error |
+| 2 | Usage (unknown flag or command, bad arguments) |
+| 3 | Not connected or signed in: run `treecli connect` |
+| 4 | Spending refused: price cap, daily spending limit, or billing |
+| 5 | Not found |
+| 6 | Rate limited: try again later |
+
+`treecli connect --install-skills` also installs the packaged skills for the
+coding agents it finds (Claude Code, Codex, Pi); without the flag it prints the
+command. The public model catalog with list prices is JSON at
+`https://api.treechat.com/api/v1/ai/catalog`.
+
 ## Common Commands
 
 ```sh

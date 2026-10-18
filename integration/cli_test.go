@@ -389,7 +389,9 @@ func isolatedEnvironment(configHome string) []string {
 		}
 		environment = append(environment, entry)
 	}
-	return append(environment, "XDG_CONFIG_HOME="+configHome)
+	// These tests pin the human-facing output; piped stdout would otherwise
+	// switch treecli to its agent (JSON) output. agent_output_test covers that.
+	return append(environment, "XDG_CONFIG_HOME="+configHome, "TREECLI_OUTPUT=text")
 }
 
 func assertOwnerOnlyConfig(t *testing.T, configHome string) {

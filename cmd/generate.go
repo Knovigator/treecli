@@ -353,7 +353,9 @@ func writeOutputs(base string, urls []string, profile profileConfig) ([]string, 
 }
 
 func pollGeneration(profile profileConfig, id string) (api.GenerationResponse, error) {
-	deadline := time.Now().Add(generateTimeout)
+	started := time.Now()
+	deadline := started.Add(generateTimeout)
+	lastStatus, lastReport := "", time.Time{}
 	for {
 		res, err := api.GetGeneration(profile.BackendURL, id, profile.AccessToken, profile.Client, profile.UID)
 		if err != nil {
@@ -362,6 +364,11 @@ func pollGeneration(profile profileConfig, id string) (api.GenerationResponse, e
 		switch res.Status {
 		case "succeeded", "failed", "canceled":
 			return res, nil
+		}
+		// Progress goes to stderr so stdout stays clean JSON for agents.
+		if res.Status != lastStatus || time.Since(lastReport) >= 15*time.Second {
+			fmt.Fprintf(os.Stderr, "Generation %s: %s (%ds)\n", id, res.Status, int(time.Since(started).Seconds()))
+			lastStatus, lastReport = res.Status, time.Now()
 		}
 		if time.Now().After(deadline) {
 			return res, fmt.Errorf("timed out waiting for generation %s", id)

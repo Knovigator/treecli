@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"strings"
 
 	"github.com/Knovigator/treecli/api"
@@ -97,22 +96,6 @@ func writeErrorForOutput(err error, outputFormat string) error {
 
 // PrintError writes machine-readable write failures when a command requested JSON.
 // Other errors retain the CLI's historical human-readable format.
-func PrintError(writer io.Writer, err error) {
-	var structuredErr *structuredWriteError
-	if errors.As(err, &structuredErr) {
-		encoder := json.NewEncoder(writer)
-		encoder.SetIndent("", "  ")
-		if encoder.Encode(writeErrorPayload{
-			Status:  "error",
-			WriteID: structuredErr.WriteID,
-			Error:   structuredErr.Message,
-		}) == nil {
-			return
-		}
-	}
-
-	fmt.Fprintln(writer, "Error:", err)
-}
 
 func prettyWriteSuccessJSON(raw json.RawMessage, writeID string) (string, error) {
 	var payload map[string]json.RawMessage
