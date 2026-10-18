@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Knovigator/treecli/api"
 	"github.com/go-resty/resty/v2"
 	"github.com/spf13/cobra"
 )
@@ -54,7 +53,7 @@ func runSignup(cmd *cobra.Command, args []string) error {
 
 	if readSignupPasswordFromStdin &&
 		(strings.TrimSpace(signupUsername) == "" || strings.TrimSpace(signupEmail) == "") {
-		return fmt.Errorf("signup failed: --password-stdin requires --username and --email")
+		return usageErrorf("signup failed: --password-stdin requires --username and --email")
 	}
 
 	inputReader := bufio.NewReader(os.Stdin)
@@ -180,7 +179,6 @@ func resolveSignupPassword() (string, error) {
 }
 
 func performSignup(backendURL, username, email, password string) (authTokens, error) {
-	api.MarkNetwork()
 	client := resty.New()
 	client.SetTimeout(10 * time.Second)
 

@@ -61,7 +61,7 @@ func init() {
 func runNewReply(cmd *cobra.Command, args []string) error {
 	content := args[0]
 	if content == "" {
-		return fmt.Errorf("content is required for a reply")
+		return usageErrorf("content is required for a reply")
 	}
 
 	resolvedOutputFormat := resolveOutputFormat(createOutputFormat, createJSONOutput)

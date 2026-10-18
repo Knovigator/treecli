@@ -5,12 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
 	"strings"
-	"syscall"
 
-	"github.com/Knovigator/treecli/api"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -32,8 +29,10 @@ type usageError struct{ err error }
 func (e usageError) Error() string { return e.err.Error() }
 func (e usageError) Unwrap() error { return e.err }
 
-// networkUsed is a variable so tests can choose; see ExitCode.
-var networkUsed = api.NetworkUsed
+// usageErrorf reports an invalid invocation: a bad or missing argument or flag.
+func usageErrorf(format string, args ...interface{}) error {
+	return usageError{fmt.Errorf(format, args...)}
+}
 
 // stdoutIsTerminal is a variable so tests can pretend output is piped.
 var stdoutIsTerminal = func() bool { return term.IsTerminal(int(os.Stdout.Fd())) }
@@ -114,28 +113,11 @@ func ExitCode(err error) int {
 		return ExitNotSignedIn
 	case contains("not_found", "not found"):
 		return ExitNotFound
-	// Checked last so server-side auth, spending and lookup failures keep their
-	// own codes: these are the CLI's argument and flag validation messages.
-	case contains("unknown command", "unknown flag", "unknown shorthand flag", "required flag", "accepts ",
-		"requires at least", "invalid argument", "flag needs an argument", "is required", "must be ",
-		"if any flags in the group", "at least one of the flags in the group",
-		"cannot be ", "invalid --", "invalid output", "invalid account", "invalid payment", "specify ",
-		"requires --", "invalid_arguments"):
-		return ExitUsage
-	}
-	// A command that failed before contacting any server failed on its own
-	// arguments or local input (a missing target, a conflicting flag, an
-	// unreadable --reference file): an invalid invocation.
-	// Filesystem and OS failures (disk full, permission denied) are operational
-	// even when no server was involved.
-	var pathErr *fs.PathError
-	var linkErr *os.LinkError
-	var syscallErr *os.SyscallError
-	var errno syscall.Errno
-	if errors.As(err, &pathErr) || errors.As(err, &linkErr) || errors.As(err, &syscallErr) || errors.As(err, &errno) {
-		return ExitError
-	}
-	if !networkUsed() {
+	// Cobra's own flag and argument errors are untyped; the server reports bad
+	// tool arguments as invalid_arguments. treecli's own checks use usageErrorf.
+	case contains("unknown command", "unknown flag", "unknown shorthand flag", "required flag(s)",
+		"accepts ", "requires at least", "invalid argument", "flag needs an argument",
+		"if any flags in the group", "at least one of the flags in the group", "invalid_arguments"):
 		return ExitUsage
 	}
 	return ExitError

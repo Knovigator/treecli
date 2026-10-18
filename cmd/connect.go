@@ -499,7 +499,6 @@ func reportBillingAfterConnect(cmd *cobra.Command, profile profileConfig) {
 }
 
 func oauthHTTP() *resty.Client {
-	api.MarkNetwork()
 	client := resty.New().SetTimeout(15 * time.Second)
 	// Never follow redirects with credentials or device codes in the request.
 	client.SetRedirectPolicy(resty.NoRedirectPolicy())

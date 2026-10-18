@@ -93,7 +93,7 @@ func init() {
 
 func runGenerate(cmd *cobra.Command, args []string) error {
 	if generateQuoteID != "" && generateQuote {
-		return fmt.Errorf("--quote and --quote-id cannot be combined; --quote never executes a generation")
+		return usageErrorf("--quote and --quote-id cannot be combined; --quote never executes a generation")
 	}
 	action, prompt := "", ""
 	var err error
@@ -106,16 +106,16 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 	// Media-only actions (upscalers) run from --reference alone; the backend still requires a
 	// prompt for every other action.
 	if !generateQuote && strings.TrimSpace(generateOut) == "" {
-		return fmt.Errorf("--out <path> is required (or use --quote to just see the price)")
+		return usageErrorf("--out <path> is required (or use --quote to just see the price)")
 	}
 	if generateDuration < 0 {
-		return fmt.Errorf("--duration must be zero or greater")
+		return usageErrorf("--duration must be zero or greater")
 	}
 	if generatePollInterval <= 0 {
-		return fmt.Errorf("--poll-interval must be greater than zero")
+		return usageErrorf("--poll-interval must be greater than zero")
 	}
 	if generateTimeout <= 0 {
-		return fmt.Errorf("--timeout must be greater than zero")
+		return usageErrorf("--timeout must be greater than zero")
 	}
 	paymentMode, err := normalizePaymentMode(generatePaymentMode)
 	if err != nil {
@@ -139,10 +139,10 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 	}
 
 	if generateQuoteID == "" && ((cmd == nil || !cmd.Flags().Changed("max-price-cents")) || generateMaxPriceCents < 0) {
-		return fmt.Errorf("--max-price-cents is required and must be nonnegative")
+		return usageErrorf("--max-price-cents is required and must be nonnegative")
 	}
 	if generateQuoteID != "" && generateRequestID == "" {
-		return fmt.Errorf("--id is required when executing --quote-id")
+		return usageErrorf("--id is required when executing --quote-id")
 	}
 
 	profile, err := requireAuthenticatedProfile()
@@ -274,13 +274,13 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 
 func parseGenerateInvocation(args []string) (string, string, error) {
 	if len(args) == 0 {
-		return "", "", fmt.Errorf("an AI action is required")
+		return "", "", usageErrorf("an AI action is required")
 	}
 
 	action := strings.TrimSpace(args[0])
 	prompt := strings.TrimSpace(strings.Join(args[1:], " "))
 	if action == "" {
-		return "", "", fmt.Errorf("an AI action is required")
+		return "", "", usageErrorf("an AI action is required")
 	}
 
 	return action, prompt, nil
@@ -311,11 +311,11 @@ func applyInputs(settings map[string]interface{}, inputs []string) error {
 	for _, kv := range inputs {
 		i := strings.Index(kv, "=")
 		if i <= 0 {
-			return fmt.Errorf("invalid --input %q: expected key=value", kv)
+			return usageErrorf("invalid --input %q: expected key=value", kv)
 		}
 		key := strings.TrimSpace(kv[:i])
 		if key == "" {
-			return fmt.Errorf("invalid --input %q: empty key", kv)
+			return usageErrorf("invalid --input %q: empty key", kv)
 		}
 		raw := kv[i+1:]
 		var parsed interface{}

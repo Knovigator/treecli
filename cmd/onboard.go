@@ -146,7 +146,7 @@ func runOnboard(cmd *cobra.Command, args []string) error {
 
 func validateOnboardRootFlags(jsonOutput bool, legacyMode bool) error {
 	if jsonOutput && legacyMode {
-		return fmt.Errorf("--json cannot be combined with deprecated onboarding flags")
+		return usageErrorf("--json cannot be combined with deprecated onboarding flags")
 	}
 	return nil
 }
@@ -155,7 +155,7 @@ func validateOnboardRootFlags(jsonOutput bool, legacyMode bool) error {
 // invocations like `treecli onboard --agents-md >> AGENTS.md` keep working.
 func runOnboardLegacy() error {
 	if onboardShort && onboardLong {
-		return fmt.Errorf("use only one of --short or --long")
+		return usageErrorf("use only one of --short or --long")
 	}
 
 	mode := "long"
@@ -234,10 +234,10 @@ func runOnboardAgents(cmd *cobra.Command, args []string) error {
 
 func validateOnboardAgentsFlags(variant string, write bool, check bool, file string) error {
 	if strings.TrimSpace(file) != "" && !write && !check {
-		return fmt.Errorf("--file requires --write or --check")
+		return usageErrorf("--file requires --write or --check")
 	}
 	if check && variant != "" {
-		return fmt.Errorf("--short and --long cannot be used with --check")
+		return usageErrorf("--short and --long cannot be used with --check")
 	}
 	return nil
 }

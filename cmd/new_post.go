@@ -206,7 +206,7 @@ func init() {
 func runNewPost(cmd *cobra.Command, args []string) error {
 	content := args[0]
 	if content == "" {
-		return fmt.Errorf("content is required for a post")
+		return usageErrorf("content is required for a post")
 	}
 
 	resolvedOutputFormat := resolveOutputFormat(createOutputFormat, createJSONOutput)
@@ -280,7 +280,7 @@ func runNewPost(cmd *cobra.Command, args []string) error {
 
 func runAction(cmd *cobra.Command, args []string) error {
 	if (cmd == nil || !cmd.Flags().Changed("max-price-cents")) || actionMaxPriceCents < 0 {
-		return fmt.Errorf("--max-price-cents is required and must be nonnegative")
+		return usageErrorf("--max-price-cents is required and must be nonnegative")
 	}
 	invocation, err := parseActionInvocation(args)
 	if err != nil {
@@ -288,13 +288,13 @@ func runAction(cmd *cobra.Command, args []string) error {
 	}
 
 	if actionPollInterval <= 0 {
-		return fmt.Errorf("--poll-interval must be greater than zero")
+		return usageErrorf("--poll-interval must be greater than zero")
 	}
 	if actionTimeout <= 0 {
-		return fmt.Errorf("--timeout must be greater than zero")
+		return usageErrorf("--timeout must be greater than zero")
 	}
 	if actionDuration < 0 {
-		return fmt.Errorf("--duration must be zero or greater")
+		return usageErrorf("--duration must be zero or greater")
 	}
 	paymentMode, err := normalizePaymentMode(actionPaymentMode)
 	if err != nil {
@@ -343,16 +343,16 @@ func runActionStatus(cmd *cobra.Command, args []string) error {
 	}
 
 	if strings.TrimSpace(actionStatusAnswerID) == "" && strings.TrimSpace(threadTarget) == "" {
-		return fmt.Errorf("pass a quest id/link, or use --post/--answer <post-id-or-link>")
+		return usageErrorf("pass a quest id/link, or use --post/--answer <post-id-or-link>")
 	}
 	if strings.TrimSpace(actionStatusAnswerID) != "" && strings.TrimSpace(threadTarget) != "" {
-		return fmt.Errorf("pass either a quest target or --post/--answer, but not both")
+		return usageErrorf("pass either a quest target or --post/--answer, but not both")
 	}
 	if actionStatusPollInterval <= 0 {
-		return fmt.Errorf("--poll-interval must be greater than zero")
+		return usageErrorf("--poll-interval must be greater than zero")
 	}
 	if actionStatusTimeout <= 0 {
-		return fmt.Errorf("--timeout must be greater than zero")
+		return usageErrorf("--timeout must be greater than zero")
 	}
 	resolvedOutputFormat := resolveOutputFormat(actionStatusOutputFormat, actionStatusJSONOutput)
 
@@ -531,7 +531,7 @@ func rejectRootOnlyPostFlags(cmd *cobra.Command, replyTo string) error {
 	replyRestrictedFlags := []string{"stream", "team-id", "public", "private", "thread-type", "url"}
 	for _, flagName := range replyRestrictedFlags {
 		if cmd.Flags().Changed(flagName) {
-			return fmt.Errorf("--%s cannot be used with --reply-to because replies inherit the existing thread placement", flagName)
+			return usageErrorf("--%s cannot be used with --reply-to because replies inherit the existing thread placement", flagName)
 		}
 	}
 
@@ -540,17 +540,17 @@ func rejectRootOnlyPostFlags(cmd *cobra.Command, replyTo string) error {
 
 func parseActionInvocation(args []string) (actionInvocation, error) {
 	if len(args) == 0 {
-		return actionInvocation{}, fmt.Errorf("an AI action is required")
+		return actionInvocation{}, usageErrorf("an AI action is required")
 	}
 
 	combinedArgs := strings.TrimSpace(strings.Join(args, " "))
 	if combinedArgs == "" {
-		return actionInvocation{}, fmt.Errorf("an AI action is required")
+		return actionInvocation{}, usageErrorf("an AI action is required")
 	}
 
 	fields := strings.Fields(combinedArgs)
 	if len(fields) == 0 {
-		return actionInvocation{}, fmt.Errorf("an AI action is required")
+		return actionInvocation{}, usageErrorf("an AI action is required")
 	}
 
 	rawTag := strings.TrimSpace(fields[0])
@@ -563,7 +563,7 @@ func parseActionInvocation(args []string) (actionInvocation, error) {
 
 	normalizedTag := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(rawTag, "!")))
 	if normalizedTag == "" {
-		return actionInvocation{}, fmt.Errorf("an AI action is required")
+		return actionInvocation{}, usageErrorf("an AI action is required")
 	}
 
 	promptFields := fields[1:]

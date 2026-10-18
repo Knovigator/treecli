@@ -34,30 +34,30 @@ func newGetThreadsCommand() *cobra.Command {
 			return invalidOutputFormatError(output)
 		}
 		if root && branch {
-			return fmt.Errorf("--root and --branch are mutually exclusive")
+			return usageErrorf("--root and --branch are mutually exclusive")
 		}
 		if flags.Changed("answer") && strings.TrimSpace(answer) == "" {
-			return fmt.Errorf("--answer must not be empty")
+			return usageErrorf("--answer must not be empty")
 		}
 		if len(args) == 1 && strings.TrimSpace(args[0]) == "" {
 			return fmt.Errorf("thread ID must not be empty")
 		}
 		if len(args) == 1 && flags.Changed("answer") {
-			return fmt.Errorf("thread ID and --answer are mutually exclusive")
+			return usageErrorf("thread ID and --answer are mutually exclusive")
 		}
 		lookup := len(args) == 1 || flags.Changed("answer")
 		if lookup {
 			for _, name := range []string{"user", "root", "branch", "page", "limit"} {
 				if flags.Changed(name) {
-					return fmt.Errorf("--%s cannot be combined with a thread ID or --answer", name)
+					return usageErrorf("--%s cannot be combined with a thread ID or --answer", name)
 				}
 			}
 		} else {
 			if strings.TrimSpace(user) == "" {
-				return fmt.Errorf("--user must not be empty")
+				return usageErrorf("--user must not be empty")
 			}
 			if page < 1 || limit < 1 || limit > 100 {
-				return fmt.Errorf("--page must be positive and --limit must be between 1 and 100")
+				return usageErrorf("--page must be positive and --limit must be between 1 and 100")
 			}
 		}
 		if len(args) == 1 {

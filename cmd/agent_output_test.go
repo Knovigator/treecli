@@ -24,9 +24,6 @@ func pretendPiped(t *testing.T, piped bool) {
 }
 
 func TestExitCodesAreStable(t *testing.T) {
-	previous := networkUsed
-	networkUsed = func() bool { return true }
-	t.Cleanup(func() { networkUsed = previous })
 	cases := map[error]int{
 		nil:                                ExitOK,
 		errors.New("something broke"):      ExitError,
@@ -39,8 +36,8 @@ func TestExitCodesAreStable(t *testing.T) {
 		errors.New(`{"error":"rate_limit_exceeded"}`):                                    ExitRateLimited,
 		&api.RequestError{StatusCode: 401, Message: "API request failed (status 401): "}: ExitNotSignedIn,
 		&api.RequestError{StatusCode: 429, Message: "API request failed (status 429): "}: ExitRateLimited,
-		errors.New("--out <path> is required (or use --quote to just see the price)"):    ExitUsage,
-		errors.New(`invalid --payment "credits"; use usd or bsv/bitcoinsv`):              ExitUsage,
+		usageErrorf("--out <path> is required (or use --quote to just see the price)"):   ExitUsage,
+		usageErrorf(`invalid --payment "credits"; use usd or bsv/bitcoinsv`):             ExitUsage,
 		errors.New("invalid API response: unexpected end of JSON input"):                 ExitError,
 	}
 	for err, want := range cases {
@@ -133,20 +130,22 @@ func TestAccountSelectionErrorsAreUsage(t *testing.T) {
 	}
 }
 
-func TestFailingBeforeAnyRequestIsUsage(t *testing.T) {
-	previous := networkUsed
-	t.Cleanup(func() { networkUsed = previous })
-	networkUsed = func() bool { return false }
-	if got := ExitCode(errors.New("pass a quest id/link, or use --post/--answer <post-id-or-link>")); got != ExitUsage {
-		t.Fatalf("local validation failure: got %d", got)
+func TestOnlyMarkedValidationIsUsage(t *testing.T) {
+	if got := ExitCode(usageErrorf("pass a quest id/link, or use --post/--answer <post-id-or-link>")); got != ExitUsage {
+		t.Fatalf("marked validation: got %d", got)
 	}
+	if got := ExitCode(fmt.Errorf("running: %w", usageErrorf("--out <path> is required"))); got != ExitUsage {
+		t.Fatalf("wrapped validation: got %d", got)
+	}
+	// A failed check or a full disk is an ordinary failure, not a bad invocation.
 	diskFull := fmt.Errorf("installing skills: %w", &fs.PathError{Op: "write", Path: "/x", Err: syscall.ENOSPC})
-	if got := ExitCode(diskFull); got != ExitError {
-		t.Fatalf("a local filesystem failure is operational: got %d", got)
+	for _, err := range []error{diskFull, errors.New("AGENTS.md guidance is missing or stale")} {
+		if got := ExitCode(err); got != ExitError {
+			t.Fatalf("%v: got %d", err, got)
+		}
 	}
-	networkUsed = func() bool { return true }
-	if got := ExitCode(errors.New("something broke on the server")); got != ExitError {
-		t.Fatalf("operational failure: got %d", got)
+	if got := ExitCode(&api.RequestError{StatusCode: 401, Message: "login failed: invalid credentials"}); got != ExitNotSignedIn {
+		t.Fatalf("login 401: got %d", got)
 	}
 }
 

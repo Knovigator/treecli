@@ -58,7 +58,7 @@ func resolveWriteID(requestedID string) (string, error) {
 	}
 
 	if !looksLikeUUID(requestedID) {
-		return "", fmt.Errorf("--id must be a UUID")
+		return "", usageErrorf("--id must be a UUID")
 	}
 
 	return strings.ToLower(requestedID), nil

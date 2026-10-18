@@ -40,7 +40,7 @@ func newToolsCommand() *cobra.Command {
 		}
 		var values map[string]interface{}
 		if err := json.Unmarshal([]byte(arguments), &values); err != nil || values == nil {
-			return fmt.Errorf("arguments must be a JSON object")
+			return usageErrorf("arguments must be a JSON object")
 		}
 		client, err := selectedToolsClient()
 		if err != nil {

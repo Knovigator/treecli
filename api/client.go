@@ -67,7 +67,6 @@ func scopedRequest(ctx context.Context, bearer, accessToken, clientID, uid strin
 	if timeout <= 0 {
 		timeout = 10 * time.Second
 	}
-	MarkNetwork()
 	client := resty.New().SetTimeout(timeout)
 	// Do not forward account credentials on redirects, including same-origin redirects.
 	client.SetRedirectPolicy(resty.NoRedirectPolicy())

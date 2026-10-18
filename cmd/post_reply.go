@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/Knovigator/treecli/api"
@@ -23,7 +22,7 @@ func newPostReplyCommand(branch bool) *cobra.Command {
 		Example: "  treecli " + name + " POST_ID \"Reply text\" --json",
 		RunE: func(command *cobra.Command, args []string) error {
 			if strings.TrimSpace(args[1]) == "" {
-				return fmt.Errorf("reply content is required")
+				return usageErrorf("reply content is required")
 			}
 			format := resolveOutputFormat(output, jsonOutput)
 			if format != "ascii" && format != "json" {

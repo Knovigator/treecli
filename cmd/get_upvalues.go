@@ -39,10 +39,10 @@ func runGetUpvalues(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if upvaluesPage < 1 {
-		return fmt.Errorf("--page must be 1 or greater")
+		return usageErrorf("--page must be 1 or greater")
 	}
 	if upvaluesPerPage < 1 || upvaluesPerPage > 100 {
-		return fmt.Errorf("--per-page must be between 1 and 100")
+		return usageErrorf("--per-page must be between 1 and 100")
 	}
 
 	history, err := api.GetUpvalueHistory(

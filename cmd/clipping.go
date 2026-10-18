@@ -119,5 +119,5 @@ func resolveOutputFormat(outputFormat string, jsonRequested bool) string {
 }
 
 func invalidOutputFormatError(outputFormat string) error {
-	return fmt.Errorf("invalid output format: %s. Use 'ascii' or 'json'", outputFormat)
+	return usageErrorf("invalid output format: %s. Use 'ascii' or 'json'", outputFormat)
 }

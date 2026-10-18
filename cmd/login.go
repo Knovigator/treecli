@@ -539,7 +539,6 @@ func resolvePassword() (string, error) {
 }
 
 func performLogin(backendURL, email, password string) (authTokens, error) {
-	api.MarkNetwork()
 	client := resty.New()
 	client.SetTimeout(10 * time.Second)
 
@@ -563,7 +562,8 @@ func performLogin(backendURL, email, password string) (authTokens, error) {
 		}
 
 		if resp.StatusCode() != http.StatusOK {
-			return authTokens{}, fmt.Errorf("login failed: %s", formatResponseError(resp))
+			// Keep the status so a 401 exits as "not signed in" and a 429 as rate limited.
+			return authTokens{}, &api.RequestError{StatusCode: resp.StatusCode(), Message: fmt.Sprintf("login failed: %s", formatResponseError(resp))}
 		}
 
 		return authTokensFromResponse(resp)
@@ -598,7 +598,6 @@ func authTokensFromResponse(resp *resty.Response) (authTokens, error) {
 }
 
 func fetchBootstrap(backendURL string, tokens authTokens) (*loginBootstrap, error) {
-	api.MarkNetwork()
 	client := resty.New()
 	client.SetTimeout(10 * time.Second)
 

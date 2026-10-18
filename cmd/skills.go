@@ -74,7 +74,7 @@ func runSkillsList(cmd *cobra.Command, args []string) error {
 func runSkillsEmit(cmd *cobra.Command, args []string) error {
 	format := strings.TrimSpace(skillsEmitFormat)
 	if format != "skill-md" && format != "openai-yaml" {
-		return fmt.Errorf("invalid --format. Use 'skill-md' or 'openai-yaml'")
+		return usageErrorf("invalid --format. Use 'skill-md' or 'openai-yaml'")
 	}
 
 	skillNames, err := resolvePackagedSkillKeys(args[0])
@@ -88,7 +88,7 @@ func runSkillsEmit(cmd *cobra.Command, args []string) error {
 			return err
 		}
 		if skill == nil {
-			return fmt.Errorf("unknown skill %q", skillKey)
+			return usageErrorf("unknown skill %q", skillKey)
 		}
 
 		if len(skillNames) > 1 && index > 0 {
@@ -122,7 +122,7 @@ func runSkillsInstall(cmd *cobra.Command, args []string) error {
 
 	installRoots := resolveSkillInstallRoots()
 	if len(installRoots) == 0 {
-		return fmt.Errorf("specify at least one target with --dir, --claude, --codex, or --pi")
+		return usageErrorf("specify at least one target with --dir, --claude, --codex, or --pi")
 	}
 
 	skillKeys, err := resolvePackagedSkillKeys(skillKey)
@@ -138,7 +138,7 @@ func runSkillsInstall(cmd *cobra.Command, args []string) error {
 				return err
 			}
 			if skill == nil {
-				return fmt.Errorf("unknown skill %q", key)
+				return usageErrorf("unknown skill %q", key)
 			}
 
 			installedDir, err := treeclicontent.InstallPackagedSkill(*skill, root)

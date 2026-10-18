@@ -1,9 +1,6 @@
 package api
 
-import (
-	"fmt"
-	"sync/atomic"
-)
+import "fmt"
 
 // HTTPError preserves the response status and safe response body for callers that
 // need to distinguish a rejected request from an ambiguous transport failure.
@@ -30,12 +27,3 @@ func (e *HTTPError) Error() string {
 	}
 	return fmt.Sprintf("received status code %d: %s", e.StatusCode, e.Body)
 }
-
-var networkUsed atomic.Bool
-
-// MarkNetwork records that this process contacted a server. A command that fails
-// without ever doing so failed on its own arguments (see cmd.ExitCode).
-func MarkNetwork() { networkUsed.Store(true) }
-
-// NetworkUsed reports whether MarkNetwork was called.
-func NetworkUsed() bool { return networkUsed.Load() }

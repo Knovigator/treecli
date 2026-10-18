@@ -81,7 +81,6 @@ func DownloadMedia(mediaURL, backendURL, accessToken, client, uid string) ([]byt
 	if err != nil {
 		return nil, fmt.Errorf("error preparing media download: %w", err)
 	}
-	MarkNetwork()
 	httpClient := &http.Client{Timeout: 60 * time.Second}
 	resp, err := httpClient.Do(request)
 	if err != nil {
