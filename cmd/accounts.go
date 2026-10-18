@@ -157,6 +157,7 @@ func resolveNamedAccount(environment, account string) (profileConfig, error) {
 		}
 		if normalizeBaseURL(legacy.BackendURL) == server.BackendURL {
 			stored = legacy
+			stored.credentialKeyPrefix = storedProfileKeyPrefix(profileConfig{Name: legacyName})
 		}
 	}
 	// An override must never forward a saved credential to another server.

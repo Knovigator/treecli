@@ -289,3 +289,49 @@ func TestRefreshingOneAccountKeepsAnotherAccountsNewerTokens(t *testing.T) {
 		t.Fatalf("prod's refreshed token was not saved: %q", got)
 	}
 }
+
+func TestShowRedactsTheRefreshToken(t *testing.T) {
+	redacted := redactProfile(profileConfig{AccessToken: "access-token-value", RefreshToken: "refresh-token-value"})
+	data, _ := json.Marshal(redacted)
+	if bytes.Contains(data, []byte("refresh-token-value")) {
+		t.Fatalf("refresh token leaked: %s", data)
+	}
+}
+
+func TestRefreshOfAnAccountInheritingALegacyLoginSavesToTheLegacyProfile(t *testing.T) {
+	server := newFakeAuthServer(t)
+	useTempConfig(t, "")
+	oldEnv, oldAccount, oldSelection := SelectedEnvironment, SelectedAccount, accountSelection
+	t.Cleanup(func() { SelectedEnvironment, SelectedAccount, accountSelection = oldEnv, oldAccount, oldSelection })
+	for _, name := range []string{"TREECLI_ENV", "TREECLI_ACCOUNT", "TREECLI_BACKEND_URL", "TREECTL_BACKEND_URL"} {
+		t.Setenv(name, "")
+	}
+	// A login saved with the legacy `--profile qa` interface.
+	legacy := profileConfig{
+		Name: "qa", BackendURL: server.URL, AccessToken: "access-old", Client: api.OAuthClient, UID: "user-1",
+		Expiry: time.Now().Add(-time.Minute).UTC().Format(time.RFC3339), RefreshToken: "refresh-1",
+		OAuthTokenURL: server.URL + "/mcp/oauth/token", OAuthResource: server.URL + "/mcp",
+	}
+	if err := saveProfile(legacy, false); err != nil {
+		t.Fatal(err)
+	}
+	viper.Set("environments.qa.backend_url", server.URL)
+
+	// The account interface inherits it and refreshes twice in a row.
+	accountSelection, SelectedEnvironment, SelectedAccount = true, "qa", "qa"
+	first, err := requireAuthenticatedProfile()
+	if err != nil {
+		t.Fatalf("first refresh: %v", err)
+	}
+	if first.AccessToken != "access-r1" {
+		t.Fatalf("expected a refreshed token, got %q", first.AccessToken)
+	}
+	if got := viper.GetString("profiles.qa.refresh_token"); got != "refresh-r1" {
+		t.Fatalf("renewed token not saved where it is read from: %q", got)
+	}
+	viper.Set("profiles.qa.expiry", time.Now().Add(-time.Minute).UTC().Format(time.RFC3339))
+	second, err := requireAuthenticatedProfile()
+	if err != nil || second.AccessToken != "access-r2" {
+		t.Fatalf("second refresh should use the rotated token: %q, %v", second.AccessToken, err)
+	}
+}

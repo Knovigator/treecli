@@ -60,6 +60,9 @@ type profileConfig struct {
 	RefreshToken  string `json:"refresh_token,omitempty"`
 	OAuthTokenURL string `json:"oauth_token_url,omitempty"`
 	OAuthResource string `json:"oauth_resource,omitempty"`
+	// Where the saved credentials were read from, when that differs from the
+	// profile's own section (an account inheriting a legacy profile's login).
+	credentialKeyPrefix string
 }
 
 type loginBootstrap struct {
@@ -412,6 +415,9 @@ func mergeProfile(base profileConfig, override profileConfig) profileConfig {
 	if override.OAuthResource != "" {
 		base.OAuthResource = override.OAuthResource
 	}
+	if override.credentialKeyPrefix != "" {
+		base.credentialKeyPrefix = override.credentialKeyPrefix
+	}
 
 	return base
 }
@@ -687,6 +693,15 @@ func storedProfileKeyPrefix(profile profileConfig) string {
 	return fmt.Sprintf("profiles.%s.", normalizeProfileName(profile.Name))
 }
 
+// credentialKeyPrefix is where the credentials a profile was resolved with are
+// saved, so renewed tokens go back to the same place they are read from.
+func credentialKeyPrefix(profile profileConfig) string {
+	if profile.credentialKeyPrefix != "" {
+		return profile.credentialKeyPrefix
+	}
+	return storedProfileKeyPrefix(profile)
+}
+
 func configFilePath() (string, error) {
 	configPath := viper.ConfigFileUsed()
 	if configPath != "" {
@@ -768,6 +783,9 @@ func redactProfile(profile profileConfig) profileConfig {
 	}
 	if strings.Contains(redactedProfile.UID, "@") {
 		redactedProfile.UID = profileRedactedValue
+	}
+	if redactedProfile.RefreshToken != "" {
+		redactedProfile.RefreshToken = profileRedactedValue
 	}
 
 	return redactedProfile

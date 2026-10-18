@@ -300,7 +300,7 @@ func reloadSavedOAuthTokens(profile *profileConfig) {
 	if saved.ReadInConfig() != nil {
 		return
 	}
-	prefix := storedProfileKeyPrefix(*profile)
+	prefix := credentialKeyPrefix(*profile)
 	if strings.TrimSpace(saved.GetString(prefix+"client")) != api.OAuthClient {
 		return
 	}
@@ -347,7 +347,7 @@ func saveOAuthTokens(profile profileConfig) error {
 	if err != nil {
 		return err
 	}
-	prefix := storedProfileKeyPrefix(profile)
+	prefix := credentialKeyPrefix(profile)
 	fields := map[string]string{
 		prefix + "access_token":  profile.AccessToken,
 		prefix + "refresh_token": profile.RefreshToken,
