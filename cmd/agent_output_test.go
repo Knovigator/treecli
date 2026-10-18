@@ -114,6 +114,19 @@ func TestLegacyOnboardContentModesStayText(t *testing.T) {
 	}
 }
 
+func TestAccountSelectionErrorsAreUsage(t *testing.T) {
+	previousSelection, previousEnv := accountSelection, SelectedEnvironment
+	t.Cleanup(func() { accountSelection, SelectedEnvironment = previousSelection, previousEnv })
+	command := &cobra.Command{Use: "x"}
+	command.Flags().String("env", "", "")
+	_ = command.Flags().Set("env", "bad!")
+	SelectedEnvironment = "bad!"
+	err := PrepareCommand(command, nil)
+	if err == nil || ExitCode(err) != ExitUsage {
+		t.Fatalf("expected a usage error, got %v (exit %d)", err, ExitCode(err))
+	}
+}
+
 func TestFlagGroupErrorsAreUsage(t *testing.T) {
 	err := errors.New("if any flags in the group [short long] are set none of the others can be; [long short] were all set")
 	if ExitCode(err) != ExitUsage {

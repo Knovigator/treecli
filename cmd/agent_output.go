@@ -23,6 +23,12 @@ const (
 	ExitRateLimited = 6
 )
 
+// usageError marks an invalid invocation (exit code 2) without changing its message.
+type usageError struct{ err error }
+
+func (e usageError) Error() string { return e.err.Error() }
+func (e usageError) Unwrap() error { return e.err }
+
 // stdoutIsTerminal is a variable so tests can pretend output is piped.
 var stdoutIsTerminal = func() bool { return term.IsTerminal(int(os.Stdout.Fd())) }
 
@@ -55,13 +61,21 @@ func PrepareCommand(command *cobra.Command, args []string) error {
 			_ = command.Flags().Set("json", "true")
 		}
 	}
-	return ConfigureAccountSelection(command, args)
+	// Everything account selection rejects is an invalid --env/--account/--profile.
+	if err := ConfigureAccountSelection(command, args); err != nil {
+		return usageError{err}
+	}
+	return nil
 }
 
 // ExitCode maps an error to one of the stable exit codes.
 func ExitCode(err error) int {
 	if err == nil {
 		return ExitOK
+	}
+	var usage usageError
+	if errors.As(err, &usage) {
+		return ExitUsage
 	}
 	var statusErr interface{ HTTPStatus() int }
 	if errors.As(err, &statusErr) {
