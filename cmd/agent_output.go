@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"strings"
+	"syscall"
 
 	"github.com/Knovigator/treecli/api"
 	"github.com/spf13/cobra"
@@ -124,6 +126,15 @@ func ExitCode(err error) int {
 	// A command that failed before contacting any server failed on its own
 	// arguments or local input (a missing target, a conflicting flag, an
 	// unreadable --reference file): an invalid invocation.
+	// Filesystem and OS failures (disk full, permission denied) are operational
+	// even when no server was involved.
+	var pathErr *fs.PathError
+	var linkErr *os.LinkError
+	var syscallErr *os.SyscallError
+	var errno syscall.Errno
+	if errors.As(err, &pathErr) || errors.As(err, &linkErr) || errors.As(err, &syscallErr) || errors.As(err, &errno) {
+		return ExitError
+	}
 	if !networkUsed() {
 		return ExitUsage
 	}

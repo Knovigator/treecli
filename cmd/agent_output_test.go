@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"syscall"
 	"testing"
 
 	"github.com/Knovigator/treecli/api"
@@ -136,6 +139,10 @@ func TestFailingBeforeAnyRequestIsUsage(t *testing.T) {
 	networkUsed = func() bool { return false }
 	if got := ExitCode(errors.New("pass a quest id/link, or use --post/--answer <post-id-or-link>")); got != ExitUsage {
 		t.Fatalf("local validation failure: got %d", got)
+	}
+	diskFull := fmt.Errorf("installing skills: %w", &fs.PathError{Op: "write", Path: "/x", Err: syscall.ENOSPC})
+	if got := ExitCode(diskFull); got != ExitError {
+		t.Fatalf("a local filesystem failure is operational: got %d", got)
 	}
 	networkUsed = func() bool { return true }
 	if got := ExitCode(errors.New("something broke on the server")); got != ExitError {
