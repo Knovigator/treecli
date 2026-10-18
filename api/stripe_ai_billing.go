@@ -34,12 +34,29 @@ type StripeAiBillingUsage struct {
 }
 
 type StripeAiBillingUsEvent struct {
-	ID              int64  `json:"id"`
-	AmountCents     int64  `json:"amount_cents"`
-	Status          string `json:"status"`
-	OccurredAt      string `json:"occurred_at"`
-	StripeInvoiceID string `json:"stripe_invoice_id"`
-	LastError       string `json:"last_error"`
+	ID              BillingEventID `json:"id"`
+	AmountCents     int64          `json:"amount_cents"`
+	Status          string         `json:"status"`
+	OccurredAt      string         `json:"occurred_at"`
+	StripeInvoiceID string         `json:"stripe_invoice_id"`
+	LastError       string         `json:"last_error"`
+}
+
+// BillingEventID accepts the backend's UUID strings as well as older numeric IDs.
+type BillingEventID string
+
+func (id *BillingEventID) UnmarshalJSON(data []byte) error {
+	var text string
+	if err := json.Unmarshal(data, &text); err == nil {
+		*id = BillingEventID(text)
+		return nil
+	}
+	var number json.Number
+	if err := json.Unmarshal(data, &number); err != nil {
+		return err
+	}
+	*id = BillingEventID(number.String())
+	return nil
 }
 
 // StripeAiPaymentModeResponse is returned by POST /api/v1/stripe_ai_billing/mode.

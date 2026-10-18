@@ -93,3 +93,14 @@ func TestStripeAiBillingErrorsUseSafeResponseBody(t *testing.T) {
 		})
 	}
 }
+
+func TestBillingStatusAcceptsStringAndNumericEventIDs(t *testing.T) {
+	var status StripeAiBillingStatusResponse
+	raw := `{"stripe":{"subscription_status":"active"},"usage":{"events":[{"id":"0f6c2a1e-uuid","amount_cents":4,"status":"settled"},{"id":42,"amount_cents":1,"status":"pending"}]}}`
+	if err := json.Unmarshal([]byte(raw), &status); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if status.Usage.Events[0].ID != "0f6c2a1e-uuid" || status.Usage.Events[1].ID != "42" {
+		t.Fatalf("ids: %#v", status.Usage.Events)
+	}
+}

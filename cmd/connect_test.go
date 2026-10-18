@@ -557,3 +557,22 @@ func TestOverlappingAccountUseKeepsTheMovedLogin(t *testing.T) {
 		t.Fatalf("second account use wiped the moved login: %q", got)
 	}
 }
+
+func TestConnectDoesNotWaitOnABillingCheckThatFails(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+	previous := connectBillingWait
+	connectBillingWait = 3 * time.Minute
+	t.Cleanup(func() { connectBillingWait = previous })
+
+	var out bytes.Buffer
+	ConnectCmd.SetOut(&out)
+	t.Cleanup(func() { ConnectCmd.SetOut(nil) })
+	started := time.Now()
+	reportBillingAfterConnect(ConnectCmd, profileConfig{BackendURL: server.URL, AccessToken: "a", Client: api.OAuthClient, UID: "u"})
+	if time.Since(started) > 5*time.Second || !bytes.Contains(out.Bytes(), []byte("Couldn't check card billing")) {
+		t.Fatalf("expected an immediate explanation, got %q after %s", out.String(), time.Since(started))
+	}
+}
