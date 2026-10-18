@@ -40,7 +40,7 @@ func newGetThreadsCommand() *cobra.Command {
 			return usageErrorf("--answer must not be empty")
 		}
 		if len(args) == 1 && strings.TrimSpace(args[0]) == "" {
-			return fmt.Errorf("thread ID must not be empty")
+			return usageErrorf("thread ID must not be empty")
 		}
 		if len(args) == 1 && flags.Changed("answer") {
 			return usageErrorf("thread ID and --answer are mutually exclusive")

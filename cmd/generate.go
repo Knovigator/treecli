@@ -125,7 +125,7 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 	settings := map[string]interface{}{}
 	if strings.TrimSpace(generateSettingsRaw) != "" {
 		if err := json.Unmarshal([]byte(generateSettingsRaw), &settings); err != nil {
-			return fmt.Errorf("invalid --settings JSON: %w", err)
+			return usageErrorf("invalid --settings JSON: %w", err)
 		}
 	}
 	if err := applyInputs(settings, generateInputs); err != nil {

@@ -71,7 +71,7 @@ func accountNames() (string, string, error) {
 		environment = "dev"
 	}
 	if !selectionNamePattern.MatchString(environment) {
-		return "", "", fmt.Errorf("invalid environment name; use letters, numbers, hyphens or underscores")
+		return "", "", usageErrorf("invalid environment name; use letters, numbers, hyphens or underscores")
 	}
 	account := strings.TrimSpace(SelectedAccount)
 	if account == "" {

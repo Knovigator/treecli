@@ -486,7 +486,7 @@ func resolveEmail() (string, error) {
 
 	email = strings.TrimSpace(email)
 	if email == "" {
-		return "", fmt.Errorf("email cannot be empty")
+		return "", usageErrorf("email cannot be empty")
 	}
 
 	return email, nil
@@ -516,7 +516,7 @@ func resolvePassword() (string, error) {
 
 		password := strings.TrimSpace(string(passwordBytes))
 		if password == "" {
-			return "", fmt.Errorf("password cannot be empty")
+			return "", usageErrorf("password cannot be empty")
 		}
 
 		return password, nil
@@ -532,7 +532,7 @@ func resolvePassword() (string, error) {
 	}
 
 	if password == "" {
-		return "", fmt.Errorf("password cannot be empty")
+		return "", usageErrorf("password cannot be empty")
 	}
 
 	return password, nil
@@ -815,7 +815,7 @@ func normalizeAppHost(rawHost string) string {
 func validateCredentialTransport(backendURL string) error {
 	parsedURL, err := url.Parse(strings.TrimSpace(backendURL))
 	if err != nil {
-		return fmt.Errorf("invalid backend_url %q: %w", backendURL, err)
+		return usageErrorf("invalid backend_url %q: %w", backendURL, err)
 	}
 	if parsedURL.Scheme == "https" {
 		return nil
@@ -830,7 +830,7 @@ func validateCredentialTransport(backendURL string) error {
 		return fmt.Errorf("refusing to send credentials to insecure backend_url %q; use https, localhost, or set TREECLI_ALLOW_INSECURE_HTTP=1", backendURL)
 	}
 
-	return fmt.Errorf("refusing to send credentials to unsupported backend_url scheme %q", parsedURL.Scheme)
+	return usageErrorf("refusing to send credentials to unsupported backend_url scheme %q", parsedURL.Scheme)
 }
 
 func isLoopbackHost(host string) bool {
