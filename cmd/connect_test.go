@@ -498,3 +498,25 @@ func TestDevicePollingDefaultsToFiveSeconds(t *testing.T) {
 		t.Fatalf("server interval ignored: %s", got)
 	}
 }
+
+func TestAccountUseRefusesALoginSavedForAnotherServer(t *testing.T) {
+	useTempConfig(t, "")
+	profile := profileConfig{Name: "prod", BackendURL: "https://a.example.test", AccessToken: "a", Client: api.OAuthClient, UID: "u"}
+	if err := saveProfile(profile, false); err != nil {
+		t.Fatal(err)
+	}
+	other := viper.New()
+	other.SetConfigFile(viper.ConfigFileUsed())
+	other.SetConfigType("toml")
+	if err := other.ReadInConfig(); err != nil {
+		t.Fatal(err)
+	}
+	other.Set("profiles.prod.backend_url", "https://b.example.test")
+	other.Set("profiles.prod.access_token", "b-token")
+	if err := other.WriteConfig(); err != nil {
+		t.Fatal(err)
+	}
+	if err := selectProfile(profile); err == nil {
+		t.Fatal("expected selection to refuse credentials saved for another server")
+	}
+}

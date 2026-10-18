@@ -647,23 +647,30 @@ func saveProfileLocked(profile profileConfig, setActive, reloadCredentials bool)
 
 	return withConfigLock(func() error {
 		if reloadCredentials {
-			reloadSavedCredentials(&profile, configPath)
+			if err := reloadSavedCredentials(&profile, configPath); err != nil {
+				return err
+			}
 		}
 		return saveConfigFields(profileFields(profile, setActive))
 	})
 }
 
-func reloadSavedCredentials(profile *profileConfig, configPath string) {
+func reloadSavedCredentials(profile *profileConfig, configPath string) error {
 	saved := viper.New()
 	saved.SetConfigFile(configPath)
 	saved.SetConfigType("toml")
 	prefix := credentialKeyPrefix(*profile)
 	if saved.ReadInConfig() != nil || !saved.IsSet(prefix+"client") {
-		return
+		return nil
 	}
 	get := func(key string) string { return strings.TrimSpace(saved.GetString(prefix + key)) }
+	// Credentials saved for another server must never be paired with this one.
+	if backend := get("backend_url"); backend != "" && normalizeBaseURL(backend) != normalizeBaseURL(profile.BackendURL) {
+		return fmt.Errorf("this account's login changed in another treecli; run the command again")
+	}
 	profile.AccessToken, profile.Client, profile.UID, profile.Expiry = get("access_token"), get("client"), get("uid"), get("expiry")
 	profile.RefreshToken, profile.OAuthTokenURL, profile.OAuthResource = get("refresh_token"), get("oauth_token_url"), get("oauth_resource")
+	return nil
 }
 
 func profileFields(profile profileConfig, setActive bool) map[string]interface{} {

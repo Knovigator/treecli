@@ -79,7 +79,7 @@ func (c *Client) mcpCall(ctx context.Context, method string, params, out interfa
 			return fmt.Errorf("invalid API response: %w", err)
 		}
 		if rpc.Error != nil {
-			return fmt.Errorf("Treechat request failed: %s", rpc.Error.Message)
+			return fmt.Errorf("Treechat request failed: %s", SafeCredentialResponseBody([]byte(rpc.Error.Message), c.bearer))
 		}
 		if out == nil {
 			return nil

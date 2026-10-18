@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -44,5 +45,17 @@ func TestOAuthMediaDownloadsSendNoCredentials(t *testing.T) {
 	data, err := DownloadMedia(server.URL+"/rails/active_storage/blobs/x/out.png", server.URL, "expired-bearer", OAuthClient, "user-1")
 	if err != nil || string(data) != "media" {
 		t.Fatalf("download: %q %v", data, err)
+	}
+}
+
+func TestMCPErrorMessagesAreRedacted(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"jsonrpc":"2.0","id":1,"error":{"code":-32602,"message":"bad token secret-bearer for person@example.com"}}`))
+	}))
+	defer server.Close()
+	client, _ := NewOAuthClient(server.URL, "secret-bearer")
+	_, err := client.CallTool(context.Background(), "treechat_account", nil)
+	if err == nil || strings.Contains(err.Error(), "secret-bearer") || strings.Contains(err.Error(), "person@example.com") {
+		t.Fatalf("unredacted error: %v", err)
 	}
 }
