@@ -72,7 +72,7 @@ func (c *Client) mcpCall(ctx context.Context, method string, params, out interfa
 			continue
 		}
 		if response.StatusCode() < 200 || response.StatusCode() >= 300 {
-			return fmt.Errorf("API request failed (status %d): %s", response.StatusCode(), SafeCredentialResponseBody(response.Body(), c.bearer))
+			return &RequestError{StatusCode: response.StatusCode(), Message: fmt.Sprintf("API request failed (status %d): %s", response.StatusCode(), SafeCredentialResponseBody(response.Body(), c.bearer))}
 		}
 		var rpc rpcResponse
 		if err := json.Unmarshal(response.Body(), &rpc); err != nil {

@@ -80,7 +80,7 @@ func init() {
 func runUpdate(cmd *cobra.Command, args []string) error {
 	repo := strings.TrimSpace(updateOptions.repo)
 	if repo == "" {
-		return fmt.Errorf("--repo is required")
+		return usageErrorf("--repo is required")
 	}
 
 	version := "latest"

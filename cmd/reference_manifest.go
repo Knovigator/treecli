@@ -3,7 +3,6 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"regexp"
 
 	treeclicontent "github.com/Knovigator/treecli/content"
@@ -20,7 +19,7 @@ var ReferenceManifestCmd = &cobra.Command{
 	RunE: func(command *cobra.Command, args []string) error {
 		revision, _ := command.Flags().GetString("source-revision")
 		if !regexp.MustCompile(`^[0-9a-f]{40}$`).MatchString(revision) {
-			return fmt.Errorf("--source-revision must be a full source commit SHA")
+			return usageErrorf("--source-revision must be a full source commit SHA")
 		}
 		skills, err := treeclicontent.ListPackagedSkills()
 		if err != nil {

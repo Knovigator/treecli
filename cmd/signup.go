@@ -53,7 +53,7 @@ func runSignup(cmd *cobra.Command, args []string) error {
 
 	if readSignupPasswordFromStdin &&
 		(strings.TrimSpace(signupUsername) == "" || strings.TrimSpace(signupEmail) == "") {
-		return fmt.Errorf("signup failed: --password-stdin requires --username and --email")
+		return usageErrorf("signup failed: --password-stdin requires --username and --email")
 	}
 
 	inputReader := bufio.NewReader(os.Stdin)
@@ -119,7 +119,7 @@ func resolveSignupUsername(reader *bufio.Reader) (string, error) {
 
 	username = strings.TrimSpace(username)
 	if username == "" {
-		return "", fmt.Errorf("username cannot be empty")
+		return "", usageErrorf("username cannot be empty")
 	}
 
 	return username, nil
@@ -138,7 +138,7 @@ func resolveSignupEmail(reader *bufio.Reader) (string, error) {
 
 	email = strings.TrimSpace(email)
 	if email == "" {
-		return "", fmt.Errorf("email cannot be empty")
+		return "", usageErrorf("email cannot be empty")
 	}
 
 	return email, nil
@@ -153,7 +153,7 @@ func resolveSignupPassword() (string, error) {
 
 		password := strings.TrimSpace(string(passwordBytes))
 		if password == "" {
-			return "", fmt.Errorf("password cannot be empty")
+			return "", usageErrorf("password cannot be empty")
 		}
 
 		return password, nil
@@ -164,7 +164,7 @@ func resolveSignupPassword() (string, error) {
 		return "", err
 	}
 	if password == "" {
-		return "", fmt.Errorf("password cannot be empty")
+		return "", usageErrorf("password cannot be empty")
 	}
 
 	confirmation, err := readHiddenPassword("Confirm password: ")

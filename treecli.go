@@ -17,7 +17,7 @@ var rootCmd = &cobra.Command{
 	Version:           cmd.CurrentVersion,
 	SilenceErrors:     true,
 	SilenceUsage:      true,
-	PersistentPreRunE: cmd.ConfigureAccountSelection,
+	PersistentPreRunE: cmd.PrepareCommand,
 }
 
 const (
@@ -106,7 +106,7 @@ func resolveConfigPath() (string, error) {
 func main() {
 	if err := rootCmd.Execute(); err != nil {
 		cmd.PrintError(os.Stderr, err)
-		os.Exit(1)
+		os.Exit(cmd.ExitCode(err))
 	}
 }
 

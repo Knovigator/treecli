@@ -447,9 +447,9 @@ func requireAuthenticatedProfile() (profileConfig, error) {
 
 	if profile.AccessToken == "" || profile.Client == "" || profile.UID == "" {
 		if profile.Environment != "" {
-			return profileConfig{}, fmt.Errorf("missing credentials for account %q in environment %q; run treecli --env %s --account %s login", profile.Account, profile.Environment, profile.Environment, profile.Account)
+			return profileConfig{}, fmt.Errorf("missing credentials for account %q in environment %q; run treecli --env %s --account %s connect (or login)", profile.Account, profile.Environment, profile.Environment, profile.Account)
 		}
-		return profileConfig{}, fmt.Errorf("missing credentials for profile %q; run treecli login --profile %s", profile.Name, profile.Name)
+		return profileConfig{}, fmt.Errorf("missing credentials for profile %q; run treecli connect --profile %s (or login)", profile.Name, profile.Name)
 	}
 	if err := validateCredentialTransport(profile.BackendURL); err != nil {
 		return profileConfig{}, err
@@ -486,7 +486,7 @@ func resolveEmail() (string, error) {
 
 	email = strings.TrimSpace(email)
 	if email == "" {
-		return "", fmt.Errorf("email cannot be empty")
+		return "", usageErrorf("email cannot be empty")
 	}
 
 	return email, nil
@@ -516,7 +516,7 @@ func resolvePassword() (string, error) {
 
 		password := strings.TrimSpace(string(passwordBytes))
 		if password == "" {
-			return "", fmt.Errorf("password cannot be empty")
+			return "", usageErrorf("password cannot be empty")
 		}
 
 		return password, nil
@@ -532,7 +532,7 @@ func resolvePassword() (string, error) {
 	}
 
 	if password == "" {
-		return "", fmt.Errorf("password cannot be empty")
+		return "", usageErrorf("password cannot be empty")
 	}
 
 	return password, nil
@@ -562,7 +562,8 @@ func performLogin(backendURL, email, password string) (authTokens, error) {
 		}
 
 		if resp.StatusCode() != http.StatusOK {
-			return authTokens{}, fmt.Errorf("login failed: %s", formatResponseError(resp))
+			// Keep the status so a 401 exits as "not signed in" and a 429 as rate limited.
+			return authTokens{}, &api.RequestError{StatusCode: resp.StatusCode(), Message: fmt.Sprintf("login failed: %s", formatResponseError(resp))}
 		}
 
 		return authTokensFromResponse(resp)
@@ -814,7 +815,7 @@ func normalizeAppHost(rawHost string) string {
 func validateCredentialTransport(backendURL string) error {
 	parsedURL, err := url.Parse(strings.TrimSpace(backendURL))
 	if err != nil {
-		return fmt.Errorf("invalid backend_url %q: %w", backendURL, err)
+		return usageErrorf("invalid backend_url %q: %w", backendURL, err)
 	}
 	if parsedURL.Scheme == "https" {
 		return nil
@@ -829,7 +830,7 @@ func validateCredentialTransport(backendURL string) error {
 		return fmt.Errorf("refusing to send credentials to insecure backend_url %q; use https, localhost, or set TREECLI_ALLOW_INSECURE_HTTP=1", backendURL)
 	}
 
-	return fmt.Errorf("refusing to send credentials to unsupported backend_url scheme %q", parsedURL.Scheme)
+	return usageErrorf("refusing to send credentials to unsupported backend_url scheme %q", parsedURL.Scheme)
 }
 
 func isLoopbackHost(host string) bool {

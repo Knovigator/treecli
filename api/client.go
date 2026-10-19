@@ -98,7 +98,7 @@ func (c *Client) DoJSON(ctx context.Context, method, path string, query url.Valu
 		return fmt.Errorf("API request failed")
 	}
 	if response.StatusCode() < 200 || response.StatusCode() >= 300 {
-		return fmt.Errorf("API request failed (status %d): %s", response.StatusCode(), SafeCredentialResponseBody(response.Body(), c.bearer, c.accessToken, c.clientID, c.uid))
+		return &RequestError{StatusCode: response.StatusCode(), Message: fmt.Sprintf("API request failed (status %d): %s", response.StatusCode(), SafeCredentialResponseBody(response.Body(), c.bearer, c.accessToken, c.clientID, c.uid))}
 	}
 	if out == nil || len(response.Body()) == 0 {
 		return nil

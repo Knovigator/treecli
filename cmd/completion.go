@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"fmt"
 	"github.com/spf13/cobra"
 	"io"
 )
@@ -73,6 +72,6 @@ func RenderCompletion(root *cobra.Command, shell string, out io.Writer, noDescri
 		}
 		return root.GenPowerShellCompletionWithDesc(out)
 	default:
-		return fmt.Errorf("unsupported completion shell %q", shell)
+		return usageErrorf("unsupported completion shell %q", shell)
 	}
 }

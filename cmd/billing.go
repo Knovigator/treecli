@@ -152,7 +152,7 @@ func runBillingMode(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if mode == "" {
-		return fmt.Errorf("specify a payment mode: usd or bsv")
+		return usageErrorf("specify a payment mode: usd or bsv")
 	}
 
 	profile, err := requireAuthenticatedProfile()
@@ -183,7 +183,7 @@ func runBillingMode(cmd *cobra.Command, args []string) error {
 func runBillingSync(cmd *cobra.Command, args []string) error {
 	sessionID := strings.TrimSpace(args[0])
 	if sessionID == "" {
-		return fmt.Errorf("checkout session id is required")
+		return usageErrorf("checkout session id is required")
 	}
 
 	profile, err := requireAuthenticatedProfile()

@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"fmt"
 	"strings"
 )
 
@@ -14,7 +13,7 @@ func normalizePaymentMode(raw string) (string, error) {
 	case "usd", "stripe", "stripe_metered", "stripe-metered":
 		return "stripe_metered", nil
 	default:
-		return "", fmt.Errorf("invalid --payment %q; use usd or bsv/bitcoinsv", raw)
+		return "", usageErrorf("invalid --payment %q; use usd or bsv/bitcoinsv", raw)
 	}
 }
 

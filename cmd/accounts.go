@@ -34,16 +34,16 @@ func ConfigureAccountSelection(command *cobra.Command, args []string) error {
 		return fmt.Errorf("account commands require --env/--account, not --profile")
 	}
 	if (legacy || legacyCommand) && modern {
-		return fmt.Errorf("--profile/profile commands cannot be combined with --env or --account; choose one interface")
+		return usageErrorf("--profile/profile commands cannot be combined with --env or --account; choose one interface")
 	}
 	if command.Flags().Changed("profile") && strings.TrimSpace(SelectedProfile) == "" {
-		return fmt.Errorf("--profile requires a nonempty name")
+		return usageErrorf("--profile requires a nonempty name")
 	}
 	for _, name := range []string{"env", "account"} {
 		if command.Flags().Changed(name) {
 			value, _ := command.Flags().GetString(name)
 			if strings.TrimSpace(value) == "" {
-				return fmt.Errorf("--%s requires a nonempty name", name)
+				return usageErrorf("--%s requires a nonempty name", name)
 			}
 		}
 	}
@@ -71,7 +71,7 @@ func accountNames() (string, string, error) {
 		environment = "dev"
 	}
 	if !selectionNamePattern.MatchString(environment) {
-		return "", "", fmt.Errorf("invalid environment name; use letters, numbers, hyphens or underscores")
+		return "", "", usageErrorf("invalid environment name; use letters, numbers, hyphens or underscores")
 	}
 	account := strings.TrimSpace(SelectedAccount)
 	if account == "" {
@@ -106,7 +106,7 @@ func accountNames() (string, string, error) {
 	}
 	account = normalizeProfileName(account)
 	if !selectionNamePattern.MatchString(account) {
-		return "", "", fmt.Errorf("invalid account name; use letters, numbers, hyphens or underscores")
+		return "", "", usageErrorf("invalid account name; use letters, numbers, hyphens or underscores")
 	}
 	return environment, account, nil
 }
@@ -199,7 +199,7 @@ func newAccountCommand() *cobra.Command {
 		}
 		name := normalizeProfileName(args[0])
 		if !selectionNamePattern.MatchString(name) {
-			return fmt.Errorf("invalid account name")
+			return usageErrorf("invalid account name")
 		}
 		profile, err := resolveNamedAccount(environment, name)
 		if err != nil {

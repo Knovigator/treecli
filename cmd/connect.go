@@ -7,10 +7,12 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/Knovigator/treecli/api"
+	treeclicontent "github.com/Knovigator/treecli/content"
 	"github.com/go-resty/resty/v2"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -27,6 +29,7 @@ const oauthRefreshSkew = time.Minute
 
 var connectNoBrowser bool
 var connectBillingWait time.Duration
+var connectInstallSkills bool
 
 var ConnectCmd = &cobra.Command{
 	Use:   "connect",
@@ -43,6 +46,7 @@ var ConnectCmd = &cobra.Command{
 func init() {
 	ConnectCmd.Flags().BoolVar(&connectNoBrowser, "no-browser", false, "Print the link instead of opening a browser")
 	ConnectCmd.Flags().DurationVar(&connectBillingWait, "billing-wait", 3*time.Minute, "How long to wait for card setup after access is allowed (0 to skip)")
+	ConnectCmd.Flags().BoolVar(&connectInstallSkills, "install-skills", false, "Also install treecli skills for the coding agents found on this machine (Claude Code, Codex, Pi)")
 }
 
 type oauthServer struct {
@@ -125,6 +129,62 @@ func runConnect(cmd *cobra.Command, args []string) error {
 	fmt.Fprintf(out, "Connected as @%s.\n", identity.Username)
 
 	reportBillingAfterConnect(cmd, profile)
+	return offerAgentSkills(cmd)
+}
+
+// detectedSkillRoots lists skill folders for coding agents installed here.
+func detectedSkillRoots() map[string]string {
+	home := userHomeDir()
+	if home == "" {
+		return nil
+	}
+	candidates := map[string][2]string{
+		"--claude": {filepath.Join(home, ".claude"), filepath.Join(home, ".claude", "skills")},
+		"--codex":  {filepath.Join(home, ".codex"), filepath.Join(home, ".codex", "skills")},
+		"--pi":     {filepath.Join(home, ".pi", "agent"), filepath.Join(home, ".pi", "agent", "skills")},
+	}
+	found := map[string]string{}
+	for flag, paths := range candidates {
+		if info, err := os.Stat(paths[0]); err == nil && info.IsDir() {
+			found[flag] = paths[1]
+		}
+	}
+	return found
+}
+
+// offerAgentSkills teaches the coding agents found here how to use treecli:
+// installs the packaged skills with --install-skills, or prints the command.
+func offerAgentSkills(cmd *cobra.Command) error {
+	out := cmd.OutOrStdout()
+	roots := detectedSkillRoots()
+	if len(roots) == 0 {
+		return nil
+	}
+	flags := make([]string, 0, len(roots))
+	for flag := range roots {
+		flags = append(flags, flag)
+	}
+	sort.Strings(flags)
+	if !connectInstallSkills {
+		fmt.Fprintf(out, "Teach your coding agent treecli: treecli skills install all %s\n", strings.Join(flags, " "))
+		return nil
+	}
+	keys, err := resolvePackagedSkillKeys("all")
+	if err != nil {
+		return err
+	}
+	for _, flag := range flags {
+		for _, key := range keys {
+			skill, err := treeclicontent.GetPackagedSkill(key)
+			if err != nil || skill == nil {
+				return fmt.Errorf("packaged skill %q unavailable", key)
+			}
+			if _, err := treeclicontent.InstallPackagedSkill(*skill, roots[flag]); err != nil {
+				return err
+			}
+		}
+		fmt.Fprintf(out, "Installed treecli skills to %s\n", roots[flag])
+	}
 	return nil
 }
 
