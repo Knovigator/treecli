@@ -5,6 +5,8 @@ import (
 	"github.com/spf13/viper"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -142,4 +144,53 @@ func configureSharedCommandProfile(t *testing.T, backend string) {
 	viper.Set("profiles.prod.access_token", "test-token")
 	viper.Set("profiles.prod.client", "test-client")
 	viper.Set("profiles.prod.uid", "test-uid")
+}
+
+func TestGeneratedRetryKeyIsPrintedBeforeGenerationRequest(t *testing.T) {
+	withGenerateGlobals(t)
+	oldID, oldCap := generateRequestID, generateMaxPriceCents
+	oldChanged := GenerateCmd.Flags().Lookup("max-price-cents").Changed
+	t.Cleanup(func() {
+		generateRequestID, generateMaxPriceCents = oldID, oldCap
+		GenerateCmd.Flags().Lookup("max-price-cents").Changed = oldChanged
+	})
+	log, err := os.CreateTemp(t.TempDir(), "retry-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer log.Close()
+	previous := os.Stderr
+	os.Stderr = log
+	t.Cleanup(func() { os.Stderr = previous })
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		var request struct {
+			Name      string                 `json:"name"`
+			Arguments map[string]interface{} `json:"arguments"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Error(err)
+		}
+		key, _ := request.Arguments["idempotency_key"].(string)
+		printed, err := os.ReadFile(log.Name())
+		if request.Name != "generate_media" || key == "" || err != nil || !strings.Contains(string(printed), key) {
+			t.Errorf("key was not printed before RPC: key=%q log=%q err=%v", key, printed, err)
+		}
+		w.Write([]byte(`{"isError":true,"structuredContent":{"status":503,"body":{"error":"fixture unavailable"}}}`))
+	}))
+	defer server.Close()
+	configureSharedCommandProfile(t, server.URL)
+	generateRequestID = ""
+	generateMaxPriceCents = 10
+	GenerateCmd.Flags().Lookup("max-price-cents").Changed = true
+	generateQuote = false
+	generateReference = ""
+	generateInputs = nil
+	generateSettingsRaw = ""
+	generateOut = filepath.Join(t.TempDir(), "out.png")
+	err = runGenerate(GenerateCmd, []string{"flux", "prompt"})
+	if err == nil || calls != 1 {
+		t.Fatalf("calls=%d err=%v", calls, err)
+	}
 }
