@@ -397,17 +397,18 @@ Agents should install `treecli`, run `treecli onboard` to see what setup remains
 
 `treecli` is licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE).
 
-### Shared daily generation budget
+### Connected application generation budget
 
-Generation is paid per action. The CLI does not create or change a billing subscription when generating or setting a budget. The backend enforces the explicit action price ceiling and the account's daily reservation budget for shared direct-generation calls (`generate_media` and reviewed-quote `create_generation`) from both CLI and MCP. This daily budget excludes native/post-backed generation, the legacy direct endpoint, other Treechat spend, and network fees.
+Generation is paid per action. The CLI does not create or change a billing subscription when generating or reading the budget. The backend enforces each action's explicit price ceiling and the existing OAuth application's daily consent limit across native/post-backed and direct AI reservations. The window rolls over the previous 24 hours, shared by this application's CLI and MCP calls. Other applications, legacy clients and network fees are excluded.
 
 ```bash
 treecli billing budget
 treecli billing budget --json
-treecli billing budget set 500
-treecli billing budget unset
+treecli connect
 ```
 
-These are example limits, not account values. Limits use integer USD cents; `0` permits no positive-cost admission. `unset` sends `null`, removing the daily cap while retaining per-action caps. Status reports the backend's reserved and remaining amounts, scope, exclusions, and reset time. Admission days reset at midnight UTC; reservation accounting is not a settled-charge total.
+`billing budget` only reads the limit. Set or change the daily limit by reconnecting through `treecli connect` and approving browser consent; no tool silently overrides the grant's limit. Limits use integer USD cents; `0` permits no positive-cost admission. Without an OAuth connection, status explicitly reports `not_connected` and an unset limit, with instructions to connect. No live account limit is assumed here.
+
+Status reports reserved and remaining capacity, scope, exclusions, and the earliest known reservation expiry as `next_release_at` in UTC. There is no fixed midnight reset (`resets_at` is null). Reservation accounting is not a settled-charge total.
 
 Local references remain local until explicitly uploaded. An `@path` upload creates a reference ID: reuse the printed `run:<id>` for a retry rather than uploading the file again. For uploaded `--input` settings, reuse the normalized reference IDs in the request. Wallet private keys remain in local custody.

@@ -97,21 +97,22 @@ when retrying rather than uploading the same file again.
 `generate --quote` calls `quote_generation` as an optional price preview without
 generating media. Existing reviewed quotes can still be executed with
 `generate --quote-id QUOTE_ID --id REQUEST_ID --out FILE`, which calls
-`create_generation`. Both execution paths enforce the shared direct-generation
-daily budget. There is no automatic fallback to a legacy endpoint.
+`create_generation`. Both execution paths enforce the connected application rolling 24-hour
+budget. There is no automatic fallback to a legacy endpoint.
 
-`billing budget` calls `get_generation_budget`; `billing budget set CENTS` and
-`billing budget unset` call `set_generation_budget` with an integer or explicit
-null. A zero daily cap blocks positive-cost admissions; an unset daily cap imposes
-no daily limit. Per-action caps remain required. No budget values are inferred
-from these examples and these commands do not create a billing subscription.
+`billing budget` calls the read-only `get_generation_budget`. It reports the
+existing OAuth application's consent limit across native/post-backed and direct
+AI reservations. Other applications, legacy clients and network fees are excluded.
+The window is rolling 24 hours, not a UTC calendar day; `resets_at` is null and
+`next_release_at` identifies the earliest counted reservation expiry, when known.
+All timestamps use UTC. This reservation total is not settled billing spend.
 
-This budget covers quoted-price reservations admitted through shared direct
-`generate_media` and `create_generation` calls, across CLI and MCP. It excludes
-native/post-backed generation, the legacy direct endpoint, other Treechat spend,
-and network fees. All admitted job states remain counted; this is not a settled
-billing total. Admission days reset at midnight UTC. The status response reports
-the current cap, reserved/remaining amounts, reset time, scope and exclusions.
+Set or change the daily limit through `treecli connect` browser consent. There is
+no budget setter tool or CLI subcommand that overrides the OAuth grant limit.
+A zero limit blocks positive-cost admissions. Without an OAuth connection,
+`not_connected` and an unset daily limit are explicit; connect to approve a limit.
+Per-action caps remain required. Generating and reading the budget do not create
+or modify a billing subscription.
 
 ## Shared resources and client responsibilities
 

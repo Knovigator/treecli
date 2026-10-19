@@ -32,8 +32,8 @@ var GenerateCmd = &cobra.Command{
 	Use:   "generate <ai-action> [prompt...]",
 	Short: "Generate AI media directly and download it locally (never creates a post)",
 	Long: "Generate AI media through the direct generation API and save it to a local file.\n\n" +
-		"Set --max-price-cents and --id for each action. The shared backend enforces the action cap and account daily budget.\n" +
-		"Use `treecli billing budget` to inspect the daily cap and its UTC reset. --quote is an optional preview.\n\n" +
+		"Set --max-price-cents and --id for each action. The shared backend enforces the action cap and connected application rolling 24-hour budget.\n" +
+		"Use `treecli billing budget` to inspect the daily cap and next capacity release. --quote is an optional preview.\n\n" +
 		"This charges your account (USD/BSV) and NEVER touches the posting infra — no Answer, " +
 		"no Quest, no thread, nothing on your feed.\n\n" +
 		"Pass arbitrary model inputs with repeatable --input key=value (values are parsed as JSON " +

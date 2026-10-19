@@ -53,7 +53,7 @@ func TestCompiledCappedGenerationAndBudgetAdapters(t *testing.T) {
 			result = map[string]interface{}{"generation_id": "g", "status": "succeeded", "media_urls": []string{"http://" + r.Host + "/media.png"}}
 		case "quote_generation":
 			result = map[string]interface{}{"quote_id": "preview", "price_cents": 7}
-		case "get_generation_budget", "set_generation_budget":
+		case "get_generation_budget":
 			result = map[string]interface{}{"daily_limit_cents": c.Arguments["daily_limit_cents"], "spent_cents": 10, "reserved_cents": 20, "future_field": "preserved"}
 		default:
 			t.Errorf("unexpected tool %s", c.Name)
@@ -139,33 +139,21 @@ func TestCompiledCappedGenerationAndBudgetAdapters(t *testing.T) {
 			t.Fatalf("denial wrote output: %v", err)
 		}
 	})
-	t.Run("budget forwarding", func(t *testing.T) {
-		for _, tc := range []struct {
-			args  []string
-			name  string
-			value interface{}
-		}{
-			{[]string{"billing", "budget", "--json"}, "get_generation_budget", nil},
-			{[]string{"billing", "budget", "set", "250", "--json"}, "set_generation_budget", float64(250)},
-			{[]string{"billing", "budget", "set", "0", "--json"}, "set_generation_budget", float64(0)},
-			{[]string{"billing", "budget", "unset", "--json"}, "set_generation_budget", nil},
-		} {
+	t.Run("budget read only", func(t *testing.T) {
+		before := len(snapshot())
+		out, stderr, err := runCLI(t, binary, config, "", "billing", "budget", "--json")
+		if err != nil || !strings.Contains(out, "future_field") {
+			t.Fatalf("budget: %v %s %s", err, out, stderr)
+		}
+		got := snapshot()[before:]
+		if len(got) != 1 || got[0].Name != "get_generation_budget" || len(got[0].Arguments) != 0 {
+			t.Fatalf("budget wire %#v", got)
+		}
+		for _, args := range [][]string{{"billing", "budget", "set", "250"}, {"billing", "budget", "unset"}} {
 			before := len(snapshot())
-			out, stderr, err := runCLI(t, binary, config, "", tc.args...)
-			if err != nil || !strings.Contains(out, "future_field") {
-				t.Fatalf("budget %v: %v %s %s", tc.args, err, out, stderr)
-			}
-			got := snapshot()[before:]
-			if len(got) != 1 || got[0].Name != tc.name || got[0].Arguments["daily_limit_cents"] != tc.value {
-				t.Fatalf("budget wire %#v", got)
-			}
-			if tc.name == "set_generation_budget" {
-				if _, present := got[0].Arguments["daily_limit_cents"]; !present {
-					t.Fatal("unset must send explicit null")
-				}
-			}
-			if tc.name == "get_generation_budget" && len(got[0].Arguments) != 0 {
-				t.Fatalf("unexpected read args %#v", got)
+			out, stderr, err := runCLI(t, binary, config, "", args...)
+			if err == nil || len(snapshot()) != before {
+				t.Fatalf("removed mutation %v: %v %s %s", args, err, out, stderr)
 			}
 		}
 	})
