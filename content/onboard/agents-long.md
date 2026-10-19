@@ -145,12 +145,12 @@ above when starting from a **post** ID.
 - Discover model-backed AI actions with `treecli action actions`.
 - Root action: `treecli action flux "a glass cathedral in the rain" --max-price-cents 100`.
 - Reply action: `treecli action --reply-to <quest-id> animate_kling "animate this as a handheld push-in" --max-price-cents 100`.
-- Chatterbox text-to-speech: `treecli action tts "Abigail read this in a crisp narration voice" --max-price-cents 100` or `treecli generate tts "Abigail read this in a crisp narration voice" --out chatterbox.mp3 --max-price-cents 100`; alias: `chatterbox`.
-- Chatterbox voice clone: `treecli action --reply-to <quest-id> clone "read this in the uploaded voice" --max-price-cents 100` in a thread with audio, or `treecli generate clone "read this in the sampled voice" --reference @voice.mp3 --out clone.mp3 --max-price-cents 100`.
-- ElevenLabs text-to-speech: `treecli action eleven_tts "read this in a crisp narration voice" --max-price-cents 100` or `treecli generate eleven_tts "read this in a crisp narration voice" --out narration.mp3 --max-price-cents 100`; aliases include `eleven`, `elevenlabs`, and `11`.
-- Video sound effects: `treecli action sfx "rain, tires on wet asphalt, distant thunder" --max-price-cents 100` or `treecli generate sfx "rain, tires on wet asphalt, distant thunder" --reference @clip.mp4 --out sfx.mp3 --max-price-cents 100`; aliases include `sfx`, `mmaudio`, and `foley`.
-- Direct existing-image animation: use the base video model with a reference, such as `treecli generate kling2 "slow handheld push-in" --reference @image.png --out animated.mp4 --max-price-cents 100`.
-- Direct existing-image edit: use the base image model with a reference, such as `treecli generate qwen "replace the sky with stars" --reference @image.png --out edited.png --max-price-cents 100`.
+- Chatterbox text-to-speech: `treecli action tts "Abigail read this in a crisp narration voice" --max-price-cents 100` or `treecli generate tts "Abigail read this in a crisp narration voice" --out chatterbox.mp3 --max-price-cents 100 --id <unique-action-id>`; alias: `chatterbox`.
+- Chatterbox voice clone: `treecli action --reply-to <quest-id> clone "read this in the uploaded voice" --max-price-cents 100` in a thread with audio, or `treecli generate clone "read this in the sampled voice" --reference @voice.mp3 --out clone.mp3 --max-price-cents 100 --id <unique-action-id>`.
+- ElevenLabs text-to-speech: `treecli action eleven_tts "read this in a crisp narration voice" --max-price-cents 100` or `treecli generate eleven_tts "read this in a crisp narration voice" --out narration.mp3 --max-price-cents 100 --id <unique-action-id>`; aliases include `eleven`, `elevenlabs`, and `11`.
+- Video sound effects: `treecli action sfx "rain, tires on wet asphalt, distant thunder" --max-price-cents 100` or `treecli generate sfx "rain, tires on wet asphalt, distant thunder" --reference @clip.mp4 --out sfx.mp3 --max-price-cents 100 --id <unique-action-id>`; aliases include `sfx`, `mmaudio`, and `foley`.
+- Direct existing-image animation: use the base video model with a reference, such as `treecli generate kling2 "slow handheld push-in" --reference @image.png --out animated.mp4 --max-price-cents 100 --id <unique-action-id>`.
+- Direct existing-image edit: use the base image model with a reference, such as `treecli generate qwen "replace the sky with stars" --reference @image.png --out edited.png --max-price-cents 100 --id <unique-action-id>`.
 - Treechat action model:
 - Use plain AI actions like `flux`, `veo3`, or `kling` to generate a new asset from the prompt.
 - Use `animate_*` AI actions to animate an existing image from the thread or attachment context in post-backed `action` workflows.
@@ -162,7 +162,7 @@ above when starting from a **post** ID.
 - `treecli action` waits by default and shows a spinner in interactive terminals.
 - For post-less local media generation, inspect support with `treecli generate actions --direct-only`.
 - Use `treecli generate actions --verbose` or `treecli generate describe <action>` to get model descriptions, accepted inputs, settings, reference behavior, and examples before generating.
-- Generate local media with `treecli generate <action> "prompt" --out <file> --max-price-cents 100` and pass settings with `--input key=value`, `--settings '{...}'`, `--duration`, `--instrumental`, `--reference`, or `--payment` as described by the action and billing intent. Direct image edits and image-to-video runs use the base image/video action with explicit reference media because direct generation has no thread context; do not use `edit_*` or `animate_*` with `generate`.
+- Generate local media with `treecli generate <action> "prompt" --out <file> --max-price-cents 100 --id <unique-action-id>` and pass settings with `--input key=value`, `--settings '{...}'`, `--duration`, `--instrumental`, `--reference`, or `--payment` as described by the action and billing intent. Direct image edits and image-to-video runs use the base image/video action with explicit reference media because direct generation has no thread context; do not use `edit_*` or `animate_*` with `generate`.
 
 ### Async Action Workflows
 
@@ -193,3 +193,5 @@ above when starting from a **post** ID.
 
 - For bash and zsh, turn completions on in the current shell with `if [ -n "${ZSH_VERSION:-}" ]; then autoload -U compinit && compinit; source <(treecli completion zsh); elif command -v complete >/dev/null 2>&1; then source <(treecli completion bash); else echo "Current shell does not support bash completion; use zsh or a bash with progcomp."; fi`.
 - Use `treecli completion bash` or `treecli completion zsh` directly if you want to install persistent completions.
+
+Direct generation requires an explicit per-action `--max-price-cents`. `--id` is optional: the CLI generates and prints a key before execution when omitted. Reuse the printed key via `--id` with identical inputs after an uncertain result; use a new ID for a different action. `--quote` is an optional preview. Inspect the connected application cap with `treecli billing budget`. Change the daily limit through `treecli connect` browser consent. The backend reports rolling 24-hour reservations across native and direct AI generation, and the next capacity release in UTC; there is no midnight reset. If not connected, the limit is unset and you must connect to approve it. Other applications, legacy clients and network fees are excluded. Local uploads produce new reference IDs, so reuse the returned `run:<id>` values when retrying.
