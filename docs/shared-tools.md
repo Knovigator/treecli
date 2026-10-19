@@ -79,7 +79,8 @@ format these shared results without maintaining a second model catalog.
 ## Direct generation and spending limits
 
 Named `generate` calls `generate_media` once with an explicit per-action ceiling
-and idempotency key. Pricing, eligibility, daily budget admission and generation
+and idempotency key. The CLI generates and prints a UUID when `--id` is omitted;
+pass the printed key explicitly on retries. Pricing, eligibility, budget admission and generation
 execution belong to the shared backend. No preview is required:
 
 ```sh

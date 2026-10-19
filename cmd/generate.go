@@ -32,7 +32,7 @@ var GenerateCmd = &cobra.Command{
 	Use:   "generate <ai-action> [prompt...]",
 	Short: "Generate AI media directly and download it locally (never creates a post)",
 	Long: "Generate AI media through the direct generation API and save it to a local file.\n\n" +
-		"Set --max-price-cents and --id for each action. The shared backend enforces the action cap and connected application rolling 24-hour budget.\n" +
+		"Set --max-price-cents for each action. An idempotency key is generated when --id is omitted; reuse the printed key on retries. The shared backend enforces the action cap and connected application rolling 24-hour budget.\n" +
 		"Use `treecli billing budget` to inspect the daily cap and next capacity release. --quote is an optional preview.\n\n" +
 		"This charges your account (USD/BSV) and NEVER touches the posting infra — no Answer, " +
 		"no Quest, no thread, nothing on your feed.\n\n" +
@@ -67,7 +67,7 @@ var generateQuoteID, generateRequestID string
 func init() {
 	GenerateCmd.Flags().IntVar(&generateMaxPriceCents, "max-price-cents", 0, "Maximum generation fee in USD cents; required")
 	GenerateCmd.Flags().StringVar(&generateQuoteID, "quote-id", "", "Execute this reviewed quote; reuse with --id on retries")
-	GenerateCmd.Flags().StringVar(&generateRequestID, "id", "", "Required generation idempotency key; reuse with identical inputs on retries")
+	GenerateCmd.Flags().StringVar(&generateRequestID, "id", "", "Optional generation idempotency key (default: generated UUID); reuse the printed key with identical inputs on retries")
 	GenerateCmd.Flags().StringVarP(&generateOut, "out", "o", "", "Path to write the generated file (required unless --quote). Extra outputs get a -N suffix.")
 	GenerateCmd.Flags().StringVar(&generateSettingsRaw, "settings", "", "Optional JSON object of model settings (e.g. '{\"aspect_ratio\":\"1:1\"}')")
 	GenerateCmd.Flags().StringArrayVar(&generateInputs, "input", nil, "Model input as key=value (repeatable). Value parsed as JSON if possible, else string. Use @path to upload a local media file.")
@@ -137,8 +137,8 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 	if generateQuoteID == "" && ((cmd == nil || !cmd.Flags().Changed("max-price-cents")) || generateMaxPriceCents < 0 || int64(generateMaxPriceCents) > 2147483647) {
 		return usageErrorf("--max-price-cents is required and must be between 0 and 2147483647 USD cents")
 	}
-	if !generateQuote && !regexp.MustCompile(`^[A-Za-z0-9._:-]{1,128}$`).MatchString(generateRequestID) {
-		return usageErrorf("--id is required: use 1-128 ASCII letters, digits, dots, underscores, colons or hyphens; reuse it with identical inputs on retries")
+	if generateRequestID != "" && !regexp.MustCompile(`^[A-Za-z0-9._:-]{1,128}$`).MatchString(generateRequestID) {
+		return usageErrorf("invalid --id: use 1-128 ASCII letters, digits, dots, underscores, colons or hyphens; reuse it with identical inputs on retries")
 	}
 
 	profile, err := requireAuthenticatedProfile()
@@ -146,8 +146,15 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	key := generateRequestID
+	if !generateQuote && key == "" {
+		key, err = newUUID()
+		if err != nil {
+			return err
+		}
+	}
 	tool := "generate_media"
-	arguments := map[string]interface{}{"idempotency_key": generateRequestID}
+	arguments := map[string]interface{}{"idempotency_key": key}
 	if generateQuoteID != "" {
 		tool = "create_generation"
 		arguments["quote_id"] = generateQuoteID
@@ -184,7 +191,7 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 		}
 	}
 	if !generateQuote {
-		fmt.Fprintf(os.Stderr, "Generation idempotency key: %s; reuse with identical inputs on retries.\n", generateRequestID)
+		fmt.Fprintf(os.Stderr, "Generation idempotency key: %s; reuse with identical inputs on retries.\n", key)
 	}
 	raw, err := api.SharedOperation(profile.BackendURL, profile.AccessToken, profile.Client, profile.UID, tool, arguments)
 	if err != nil {

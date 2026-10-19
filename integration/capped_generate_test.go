@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -114,8 +115,30 @@ func TestCompiledCappedGenerationAndBudgetAdapters(t *testing.T) {
 			t.Fatal("preview forwarded execution key")
 		}
 	})
+	t.Run("omitted ID generates printable reusable key", func(t *testing.T) {
+		before := len(snapshot())
+		output := filepath.Join(t.TempDir(), "generated-id.png")
+		out, stderr, err := runCLI(t, binary, config, "", "generate", "flux", "prompt", "--max-price-cents", "10", "--out", output)
+		if err != nil {
+			t.Fatalf("auto ID: %v %s %s", err, out, stderr)
+		}
+		got := snapshot()[before:]
+		if len(got) != 1 || got[0].Name != "generate_media" {
+			t.Fatalf("auto ID calls %#v", got)
+		}
+		key, ok := got[0].Arguments["idempotency_key"].(string)
+		if !ok || !regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`).MatchString(key) || !strings.Contains(stderr, key) {
+			t.Fatalf("missing printable UUID key=%q stderr=%q", key, stderr)
+		}
+		before = len(snapshot())
+		out, stderr, err = runCLI(t, binary, config, "", "generate", "flux", "prompt", "--max-price-cents", "10", "--id", key, "--out", output)
+		retried := snapshot()[before:]
+		if err != nil || len(retried) != 1 || !reflect.DeepEqual(retried[0], got[0]) {
+			t.Fatalf("generated key retry changed: %v %s %s %#v", err, out, stderr, retried)
+		}
+	})
 	t.Run("validation rejects before uploads or RPC", func(t *testing.T) {
-		for _, flags := range [][]string{{"--id", "key"}, {"--max-price-cents", "10"}, {"--max-price-cents", "-1", "--id", "key"}, {"--max-price-cents", "2147483648", "--id", "key"}, {"--max-price-cents", "0", "--id", "   "}} {
+		for _, flags := range [][]string{{"--id", "key"}, {"--max-price-cents", "-1", "--id", "key"}, {"--max-price-cents", "2147483648", "--id", "key"}, {"--max-price-cents", "0", "--id", "   "}} {
 			before := len(snapshot())
 			args := append([]string{"generate", "flux", "prompt", "--reference", "@/missing/file.png", "--out", filepath.Join(t.TempDir(), "out.png")}, flags...)
 			out, stderr, err := runCLI(t, binary, config, "", args...)
