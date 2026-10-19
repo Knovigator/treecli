@@ -572,7 +572,7 @@ func TestConnectDoesNotWaitOnABillingCheckThatFails(t *testing.T) {
 	t.Cleanup(func() { ConnectCmd.SetOut(nil) })
 	started := time.Now()
 	reportBillingAfterConnect(ConnectCmd, profileConfig{BackendURL: server.URL, AccessToken: "a", Client: api.OAuthClient, UID: "u"})
-	if time.Since(started) > 5*time.Second || !bytes.Contains(out.Bytes(), []byte("Couldn't check card billing")) {
+	if time.Since(started) > 5*time.Second || !bytes.Contains(out.Bytes(), []byte("Couldn't check USD billing")) {
 		t.Fatalf("expected an immediate explanation, got %q after %s", out.String(), time.Since(started))
 	}
 }
