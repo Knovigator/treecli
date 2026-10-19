@@ -51,13 +51,13 @@ Use this skill when you need to submit or inspect Treechat AI action work throug
 - Use `treecli generate actions --direct-only` when you only want actions that can save media locally without creating a post.
 - Use `treecli generate actions --verbose` for a full human/agent-readable catalog with model descriptions, inputs, settings, reference behavior, examples, and notes.
 - Use `treecli generate describe <action>` before generating when you need focused help for one model.
-- Run direct generation with `treecli generate <action> "prompt" --out <file> --max-price-cents 100`.
-- Chatterbox text-to-speech direct generation: `treecli generate tts "Abigail read this in a crisp narration voice" --out chatterbox.mp3 --max-price-cents 100`.
-- Chatterbox voice clone direct generation: `treecli generate clone "read this in the sampled voice" --reference @voice.mp3 --out clone.mp3 --max-price-cents 100`.
-- ElevenLabs text-to-speech direct generation: `treecli generate eleven_tts "read this in a crisp narration voice" --out narration.mp3 --max-price-cents 100`.
-- Video sound effects direct generation: `treecli generate sfx "rain, tires on wet asphalt, distant thunder" --reference @clip.mp4 --out sfx.mp3 --max-price-cents 100`.
-- Existing-image animation direct generation: use the base video model with a reference, such as `treecli generate kling2 "slow handheld push-in" --reference @image.png --out animated.mp4 --max-price-cents 100`.
-- Existing-image edit direct generation: use the base image model with a reference, such as `treecli generate qwen "replace the sky with stars" --reference @image.png --out edited.png --max-price-cents 100`.
+- Run direct generation with `treecli generate <action> "prompt" --out <file> --max-price-cents 100 --id <unique-action-id>`.
+- Chatterbox text-to-speech direct generation: `treecli generate tts "Abigail read this in a crisp narration voice" --out chatterbox.mp3 --max-price-cents 100 --id <unique-action-id>`.
+- Chatterbox voice clone direct generation: `treecli generate clone "read this in the sampled voice" --reference @voice.mp3 --out clone.mp3 --max-price-cents 100 --id <unique-action-id>`.
+- ElevenLabs text-to-speech direct generation: `treecli generate eleven_tts "read this in a crisp narration voice" --out narration.mp3 --max-price-cents 100 --id <unique-action-id>`.
+- Video sound effects direct generation: `treecli generate sfx "rain, tires on wet asphalt, distant thunder" --reference @clip.mp4 --out sfx.mp3 --max-price-cents 100 --id <unique-action-id>`.
+- Existing-image animation direct generation: use the base video model with a reference, such as `treecli generate kling2 "slow handheld push-in" --reference @image.png --out animated.mp4 --max-price-cents 100 --id <unique-action-id>`.
+- Existing-image edit direct generation: use the base image model with a reference, such as `treecli generate qwen "replace the sky with stars" --reference @image.png --out edited.png --max-price-cents 100 --id <unique-action-id>`.
 - Pass settings with `--input key=value` for individual values, `--settings '{...}'` for a JSON settings object, `--duration` for duration-aware actions, `--instrumental` for music actions, `--reference run:<id>|https://...|@path` for reference-aware actions, and `--payment usd|bsv` for per-run billing rail selection.
 
 ## Output Rules
@@ -71,3 +71,5 @@ Use this skill when you need to submit or inspect Treechat AI action work throug
 - When `--duration` is present, `treecli action` adds `settings.duration_seconds` to the action request.
 - `treecli action` also writes display `delta_json` so the post content renders like a normal AI action message in Treechat.
 - Interactive polling shows a spinner on `stderr`, so JSON output on `stdout` stays clean.
+
+Direct generation requires an explicit per-action `--max-price-cents` and `--id`. Reuse the ID with identical inputs after an uncertain result; use a new ID for a different action. `--quote` is an optional preview. Inspect the shared daily cap with `treecli billing budget`; `budget set <USD-cents>` sets it and `budget unset` removes it. An unset cap is not zero. The backend reports reservation accounting and the next midnight UTC reset. Local uploads produce new reference IDs, so reuse the returned `run:<id>` values when retrying.

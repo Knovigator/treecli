@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -31,6 +32,8 @@ var GenerateCmd = &cobra.Command{
 	Use:   "generate <ai-action> [prompt...]",
 	Short: "Generate AI media directly and download it locally (never creates a post)",
 	Long: "Generate AI media through the direct generation API and save it to a local file.\n\n" +
+		"Set --max-price-cents and --id for each action. The shared backend enforces the action cap and account daily budget.\n" +
+		"Use `treecli billing budget` to inspect the daily cap and its UTC reset. --quote is an optional preview.\n\n" +
 		"This charges your account (USD/BSV) and NEVER touches the posting infra — no Answer, " +
 		"no Quest, no thread, nothing on your feed.\n\n" +
 		"Pass arbitrary model inputs with repeatable --input key=value (values are parsed as JSON " +
@@ -42,21 +45,11 @@ var GenerateCmd = &cobra.Command{
 		"payment rail for this generation; omit it to use your account default.\n\n" +
 		"Run `treecli generate actions --verbose` or `treecli generate describe <ai-action>` " +
 		"to see available AI actions, descriptions, settings, and examples.",
-	Example: "  treecli generate flux \"soft-gradient app icon, violet to indigo\" --out icon.png\n" +
-		"  treecli generate flux2 \"wide hero banner\" --out banner.webp --input aspect_ratio=3:1\n" +
-		"  treecli generate kling2 \"slow handheld push-in\" --reference @image.png --out animated.mp4\n" +
-		"  treecli generate qwen \"replace the sky with stars\" --reference @image.png --out edited.png\n" +
-		"  treecli generate topazimg --reference @photo.jpg --input upscale_factor=4x --out photo-4x.jpg\n" +
-		"  treecli generate topazvid --reference @clip.mp4 --input target_resolution=4k --quote --max-price-cents 100\n" +
-		"  treecli generate tts \"Abigail read this in a crisp narration voice\" --out chatterbox.mp3\n" +
-		"  treecli generate clone \"read this in the sampled voice\" --reference @voice.mp3 --out clone.mp3\n" +
-		"  treecli generate eleven_tts \"read this in a crisp narration voice\" --out narration.mp3\n" +
-		"  treecli generate sfx \"rain, tires on wet asphalt, distant thunder\" --reference @clip.mp4 --out sfx.mp3\n" +
-		"  treecli generate suno \"warm ambient build, 122 BPM\" --duration 20 --out sketch.mp3\n" +
-		"  treecli generate suno \"cinematic electronic, builds to a drop\" --instrumental --duration 22 \\\n" +
-		"      --reference run:abc123 --out track.mp3\n" +
-		"  treecli generate suno \"...\" --duration 22 --quote\n" +
-		"  treecli generate actions --direct-only\n" +
+	Example: "  treecli generate flux2 \"wide hero banner\" --out banner.webp --max-price-cents 100 --id banner-001\n" +
+		"  treecli generate topazimg --reference @photo.jpg --out photo-4x.jpg --max-price-cents 100 --id upscale-001\n" +
+		"  treecli generate suno \"ambient build\" --duration 20 --quote --max-price-cents 100\n" +
+		"  treecli generate --quote-id REVIEWED_QUOTE_ID --id music-001 --out music.mp3\n" +
+		"  treecli billing budget\n" +
 		"  treecli generate describe flux2",
 	Args: func(command *cobra.Command, args []string) error {
 		if generateQuoteID != "" {
@@ -74,7 +67,7 @@ var generateQuoteID, generateRequestID string
 func init() {
 	GenerateCmd.Flags().IntVar(&generateMaxPriceCents, "max-price-cents", 0, "Maximum generation fee in USD cents; required")
 	GenerateCmd.Flags().StringVar(&generateQuoteID, "quote-id", "", "Execute this reviewed quote; reuse with --id on retries")
-	GenerateCmd.Flags().StringVar(&generateRequestID, "id", "", "Generation idempotency key; reuse with --quote-id on retries")
+	GenerateCmd.Flags().StringVar(&generateRequestID, "id", "", "Required generation idempotency key; reuse with identical inputs on retries")
 	GenerateCmd.Flags().StringVarP(&generateOut, "out", "o", "", "Path to write the generated file (required unless --quote). Extra outputs get a -N suffix.")
 	GenerateCmd.Flags().StringVar(&generateSettingsRaw, "settings", "", "Optional JSON object of model settings (e.g. '{\"aspect_ratio\":\"1:1\"}')")
 	GenerateCmd.Flags().StringArrayVar(&generateInputs, "input", nil, "Model input as key=value (repeatable). Value parsed as JSON if possible, else string. Use @path to upload a local media file.")
@@ -128,6 +121,9 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 			return usageErrorf("invalid --settings JSON: %w", err)
 		}
 	}
+	if settings == nil {
+		return usageErrorf("--settings must be a JSON object")
+	}
 	if err := applyInputs(settings, generateInputs); err != nil {
 		return err
 	}
@@ -138,11 +134,11 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 		settings["instrumental"] = generateInstrumental
 	}
 
-	if generateQuoteID == "" && ((cmd == nil || !cmd.Flags().Changed("max-price-cents")) || generateMaxPriceCents < 0) {
-		return usageErrorf("--max-price-cents is required and must be nonnegative")
+	if generateQuoteID == "" && ((cmd == nil || !cmd.Flags().Changed("max-price-cents")) || generateMaxPriceCents < 0 || int64(generateMaxPriceCents) > 2147483647) {
+		return usageErrorf("--max-price-cents is required and must be between 0 and 2147483647 USD cents")
 	}
-	if generateQuoteID != "" && generateRequestID == "" {
-		return usageErrorf("--id is required when executing --quote-id")
+	if !generateQuote && !regexp.MustCompile(`^[A-Za-z0-9._:-]{1,128}$`).MatchString(generateRequestID) {
+		return usageErrorf("--id is required: use 1-128 ASCII letters, digits, dots, underscores, colons or hyphens; reuse it with identical inputs on retries")
 	}
 
 	profile, err := requireAuthenticatedProfile()
@@ -150,10 +146,19 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	quoteID := generateQuoteID
-	if quoteID == "" {
+	tool := "generate_media"
+	arguments := map[string]interface{}{"idempotency_key": generateRequestID}
+	if generateQuoteID != "" {
+		tool = "create_generation"
+		arguments["quote_id"] = generateQuoteID
+	} else {
+		originalSettings, _ := json.Marshal(settings)
 		if err := resolveFileInputSettings(profile, settings); err != nil {
 			return err
+		}
+		resolvedSettings, _ := json.Marshal(settings)
+		if string(originalSettings) != string(resolvedSettings) {
+			fmt.Fprintf(os.Stderr, "Uploaded input settings (reuse with --settings on retries): %s\n", resolvedSettings)
 		}
 		reference := generateReference
 		if strings.HasPrefix(reference, "@") {
@@ -165,39 +170,29 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 				return fmt.Errorf("reference upload returned no run ID")
 			}
 			reference = "run:" + stringValue(uploaded["id"])
+			fmt.Fprintf(os.Stderr, "Uploaded reference: %s (reuse this reference with --id on retries)\n", reference)
 		}
-		arguments := map[string]interface{}{"model": action, "prompt": prompt, "settings": settings, "max_price_cents": generateMaxPriceCents}
+		arguments["model"] = action
+		arguments["prompt"] = prompt
+		arguments["settings"] = settings
+		arguments["max_price_cents"] = generateMaxPriceCents
 		optional(arguments, "reference", reference)
 		optional(arguments, "payment_mode", paymentMode)
-		raw, err := api.SharedOperation(profile.BackendURL, profile.AccessToken, profile.Client, profile.UID, "quote_generation", arguments)
-		if err != nil {
-			return err
-		}
-		var quote map[string]interface{}
-		if err := json.Unmarshal(raw, &quote); err != nil {
-			return err
-		}
-		quoteID = stringValue(quote["quote_id"])
-		if quoteID == "" {
-			return fmt.Errorf("backend omitted generation quote ID")
-		}
 		if generateQuote {
-			fmt.Println(string(raw))
-			return nil
-		}
-		fmt.Fprintf(os.Stderr, "Generation quote %s: %s\n", quoteID, string(raw))
-	}
-	key := generateRequestID
-	if key == "" {
-		key, err = newUUID()
-		if err != nil {
-			return err
+			tool = "quote_generation"
+			delete(arguments, "idempotency_key")
 		}
 	}
-	fmt.Fprintf(os.Stderr, "Retry identifiers: --quote-id %s --id %s\n", quoteID, key)
-	raw, err := api.SharedOperation(profile.BackendURL, profile.AccessToken, profile.Client, profile.UID, "create_generation", map[string]interface{}{"quote_id": quoteID, "idempotency_key": key})
+	if !generateQuote {
+		fmt.Fprintf(os.Stderr, "Generation idempotency key: %s; reuse with identical inputs on retries.\n", generateRequestID)
+	}
+	raw, err := api.SharedOperation(profile.BackendURL, profile.AccessToken, profile.Client, profile.UID, tool, arguments)
 	if err != nil {
 		return err
+	}
+	if generateQuote {
+		fmt.Fprintln(cmd.OutOrStdout(), string(raw))
+		return nil
 	}
 	result, err := api.DecodeGeneration(raw)
 	if err != nil {

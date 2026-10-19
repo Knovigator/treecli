@@ -147,7 +147,7 @@ treecli new post --reply-to <quest-id> "reply text"
 
 Remote commands use the same operation catalog and executor as hosted MCP and `treecli mcp serve`. The matching backend must be available; there is no fallback to legacy writes. `update --check` uses the authenticated shared release helper; actual binary installation keeps its local bootstrap path so upgrading does not depend on an account.
 
-Generation and action commands require an explicit `--max-price-cents` authorization. Examples below use a 100-cent ceiling; choose the ceiling you approve. Direct generation prints the reviewed quote and retry identifiers. Reuse both `--quote-id` and `--id` after an uncertain result; native writes reuse `--id`. Plain posts use a zero generation-fee cap. BSV network fees are separate.
+Generation and action commands require an explicit `--max-price-cents` authorization. Examples below use a 100-cent ceiling; choose the ceiling you approve. Direct generation calls the shared `generate_media` operation with a required `--id`; reuse that key with identical model, prompt, settings, reference, payment mode and cap after an uncertain result. Changing any of these requires a new key. `--quote` is an optional preview and does not generate media. Existing reviewed quotes can still be executed with `--quote-id` and `--id`; native writes reuse `--id`. Plain posts use a zero generation-fee cap. BSV network fees are separate.
 
 Use action requests for Treechat-posted AI work:
 
@@ -168,15 +168,15 @@ Use direct generation when an agent or script needs local media files without cr
 treecli generate actions --direct-only
 treecli generate actions --verbose
 treecli generate describe flux2
-treecli generate flux2 "wide cinematic hero banner" --out banner.webp --input aspect_ratio=3:1 --max-price-cents 100
-treecli generate flux2 "wide cinematic hero banner" --out banner.webp --payment bsv --max-price-cents 100
-treecli generate kling2 "slow handheld push-in" --reference @image.png --out animated.mp4 --max-price-cents 100
-treecli generate qwen "replace the sky with stars" --reference @image.png --out edited.png --max-price-cents 100
-treecli generate tts "Abigail read this in a crisp narration voice" --out chatterbox.mp3 --max-price-cents 100
-treecli generate clone "read this in the sampled voice" --reference @voice.mp3 --out clone.mp3 --max-price-cents 100
-treecli generate eleven_tts "read this in a crisp narration voice" --out narration.mp3 --max-price-cents 100
-treecli generate sfx "rain, tires on wet asphalt, distant thunder" --reference @clip.mp4 --out sfx.mp3 --max-price-cents 100
-treecli generate suno "warm ambient build, 122 BPM" --duration 20 --out sketch.mp3 --max-price-cents 100
+treecli generate flux2 "wide cinematic hero banner" --out banner.webp --input aspect_ratio=3:1 --max-price-cents 100 --id example-171
+treecli generate flux2 "wide cinematic hero banner" --out banner.webp --payment bsv --max-price-cents 100 --id example-172
+treecli generate kling2 "slow handheld push-in" --reference @image.png --out animated.mp4 --max-price-cents 100 --id example-173
+treecli generate qwen "replace the sky with stars" --reference @image.png --out edited.png --max-price-cents 100 --id example-174
+treecli generate tts "Abigail read this in a crisp narration voice" --out chatterbox.mp3 --max-price-cents 100 --id example-175
+treecli generate clone "read this in the sampled voice" --reference @voice.mp3 --out clone.mp3 --max-price-cents 100 --id example-176
+treecli generate eleven_tts "read this in a crisp narration voice" --out narration.mp3 --max-price-cents 100 --id example-177
+treecli generate sfx "rain, tires on wet asphalt, distant thunder" --reference @clip.mp4 --out sfx.mp3 --max-price-cents 100 --id example-178
+treecli generate suno "warm ambient build, 122 BPM" --duration 20 --out sketch.mp3 --max-price-cents 100 --id example-179
 ```
 
 `treecli action` and `treecli generate` accept `--payment usd` for Stripe metered AI billing or `--payment bsv` / `--payment bitcoinsv` for Bitcoin SV. Omit `--payment` to use the account default.
@@ -396,3 +396,18 @@ Agents should install `treecli`, run `treecli onboard` to see what setup remains
 ## License
 
 `treecli` is licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE).
+
+### Shared daily generation budget
+
+Generation is paid per action. The CLI does not create or change a billing subscription when generating or setting a budget. The backend enforces the explicit action price ceiling and the account's daily reservation budget for shared direct-generation calls (`generate_media` and reviewed-quote `create_generation`) from both CLI and MCP. This daily budget excludes native/post-backed generation, the legacy direct endpoint, other Treechat spend, and network fees.
+
+```bash
+treecli billing budget
+treecli billing budget --json
+treecli billing budget set 500
+treecli billing budget unset
+```
+
+These are example limits, not account values. Limits use integer USD cents; `0` permits no positive-cost admission. `unset` sends `null`, removing the daily cap while retaining per-action caps. Status reports the backend's reserved and remaining amounts, scope, exclusions, and reset time. Admission days reset at midnight UTC; reservation accounting is not a settled-charge total.
+
+Local references remain local until explicitly uploaded. An `@path` upload creates a reference ID: reuse the printed `run:<id>` for a retry rather than uploading the file again. For uploaded `--input` settings, reuse the normalized reference IDs in the request. Wallet private keys remain in local custody.

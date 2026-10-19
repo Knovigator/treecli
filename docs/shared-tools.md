@@ -2,7 +2,7 @@
 
 The CLI and local MCP adapter consume the backend-owned tool catalog and execute
 through the same backend operations. Model options, permissions, input ownership,
-quote consent and paid execution are enforced by Treechat, not copied into Go.
+price caps, idempotency and paid execution are enforced by Treechat, not copied into Go.
 A backend exposing `/api/v1/treecli/tools` and `/api/v1/treecli/call` is required.
 
 ```sh
@@ -22,8 +22,9 @@ structured tool result. Input messages are limited to 72 MiB (to accommodate bas
 This is the Treechat API adapter, separate from the unmerged local session recorder.
 It does not inspect client transcripts, expose local private wallet keys, install
 files, or update the CLI binary. Local-only commands remain local; backend guidance
-can explain their client-side equivalents. Existing commands continue using their
-existing backend controllers.
+can explain their client-side equivalents. Named remote CLI commands are thin
+adapters over the shared catalog and executor; the executor dispatches to backend
+controllers where appropriate.
 
 The API package also supports explicit request-scoped OAuth bearer clients without
 saved-credential fallback. This is transport support only: backend endpoints must
@@ -72,27 +73,51 @@ cannot be thread links. Ambiguous links containing different target UUIDs are
 rejected. Parsing never fetches the URL or changes the authenticated backend.
 
 Model discovery and `describe_action` return the backend's settings, defaults,
-reference capabilities, descriptions and aliases. The CLI's additional handcrafted
-example commands and help notes remain in CLI help; this adapter does not maintain
-a second copy of that prose or a separate model/tool catalog.
+reference capabilities, descriptions, aliases, examples and notes. CLI commands
+format these shared results without maintaining a second model catalog.
 
-Existing CLI commands retain their argument parsing, formatting and convenience
-normalization above the existing backend controllers. The new `tools` commands
-and MCP adapter share one backend-owned catalog and executor. Authorization,
-pricing, billing, generation dispatch and persistence remain shared backend
-business logic. This change does not claim to have replaced every legacy CLI
-parser with the new tool interface.
+## Direct generation and spending limits
 
-## Remaining consolidation work
+Named `generate` calls `generate_media` once with an explicit per-action ceiling
+and idempotency key. Pricing, eligibility, daily budget admission and generation
+execution belong to the shared backend. No preview is required:
 
-The shared catalog/executor is used by `tools list/call`, stdio `mcp serve`, and
-hosted MCP. Existing named CLI commands still keep Go-side alias, stream/branch,
-reference and catalog normalization before calling their original HTTP routes.
-Thus this is a shared authoritative backend, not yet a full migration of every
-legacy CLI workflow to one executor.
+```sh
+treecli generate flux2 "wide hero banner" --out banner.webp --max-price-cents 100 --id banner-001
+treecli tools call generate_media --arguments '{"model":"flux2","prompt":"wide hero banner","max_price_cents":100,"idempotency_key":"banner-001"}'
+```
 
-Hosted skills list/emit, onboarding guide/agents text, completion-script emission
-and update-check metadata are not implemented tools yet. These pure text/read
-helpers could be remote; only their installation, client filesystem inspection,
-binary replacement and private wallet-store operations inherently need the client.
-See the backend [parity audit](https://github.com/Knovigator/knovigator/blob/codex/mcp-treecli-parity/docs/treecli-mcp-parity.md) for exact mappings and CI limitations.
+The ceiling is in USD cents and authorizes only this action. Reuse the same key
+with identical inputs after an uncertain result; a different request needs a new
+key. Do not execute both examples as separate requests with different keys unless
+you intend separate generations. Local file selection, upload transport and
+output downloads remain client responsibilities. Reuse uploaded reference IDs
+when retrying rather than uploading the same file again.
+
+`generate --quote` calls `quote_generation` as an optional price preview without
+generating media. Existing reviewed quotes can still be executed with
+`generate --quote-id QUOTE_ID --id REQUEST_ID --out FILE`, which calls
+`create_generation`. Both execution paths enforce the shared direct-generation
+daily budget. There is no automatic fallback to a legacy endpoint.
+
+`billing budget` calls `get_generation_budget`; `billing budget set CENTS` and
+`billing budget unset` call `set_generation_budget` with an integer or explicit
+null. A zero daily cap blocks positive-cost admissions; an unset daily cap imposes
+no daily limit. Per-action caps remain required. No budget values are inferred
+from these examples and these commands do not create a billing subscription.
+
+This budget covers quoted-price reservations admitted through shared direct
+`generate_media` and `create_generation` calls, across CLI and MCP. It excludes
+native/post-backed generation, the legacy direct endpoint, other Treechat spend,
+and network fees. All admitted job states remain counted; this is not a settled
+billing total. Admission days reset at midnight UTC. The status response reports
+the current cap, reserved/remaining amounts, reset time, scope and exclusions.
+
+## Shared resources and client responsibilities
+
+`treecli_reference` provides skills list/emit, onboarding guide/agents text,
+completion scripts and release-update metadata. Static resources are generated
+from the canonical CLI source with revision provenance. Installation, binary
+replacement, local account files and wallet-key custody remain client operations.
+The shared executor owns alias, stream/branch, link, reference and catalog
+normalization. Local shell argument parsing and presentation remain in Go.
