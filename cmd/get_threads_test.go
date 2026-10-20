@@ -22,6 +22,13 @@ func TestThreadListValidation(t *testing.T) {
 		{[]string{"id", "--user", "me"}, "cannot be combined"},
 		{[]string{"--answer", "a", "--page", "1"}, "cannot be combined"},
 		{[]string{"id", "--root=false"}, "cannot be combined"},
+		{[]string{"--order", "time"}, "requires --public"},
+		{[]string{"--public", "--order", "bogus"}, "must be time"},
+		{[]string{"--public", "--user", "me"}, "cannot be combined"},
+		{[]string{"--public", "--limit", "5"}, "cannot be combined"},
+		{[]string{"--public", "--root"}, "cannot be combined"},
+		{[]string{"--public", "--answer", "a"}, "cannot be combined"},
+		{[]string{"--public", "--page", "0"}, "positive"},
 	} {
 		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
 			command := newGetThreadsCommand()

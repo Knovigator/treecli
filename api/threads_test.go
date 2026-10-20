@@ -66,3 +66,30 @@ func TestThreadsPropagatesSharedErrors(t *testing.T) {
 		}
 	}
 }
+
+func TestListPublicThreadsSendsFeedArguments(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var call struct {
+			Arguments struct {
+				Operation string                 `json:"operation"`
+				Arguments map[string]interface{} `json:"arguments"`
+			} `json:"arguments"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&call); err != nil {
+			t.Fatal(err)
+		}
+		args := call.Arguments.Arguments
+		if call.Arguments.Operation != "threads" || args["public"] != true || args["order"] != "time" || args["page"] != float64(3) {
+			t.Errorf("wrong feed call: %#v", call)
+		}
+		if _, ok := args["user"]; ok {
+			t.Errorf("public feed must not send user: %#v", args)
+		}
+		json.NewEncoder(w).Encode(map[string]interface{}{"structuredContent": map[string]interface{}{"status": 200, "body": json.RawMessage(`{"threads":[{"id":"q1"}],"pagination":{"page":3,"limit":20,"next_page":4,"has_more":true}}`)}})
+	}))
+	defer server.Close()
+	result, err := ListThreads(server.URL, "t", "c", "u", ThreadListOptions{Public: true, Order: "time", Page: 3})
+	if err != nil || len(result.Threads) != 1 || result.Pagination == nil || *result.Pagination.NextPage != 4 {
+		t.Fatalf("result=%#v err=%v", result, err)
+	}
+}
