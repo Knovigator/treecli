@@ -9,13 +9,13 @@ import (
 )
 
 func newGetThreadsCommand() *cobra.Command {
-	var user, answer, output string
-	var root, branch, jsonOutput bool
+	var user, answer, output, order string
+	var root, branch, public, jsonOutput bool
 	var page, limit int
 	command := &cobra.Command{
 		Use:     "threads [thread_id]",
 		Short:   "List authored threads or fetch a thread or an answer's child threads",
-		Long:    "List your authored threads, newest-created first, or fetch by thread ID or --answer. Listing includes accessible private content and defaults to --user me. Roots have no containing thread; branches grow from a message in another thread. Page numbers can shift when threads are added or removed.",
+		Long:    "List the public feed with --public (newest first by default, 20 per page), or list your authored threads, newest-created first, or fetch by thread ID or --answer. Listing includes accessible private content and defaults to --user me. Roots have no containing thread; branches grow from a message in another thread. Page numbers can shift when threads are added or removed.",
 		Example: "  treecli get threads --user me --root --limit 1\n  treecli get threads --user alice --branch --page 2 --limit 20\n  treecli get threads THREAD_ID --json\n  treecli get threads --answer ANSWER_ID --json",
 		Args:    cobra.MaximumNArgs(1),
 	}
@@ -24,6 +24,8 @@ func newGetThreadsCommand() *cobra.Command {
 	flags.StringVar(&answer, "answer", "", "Fetch all accessible child threads of this answer ID")
 	flags.BoolVar(&root, "root", false, "List only root threads")
 	flags.BoolVar(&branch, "branch", false, "List only branch threads")
+	flags.BoolVar(&public, "public", false, "List the public feed (any author) instead of one author's threads")
+	flags.StringVar(&order, "order", "time", "Public feed order: time (newest first), upvalue, or upvalueTrending (requires --public)")
 	flags.IntVar(&page, "page", 1, "Page number, starting at 1")
 	flags.IntVar(&limit, "limit", 20, "Threads per page (1–100)")
 	flags.StringVarP(&output, "output", "o", "ascii", "Output format: ascii or json")
@@ -45,6 +47,25 @@ func newGetThreadsCommand() *cobra.Command {
 		if len(args) == 1 && flags.Changed("answer") {
 			return usageErrorf("thread ID and --answer are mutually exclusive")
 		}
+		if flags.Changed("order") && !public {
+			return usageErrorf("--order requires --public")
+		}
+		if public {
+			if order != "time" && order != "upvalue" && order != "upvalueTrending" {
+				return usageErrorf("--order must be time, upvalue, or upvalueTrending")
+			}
+			if page < 1 {
+				return usageErrorf("--page must be positive")
+			}
+			if len(args) == 1 || flags.Changed("answer") {
+				return usageErrorf("--public cannot be combined with a thread ID or --answer")
+			}
+			for _, name := range []string{"user", "root", "branch", "limit"} {
+				if flags.Changed(name) {
+					return usageErrorf("--%s cannot be combined with --public (the feed has a fixed page size)", name)
+				}
+			}
+		}
 		lookup := len(args) == 1 || flags.Changed("answer")
 		if lookup {
 			for _, name := range []string{"user", "root", "branch", "page", "limit"} {
@@ -52,7 +73,7 @@ func newGetThreadsCommand() *cobra.Command {
 					return usageErrorf("--%s cannot be combined with a thread ID or --answer", name)
 				}
 			}
-		} else {
+		} else if !public {
 			if strings.TrimSpace(user) == "" {
 				return usageErrorf("--user must not be empty")
 			}
@@ -68,7 +89,9 @@ func newGetThreadsCommand() *cobra.Command {
 			return err
 		}
 		var result api.ThreadsResponse
-		if flags.Changed("answer") {
+		if public {
+			result, err = api.ListThreads(profile.BackendURL, profile.AccessToken, profile.Client, profile.UID, api.ThreadListOptions{Public: true, Order: order, Page: page})
+		} else if flags.Changed("answer") {
 			result, err = api.ThreadsForAnswer(profile.BackendURL, profile.AccessToken, profile.Client, profile.UID, answer)
 		} else {
 			scope := "all"

@@ -12,6 +12,10 @@ type ThreadListOptions struct {
 	Scope string
 	Page  int
 	Limit int
+	// Public lists the public feed instead of an author's threads; Order is
+	// forwarded as-is (time, upvalue, upvalueTrending) and the server validates it.
+	Public bool
+	Order  string
 }
 
 type ThreadPagination struct {
@@ -44,6 +48,15 @@ func ResolveThreadUser(backendURL, accessToken, client, uid, user string) (strin
 
 func ListThreads(backendURL, accessToken, client, uid string, options ThreadListOptions) (ThreadsResponse, error) {
 	var out ThreadsResponse
+	if options.Public {
+		args := map[string]interface{}{"public": true, "page": options.Page}
+		if options.Order != "" {
+			args["order"] = options.Order
+		}
+		raw, err := sharedRead(backendURL, accessToken, client, uid, "threads", args, &out)
+		out.Raw = raw
+		return out, err
+	}
 	raw, err := sharedRead(backendURL, accessToken, client, uid, "threads", map[string]interface{}{"user": options.User, "thread_scope": options.Scope, "page": options.Page, "limit": options.Limit}, &out)
 	out.Raw = raw
 	return out, err

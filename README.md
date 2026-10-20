@@ -267,6 +267,8 @@ legacy profile records are not deleted or rewritten.
 ## Reading threads
 
 ```sh
+treecli get threads --public --page 2
+treecli get threads --public --order upvalueTrending --json
 treecli get threads --user me --root --limit 1
 treecli get threads --user alice --branch --page 2 --limit 20 --json
 treecli get threads THREAD_ID
