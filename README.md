@@ -177,13 +177,14 @@ treecli generate clone "read this in the sampled voice" --reference @voice.mp3 -
 treecli generate eleven_tts "read this in a crisp narration voice" --out narration.mp3 --max-price-cents 100 --id example-177
 treecli generate sfx "rain, tires on wet asphalt, distant thunder" --reference @clip.mp4 --out sfx.mp3 --max-price-cents 100 --id example-178
 treecli generate suno "warm ambient build, 122 BPM" --duration 20 --out sketch.mp3 --max-price-cents 100 --id example-179
+treecli generate suno "Song title" --reference @song.mp3 --input replace_start_s=84 --input replace_end_s=96 --input lyrics="Need for speeeed" --input full_lyrics="$(cat lyrics.txt)" --input style="dark ambient" --duration 210 --out fixed.mp3 --max-price-cents 100 --id example-180
 ```
 
 `treecli action` and `treecli generate` accept `--payment usd` for Stripe metered AI billing or `--payment bsv` / `--payment bitcoinsv` for Bitcoin SV. Omit `--payment` to use the account default.
 
 `tts` accepts the CLI alias `chatterbox`. `eleven_tts` accepts CLI aliases `eleven`, `elevenlabs`, and `11`. `video_sfx` accepts CLI aliases `sfx`, `mmaudio`, and `foley`.
 
-`treecli generate` supports repeatable `--input key=value`, JSON `--settings`, `--duration`, `--instrumental`, and `--reference run:<id>|https://...|@path`. For direct edits or image-to-video runs, use the base image/video action with explicit `--reference` media because direct generation has no thread context to infer it from. Clone and video sound-effect actions also require explicit reference media. Use `treecli generate describe <action>` before generating when an agent needs model descriptions, accepted inputs, settings, examples, and reference behavior.
+`treecli generate` supports repeatable `--input key=value`, JSON `--settings`, `--duration`, `--instrumental`, and `--reference run:<id>|https://...|@path`. For direct edits or image-to-video runs, use the base image/video action with explicit `--reference` media because direct generation has no thread context to infer it from. Clone and video sound-effect actions also require explicit reference media. To edit one span of an existing song, pass `suno` the song as `--reference` plus `replace_start_s`, `replace_end_s` (at least 10 seconds, at most half the song), `lyrics` for the new span and `full_lyrics` for the whole edited song; the rest of the song is kept. `audio_weight`, `style_weight`, `vocal_gender` and `negative_tags` tune any lyric-mode suno run. Use `treecli generate describe <action>` before generating when an agent needs model descriptions, accepted inputs, settings, examples, and reference behavior.
 
 ## Environments and accounts
 
