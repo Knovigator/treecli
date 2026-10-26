@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "treechat": {
+      "type": "http",
+      "url": "https://api.treechat.com/mcp",
+      "oauth": {
+        "clientId": "treechat-ai",
+        "callbackPort": 47615,
+        "scopes": "generation:read generation:quote generation:create uploads:write"
+      }
+    }
+  }
+}

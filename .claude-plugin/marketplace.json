@@ -1,0 +1,12 @@
+{
+  "name": "treechat",
+  "description": "Treechat's Claude Code plugins: Treechat AI models, and the sceneboard film review board.",
+  "owner": { "name": "Treechat" },
+  "plugins": [
+    {
+      "name": "treechat-ai",
+      "source": "./plugins/treechat-ai",
+      "description": "Image, video, lip-sync, music and 4K-upscale models on your Treechat account, with spending caps."
+    }
+  ]
+}
