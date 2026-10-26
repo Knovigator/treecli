@@ -79,17 +79,17 @@ func TestListPublicThreadsSendsFeedArguments(t *testing.T) {
 			t.Fatal(err)
 		}
 		args := call.Arguments.Arguments
-		if call.Arguments.Operation != "threads" || args["public"] != true || args["order"] != "time" || args["page"] != float64(3) {
+		if call.Arguments.Operation != "threads" || args["public"] != true || args["order"] != "time" || args["limit"] != float64(5) || args["before"] != "cur" {
 			t.Errorf("wrong feed call: %#v", call)
 		}
 		if _, ok := args["user"]; ok {
 			t.Errorf("public feed must not send user: %#v", args)
 		}
-		json.NewEncoder(w).Encode(map[string]interface{}{"structuredContent": map[string]interface{}{"status": 200, "body": json.RawMessage(`{"threads":[{"id":"q1"}],"pagination":{"page":3,"limit":20,"next_page":4,"has_more":true}}`)}})
+		json.NewEncoder(w).Encode(map[string]interface{}{"structuredContent": map[string]interface{}{"status": 200, "body": json.RawMessage(`{"threads":[{"id":"q1"}],"pagination":{"limit":5,"next_cursor":"nxt","has_more":true}}`)}})
 	}))
 	defer server.Close()
-	result, err := ListThreads(server.URL, "t", "c", "u", ThreadListOptions{Public: true, Order: "time", Page: 3})
-	if err != nil || len(result.Threads) != 1 || result.Pagination == nil || *result.Pagination.NextPage != 4 {
+	result, err := ListThreads(server.URL, "t", "c", "u", ThreadListOptions{Public: true, Order: "time", Limit: 5, Before: "cur"})
+	if err != nil || len(result.Threads) != 1 || result.Pagination == nil || *result.Pagination.NextCursor != "nxt" {
 		t.Fatalf("result=%#v err=%v", result, err)
 	}
 }

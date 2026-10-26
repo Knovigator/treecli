@@ -16,13 +16,18 @@ type ThreadListOptions struct {
 	// forwarded as-is (time, upvalue, upvalueTrending) and the server validates it.
 	Public bool
 	Order  string
+	// Before is the keyset cursor for the time-ordered public feed; ranked
+	// orders page by Page instead.
+	Before string
 }
 
 type ThreadPagination struct {
 	Page     int  `json:"page"`
 	Limit    int  `json:"limit"`
 	NextPage *int `json:"next_page"`
-	HasMore  bool `json:"has_more"`
+	// NextCursor is set instead of NextPage by the time-ordered public feed.
+	NextCursor *string `json:"next_cursor"`
+	HasMore    bool    `json:"has_more"`
 }
 
 type ThreadsResponse struct {
@@ -49,9 +54,17 @@ func ResolveThreadUser(backendURL, accessToken, client, uid, user string) (strin
 func ListThreads(backendURL, accessToken, client, uid string, options ThreadListOptions) (ThreadsResponse, error) {
 	var out ThreadsResponse
 	if options.Public {
-		args := map[string]interface{}{"public": true, "page": options.Page}
+		args := map[string]interface{}{"public": true}
 		if options.Order != "" {
 			args["order"] = options.Order
+		}
+		if options.Order == "" || options.Order == "time" {
+			args["limit"] = options.Limit
+			if options.Before != "" {
+				args["before"] = options.Before
+			}
+		} else {
+			args["page"] = options.Page
 		}
 		raw, err := sharedRead(backendURL, accessToken, client, uid, "threads", args, &out)
 		out.Raw = raw
