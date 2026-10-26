@@ -48,6 +48,8 @@ var GenerateCmd = &cobra.Command{
 	Example: "  treecli generate flux2 \"wide hero banner\" --out banner.webp --max-price-cents 100 --id banner-001\n" +
 		"  treecli generate topazimg --reference @photo.jpg --out photo-4x.jpg --max-price-cents 100 --id upscale-001\n" +
 		"  treecli generate suno \"ambient build\" --duration 20 --quote --max-price-cents 100\n" +
+		"  treecli generate suno \"Song title\" --reference @song.mp3 --input replace_start_s=84 --input replace_end_s=96 \\\n" +
+		"      --input lyrics=\"new lines\" --input full_lyrics=\"$(cat lyrics.txt)\" --duration 210 --out fixed.mp3 --max-price-cents 100\n" +
 		"  treecli generate --quote-id REVIEWED_QUOTE_ID --id music-001 --out music.mp3\n" +
 		"  treecli billing budget\n" +
 		"  treecli generate describe flux2",
