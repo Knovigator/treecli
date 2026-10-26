@@ -137,7 +137,7 @@ func newGetThreadsCommand() *cobra.Command {
 			}
 			if result.Pagination != nil && result.Pagination.NextCursor != nil {
 				fmt.Fprintf(cmd.OutOrStdout(), "Next page: --before %s\n", *result.Pagination.NextCursor)
-			} else if result.Pagination != nil && result.Pagination.NextPage != nil {
+			} else if result.Pagination != nil && result.Pagination.NextPage != nil && len(result.Threads) > 0 {
 				fmt.Fprintf(cmd.OutOrStdout(), "Next page: --page %d\n", *result.Pagination.NextPage)
 			}
 		}
