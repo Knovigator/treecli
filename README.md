@@ -82,10 +82,11 @@ treecli connect
 
 treecli prints a short code and opens a Treechat page. There the person signs in
 or creates an account (email, Google or X), checks that the code matches,
-allows access, and can add a card for pay-as-you-go AI generation. treecli waits
+allows access, and can buy AI credits with a card (accounts that already have
+card billing keep paying as they go). treecli waits
 for the approval, then saves an OAuth connection that renews itself; nobody
 types a password into the terminal. Use `--no-browser` to only print the link,
-and `--billing-wait 0` to skip waiting for card setup.
+and `--billing-wait 0` to skip waiting for the purchase.
 
 Connected accounts call the backend's `/mcp` endpoint with a short-lived bearer
 token and refresh it automatically. A connection that goes unused for 30 days
@@ -180,7 +181,24 @@ treecli generate suno "warm ambient build, 122 BPM" --duration 20 --out sketch.m
 treecli generate suno "Song title" --reference @song.mp3 --input replace_start_s=84 --input replace_end_s=96 --input lyrics="Need for speeeed" --input full_lyrics="$(cat lyrics.txt)" --input style="dark ambient" --duration 210 --out fixed.mp3 --max-price-cents 100 --id example-180
 ```
 
-`treecli action` and `treecli generate` accept `--payment usd` for Stripe metered AI billing or `--payment bsv` / `--payment bitcoinsv` for Bitcoin SV. Omit `--payment` to use the account default.
+`treecli action` and `treecli generate` accept `--payment usd` to pay in USD or `--payment bsv` / `--payment bitcoinsv` for Bitcoin SV. Omit `--payment` to use the account default.
+
+### USD billing
+
+USD generations are paid from prepaid AI credits:
+
+```sh
+treecli billing checkout --amount 20     # buy $20 of credits (5, 10, 20 or 50)
+treecli billing status                   # balance, card, auto-reload, recent activity
+treecli billing auto-reload off          # or: on --amount 50 --below 10
+```
+
+The first purchase saves the card. When the balance drops below the threshold
+($5 by default), auto-reload adds $20 from it. A declined card pauses
+auto-reload until the next purchase or `treecli billing auto-reload on`. A
+generation the balance can't cover is refused with exit code 4. Accounts that
+already use card billing (pay as you go) stay on it; `billing status` says which
+an account has.
 
 `tts` accepts the CLI alias `chatterbox`. `eleven_tts` accepts CLI aliases `eleven`, `elevenlabs`, and `11`. `video_sfx` accepts CLI aliases `sfx`, `mmaudio`, and `foley`.
 

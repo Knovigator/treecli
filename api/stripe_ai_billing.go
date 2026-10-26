@@ -6,15 +6,55 @@ import (
 
 // StripeAiBillingCheckoutResponse is returned by POST /api/v1/stripe_ai_billing/checkout.
 type StripeAiBillingCheckoutResponse struct {
-	URL string          `json:"url"`
-	Raw json.RawMessage `json:"-"`
+	URL  string          `json:"url"`
+	Mode string          `json:"mode"`
+	Raw  json.RawMessage `json:"-"`
 }
 
 // StripeAiBillingStatusResponse is returned by GET /api/v1/stripe_ai_billing/status.
 type StripeAiBillingStatusResponse struct {
+	USD    *StripeAiBillingUSD   `json:"usd"`
 	Stripe StripeAiBillingStripe `json:"stripe"`
 	Usage  StripeAiBillingUsage  `json:"usage"`
 	Raw    json.RawMessage       `json:"-"`
+}
+
+// StripeAiBillingUSD says how USD is collected: "credits" (a prepaid balance
+// with auto-reload) or "settlement" (card billing, pay as you go). Older
+// servers leave it out.
+type StripeAiBillingUSD struct {
+	Mode    string           `json:"mode"`
+	Payable bool             `json:"payable"`
+	Credits *AiCreditsStatus `json:"credits"`
+}
+
+type AiCreditsStatus struct {
+	BalanceCents      int64           `json:"balance_cents"`
+	AutoReload        bool            `json:"auto_reload"`
+	ReloadCents       int64           `json:"reload_cents"`
+	ThresholdCents    int64           `json:"threshold_cents"`
+	Card              string          `json:"card"`
+	CardSaved         bool            `json:"card_saved"`
+	ReloadFailedAt    string          `json:"reload_failed_at"`
+	ReloadFailure     string          `json:"reload_failure"`
+	TopupOptionsCents []int64         `json:"topup_options_cents"`
+	Entries           []AiCreditEntry `json:"entries"`
+}
+
+type AiCreditEntry struct {
+	ID                string `json:"id"`
+	Kind              string `json:"kind"`
+	Status            string `json:"status"`
+	AmountCents       int64  `json:"amount_cents"`
+	BalanceAfterCents int64  `json:"balance_after_cents"`
+	CreatedAt         string `json:"created_at"`
+}
+
+// AutoReloadResponse is returned by the treechat_billing auto_reload operation.
+type AutoReloadResponse struct {
+	OK      bool             `json:"ok"`
+	Credits *AiCreditsStatus `json:"credits"`
+	Raw     json.RawMessage  `json:"-"`
 }
 
 type StripeAiBillingStripe struct {
@@ -72,9 +112,15 @@ type StripeAiBillingSyncResponse struct {
 	Raw json.RawMessage `json:"-"`
 }
 
-func CreateStripeAiBillingCheckoutSession(backendURL, accessToken, client, uid string) (StripeAiBillingCheckoutResponse, error) {
+// CreateStripeAiBillingCheckoutSession starts Checkout: a credit top-up of
+// amountCents in credits mode (0 = the server's default), or card setup.
+func CreateStripeAiBillingCheckoutSession(backendURL, accessToken, client, uid string, amountCents int) (StripeAiBillingCheckoutResponse, error) {
 	var out StripeAiBillingCheckoutResponse
-	raw, err := SharedOperation(backendURL, accessToken, client, uid, "treechat_billing", map[string]interface{}{"operation": "checkout", "arguments": map[string]interface{}{}})
+	arguments := map[string]interface{}{}
+	if amountCents > 0 {
+		arguments["amount_cents"] = amountCents
+	}
+	raw, err := SharedOperation(backendURL, accessToken, client, uid, "treechat_billing", map[string]interface{}{"operation": "checkout", "arguments": arguments})
 	if err == nil {
 		err = json.Unmarshal(raw, &out)
 	}
@@ -85,6 +131,27 @@ func CreateStripeAiBillingCheckoutSession(backendURL, accessToken, client, uid s
 func GetStripeAiBillingStatus(backendURL, accessToken, client, uid string, refresh bool) (StripeAiBillingStatusResponse, error) {
 	var out StripeAiBillingStatusResponse
 	raw, err := SharedOperation(backendURL, accessToken, client, uid, "treechat_billing", map[string]interface{}{"operation": "status", "arguments": map[string]interface{}{"refresh": refresh}})
+	if err == nil {
+		err = json.Unmarshal(raw, &out)
+	}
+	out.Raw = raw
+	return out, err
+}
+
+// SetAutoReload changes credits auto-reload; nil fields stay as they are.
+func SetAutoReload(backendURL, accessToken, client, uid string, enabled *bool, reloadCents, thresholdCents int) (AutoReloadResponse, error) {
+	var out AutoReloadResponse
+	arguments := map[string]interface{}{}
+	if enabled != nil {
+		arguments["enabled"] = *enabled
+	}
+	if reloadCents > 0 {
+		arguments["reload_cents"] = reloadCents
+	}
+	if thresholdCents > 0 {
+		arguments["threshold_cents"] = thresholdCents
+	}
+	raw, err := SharedOperation(backendURL, accessToken, client, uid, "treechat_billing", map[string]interface{}{"operation": "auto_reload", "arguments": arguments})
 	if err == nil {
 		err = json.Unmarshal(raw, &out)
 	}
