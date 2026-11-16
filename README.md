@@ -141,6 +141,10 @@ treecli get messages <answer-id> [...]
 
 treecli new post "hello world"
 treecli new post --reply-to <quest-id> "reply text"
+
+treecli new channel "Agent notes"            # private: members only
+treecli new channel "Open floor" --public
+treecli new post --stream "Agent notes" "first note"
 ```
 
 ## AI Actions And Media

@@ -52,6 +52,7 @@ func TestContentWriteCommandsExposeIDFlag(t *testing.T) {
 		newPostCmd,
 		newReplyCmd,
 		newClipCmd,
+		newChannelCmd,
 		ActionCmd,
 	} {
 		if command.Flags().Lookup("id") == nil {

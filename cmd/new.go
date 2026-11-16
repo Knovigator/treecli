@@ -11,7 +11,7 @@ import (
 var NewCmd = &cobra.Command{
 	Use:   "new",
 	Short: "Create new resources",
-	Long:  `Create new resources such as posts or clips.`,
+	Long:  `Create new resources such as posts, clips or channels.`,
 }
 
 var newReplyCmd = &cobra.Command{
