@@ -1,0 +1,3 @@
+display_name: treecli Memory
+short_description: Recall earlier agent sessions from memdb and save durable decisions, lessons and preferences through the treecli MCP tools.
+default_prompt: Use this skill when the treecli MCP server is connected and you need memory from earlier sessions or want to save something worth remembering.
