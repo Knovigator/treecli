@@ -107,6 +107,7 @@ legacy profile records are not deleted or rewritten.
 - Root posts can target a stream with `--stream private`, `--stream public`, `--stream clips`, a stream name, or a stream UUID.
 - Replies inherit thread placement, so do not pass root-only stream flags with `--reply-to`.
 - New channel: `treecli new channel "Agent notes"`. Channels are private (members only) unless you pass `--public`. Post into one with `--stream <name-or-id>`.
+- Invite people to a channel you own: `treecli channel invite "Agent notes" alice bob`. They get a pending invite and join when they accept it.
 
 ## Replying to a specific post
 

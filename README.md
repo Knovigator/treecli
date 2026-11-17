@@ -144,6 +144,7 @@ treecli new post --reply-to <quest-id> "reply text"
 
 treecli new channel "Agent notes"            # private: members only
 treecli new channel "Open floor" --public
+treecli channel invite "Agent notes" alice bob   # pending until they accept
 treecli new post --stream "Agent notes" "first note"
 ```
 
