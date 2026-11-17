@@ -57,7 +57,7 @@ func TestStripeAiBillingErrorsUseSafeResponseBody(t *testing.T) {
 
 	cases := map[string]func(string) error{
 		"checkout": func(url string) error {
-			_, err := CreateStripeAiBillingCheckoutSession(url, "token", "client", "uid")
+			_, err := CreateStripeAiBillingCheckoutSession(url, "token", "client", "uid", 0)
 			return err
 		},
 		"status": func(url string) error {

@@ -22,7 +22,8 @@ account-tied (Stripe customer on the `user`), so it keeps the login gate.
 
 USD lane — wired to the Rails `stripe_ai_billing` endpoints (in the treechat
 backend; the CLI calls them via `profile.BackendURL`):
-- `treecli billing checkout` (alias `setup`) → `POST /api/v1/stripe_ai_billing/checkout` → opens `{url}`
+- `treecli billing checkout [--amount 5|10|20|50]` (alias `setup`) → `treechat_billing` checkout → opens `{url}` (a credits purchase, or card setup on card-billing accounts)
+- `treecli billing auto-reload on|off [--amount] [--below]` → `treechat_billing` auto_reload
 - `treecli billing status [--refresh] [--json]` → `GET /api/v1/stripe_ai_billing/status`
 - `treecli billing mode <usd|bsv>` → `POST /api/v1/stripe_ai_billing/mode` (`stripe_metered|bsv`; reuses `normalizePaymentMode`)
 - `treecli billing sync <session-id>` → `GET /api/v1/stripe_ai_billing/sync?session_id=`

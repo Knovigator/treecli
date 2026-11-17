@@ -105,7 +105,7 @@ func ExitCode(err error) int {
 		return false
 	}
 	switch {
-	case contains("daily_limit_reached", "price_cap_exceeded", "price cap", "spending cap", "spending limit", "insufficient", "billing is not", "payment required"):
+	case contains("daily_limit_reached", "price_cap_exceeded", "price cap", "spending cap", "spending limit", "insufficient", "billing is not", "payment required", "not enough ai credits"):
 		return ExitSpending
 	case contains("rate_limit_exceeded", "rate limit", "too many requests", "try again later"):
 		return ExitRateLimited

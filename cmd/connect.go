@@ -33,11 +33,11 @@ var connectInstallSkills bool
 
 var ConnectCmd = &cobra.Command{
 	Use:   "connect",
-	Short: "Connect treecli to your Treechat account in the browser (sign up, sign in, card billing)",
+	Short: "Connect treecli to your Treechat account in the browser (sign up, sign in, AI credits)",
 	Long: "Connect treecli to a Treechat account without typing a password into the terminal.\n\n" +
 		"treecli shows a short code and opens a Treechat page. There you sign in or create an account " +
-		"(email, Google or X), check the code, allow access, and can add a card for pay-as-you-go AI " +
-		"generation. treecli waits, then saves a connection that renews itself.",
+		"(email, Google or X), check the code, allow access, and can buy AI credits with a card (or set " +
+		"up card billing on accounts that have it). treecli waits, then saves a connection that renews itself.",
 	Example: "  treecli connect\n  treecli connect --no-browser\n  treecli --env staging --account bot connect",
 	Args:    cobra.NoArgs,
 	RunE:    runConnect,
@@ -45,7 +45,7 @@ var ConnectCmd = &cobra.Command{
 
 func init() {
 	ConnectCmd.Flags().BoolVar(&connectNoBrowser, "no-browser", false, "Print the link instead of opening a browser")
-	ConnectCmd.Flags().DurationVar(&connectBillingWait, "billing-wait", 3*time.Minute, "How long to wait for card setup after access is allowed (0 to skip)")
+	ConnectCmd.Flags().DurationVar(&connectBillingWait, "billing-wait", 3*time.Minute, "How long to wait for a credits purchase or card setup after access is allowed (0 to skip)")
 	ConnectCmd.Flags().BoolVar(&connectInstallSkills, "install-skills", false, "Also install treecli skills for the coding agents found on this machine (Claude Code, Codex, Pi)")
 }
 
@@ -466,36 +466,66 @@ func withConfigLock(fn func() error) error {
 	}
 }
 
-// reportBillingAfterConnect waits briefly for card setup started in the browser,
-// so an agent can generate right after connect returns.
+// reportBillingAfterConnect waits briefly for a purchase or card setup started
+// in the browser, so an agent can generate right after connect returns.
 func reportBillingAfterConnect(cmd *cobra.Command, profile profileConfig) {
 	out := cmd.OutOrStdout()
+	var last api.StripeAiBillingStatusResponse
 	active := func(refresh bool) (bool, error) {
 		status, err := api.GetStripeAiBillingStatus(profile.BackendURL, profile.AccessToken, profile.Client, profile.UID, refresh)
-		return err == nil && (status.Stripe.SubscriptionStatus == "active" || status.Stripe.SubscriptionStatus == "trialing"), err
+		if err != nil {
+			return false, err
+		}
+		last = status
+		return usdPayable(status), nil
 	}
 	on, err := active(true)
 	if err != nil {
 		// Don't wait on a check that can't succeed; the connection itself is saved.
-		fmt.Fprintf(out, "Couldn't check card billing (%v). Run `treecli billing status` to see it.\n", err)
+		fmt.Fprintf(out, "Couldn't check USD billing (%v). Run `treecli billing status` to see it.\n", err)
 		return
 	}
 	if on {
-		fmt.Fprintln(out, "Card billing is on: AI generations are charged pay as you go.")
+		fmt.Fprintln(out, usdReadyLine(last))
 		return
 	}
 	if connectBillingWait > 0 {
-		fmt.Fprintf(out, "If you're adding a card in the browser, finish there. Waiting up to %s (Ctrl-C to stop)...\n", connectBillingWait)
+		fmt.Fprintf(out, "If you're paying in the browser, finish there. Waiting up to %s (Ctrl-C to stop)...\n", connectBillingWait)
 		deadline := time.Now().Add(connectBillingWait)
 		for time.Now().Before(deadline) {
 			time.Sleep(5 * time.Second)
 			if on, _ := active(false); on {
-				fmt.Fprintln(out, "Card billing is on: AI generations are charged pay as you go.")
+				fmt.Fprintln(out, usdReadyLine(last))
 				return
 			}
 		}
 	}
+	if last.USD != nil && last.USD.Mode == "credits" {
+		fmt.Fprintln(out, "No AI credits yet. Buy some any time with `treecli billing checkout --amount 10`.")
+		return
+	}
 	fmt.Fprintln(out, "Card billing isn't set up. Add it any time with `treecli billing checkout`.")
+}
+
+// usdPayable: can a USD generation be paid for now? Older servers only report
+// the card billing state.
+func usdPayable(status api.StripeAiBillingStatusResponse) bool {
+	if status.USD != nil {
+		return status.USD.Payable
+	}
+	return status.Stripe.SubscriptionStatus == "active" || status.Stripe.SubscriptionStatus == "trialing"
+}
+
+func usdReadyLine(status api.StripeAiBillingStatusResponse) string {
+	if status.USD != nil && status.USD.Mode == "credits" && status.USD.Credits != nil {
+		credits := status.USD.Credits
+		line := fmt.Sprintf("AI credits: %s.", centsToUSD(credits.BalanceCents))
+		if credits.AutoReload && credits.CardSaved && credits.ReloadFailedAt == "" {
+			line += fmt.Sprintf(" Auto-reload adds %s when it runs low.", centsToUSD(credits.ReloadCents))
+		}
+		return line
+	}
+	return "Card billing is on: AI generations are charged pay as you go."
 }
 
 func oauthHTTP() *resty.Client {
