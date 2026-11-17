@@ -84,11 +84,13 @@ func TestSharedUploadSeparatesStorageAndBackendCredentials(t *testing.T) {
 func TestDecodeGenerationNeverTreatsQuotedPriceAsActualCharge(t *testing.T) {
 	for _, tc := range []struct {
 		name, body string
-		want       float64
+		want       USDAmount
 	}{
 		{"quote only", `{"generation_id":"g","price_cents":125}`, 0},
 		{"explicit actual charge", `{"generation_id":"g","price_cents":125,"amount_usd":0.75}`, 0.75},
 		{"explicit zero charge", `{"generation_id":"g","price_cents":125,"amount_usd":0}`, 0},
+		{"decimal string charge", `{"generation_id":"g","price_cents":15,"amount_usd":"0.15"}`, 0.15},
+		{"null charge", `{"generation_id":"g","price_cents":15,"amount_usd":null}`, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := DecodeGeneration(json.RawMessage(tc.body))
@@ -96,5 +98,11 @@ func TestDecodeGenerationNeverTreatsQuotedPriceAsActualCharge(t *testing.T) {
 				t.Fatalf("result=%#v err=%v", result, err)
 			}
 		})
+	}
+}
+
+func TestDecodeGenerationRejectsNonNumericAmountUSD(t *testing.T) {
+	if _, err := DecodeGeneration(json.RawMessage(`{"generation_id":"g","amount_usd":"fifteen cents"}`)); err == nil {
+		t.Fatal("expected an error for a non-numeric amount_usd")
 	}
 }

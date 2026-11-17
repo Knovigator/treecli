@@ -1,12 +1,14 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"mime"
 	"net/http"
 	neturl "net/url"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -23,7 +25,7 @@ type GenerationResponse struct {
 	MediaURLs    []string               `json:"media_urls"`
 	MediaOutputs []GenerationMedia      `json:"media_outputs,omitempty"`
 	AmountSats   int64                  `json:"amount_sats,omitempty"`
-	AmountUSD    float64                `json:"amount_usd,omitempty"`
+	AmountUSD    USDAmount              `json:"amount_usd,omitempty"`
 	Quote        *GenerationQuote       `json:"quote,omitempty"`
 	Failure      map[string]interface{} `json:"failure,omitempty"`
 	Error        string                 `json:"error,omitempty"`
@@ -39,12 +41,43 @@ type GenerationMedia struct {
 
 // GenerationQuote is the price for a generation, returned when quote=true (no media is produced).
 type GenerationQuote struct {
-	AmountSats  int64   `json:"amount_sats"`
-	AmountUSD   float64 `json:"amount_usd"`
-	Action      string  `json:"action,omitempty"`
-	Tag         string  `json:"tag"`
-	Provider    string  `json:"provider,omitempty"`
-	PaymentMode string  `json:"payment_mode,omitempty"`
+	AmountSats  int64     `json:"amount_sats"`
+	AmountUSD   USDAmount `json:"amount_usd"`
+	Action      string    `json:"action,omitempty"`
+	Tag         string    `json:"tag"`
+	Provider    string    `json:"provider,omitempty"`
+	PaymentMode string    `json:"payment_mode,omitempty"`
+}
+
+// USDAmount accepts the backend's dollar amounts as JSON numbers or as decimal
+// strings (Rails serializes BigDecimal as "0.15"), so a display-only price field
+// never aborts a generation that has already been charged.
+type USDAmount float64
+
+func (amount *USDAmount) UnmarshalJSON(data []byte) error {
+	var text string
+	if err := json.Unmarshal(data, &text); err == nil {
+		if strings.TrimSpace(text) == "" {
+			*amount = 0
+			return nil
+		}
+		value, err := strconv.ParseFloat(strings.TrimSpace(text), 64)
+		if err != nil {
+			return fmt.Errorf("amount_usd %q is not a number", text)
+		}
+		*amount = USDAmount(value)
+		return nil
+	}
+	var value *float64
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	if value == nil {
+		*amount = 0
+		return nil
+	}
+	*amount = USDAmount(*value)
+	return nil
 }
 
 // GetGeneration polls a direct generation by id. GET /api/v1/ai/generations/:id.
