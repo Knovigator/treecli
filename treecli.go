@@ -52,6 +52,7 @@ func init() {
 	rootCmd.AddCommand(cmd.SkillsCmd)
 	rootCmd.AddCommand(cmd.UpdateCmd)
 	rootCmd.AddCommand(cmd.ToolsCmd)
+	rootCmd.AddCommand(cmd.ChannelCmd)
 	rootCmd.AddCommand(cmd.MCPCmd)
 	rootCmd.AddCommand(cmd.ReferenceManifestCmd)
 	rootCmd.InitDefaultCompletionCmd()
